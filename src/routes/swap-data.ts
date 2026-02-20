@@ -1,10 +1,47 @@
 import { Request, Response } from "express";
-import { trackRequest } from "./health";
+import { ethers } from "ethers";
+import { trackRequest } from "./health.js";
 
 // MangoSwap contract on Base
 const MANGOSWAP_CONTRACT = "0xb81fea65B45D743AB62a1A2B351f4f92fb1d4D16";
 
-// Popular Base tokens with pool data
+// Uniswap V3 Quoter V2 on Base
+const UNISWAP_QUOTER = "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a";
+// Uniswap V3 Factory on Base
+const UNISWAP_FACTORY = "0x33128a8fC17869897dcE68Ed026d694621f6FDfD";
+
+const BASE_RPC = "https://mainnet.base.org";
+const provider = new ethers.JsonRpcProvider(BASE_RPC);
+
+// Quoter V2 ABI (quoteExactInputSingle)
+const QUOTER_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          { name: "tokenIn", type: "address" },
+          { name: "tokenOut", type: "address" },
+          { name: "amountIn", type: "uint256" },
+          { name: "fee", type: "uint24" },
+          { name: "sqrtPriceLimitX96", type: "uint160" },
+        ],
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "quoteExactInputSingle",
+    outputs: [
+      { name: "amountOut", type: "uint256" },
+      { name: "sqrtPriceX96After", type: "uint160" },
+      { name: "initializedTicksCrossed", type: "uint32" },
+      { name: "gasEstimate", type: "uint256" },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+];
+
+// Popular Base tokens
 const BASE_TOKENS: Record<string, TokenInfo> = {
   USDC: {
     address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -17,6 +54,13 @@ const BASE_TOKENS: Record<string, TokenInfo> = {
     address: "0x4200000000000000000000000000000000000006",
     symbol: "WETH",
     name: "Wrapped Ether",
+    decimals: 18,
+    pools: ["uniswap-v3", "aerodrome"],
+  },
+  ETH: {
+    address: "0x4200000000000000000000000000000000000006",
+    symbol: "WETH",
+    name: "Ether (wrapped)",
     decimals: 18,
     pools: ["uniswap-v3", "aerodrome"],
   },
@@ -62,6 +106,13 @@ const BASE_TOKENS: Record<string, TokenInfo> = {
     decimals: 6,
     pools: ["uniswap-v3", "aerodrome"],
   },
+  DAI: {
+    address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
+    symbol: "DAI",
+    name: "Dai Stablecoin",
+    decimals: 18,
+    pools: ["uniswap-v3", "aerodrome"],
+  },
 };
 
 interface TokenInfo {
@@ -72,17 +123,19 @@ interface TokenInfo {
   pools: string[];
 }
 
+// Common Uniswap V3 fee tiers
+const FEE_TIERS = [500, 3000, 10000]; // 0.05%, 0.3%, 1%
+
 /**
  * GET /api/v1/swap/quote
- * 
- * Get an optimal swap quote routed through Uniswap V3 and Aerodrome.
- * This is what agents need when they want to swap tokens on Base.
- * 
+ *
+ * Get a live swap quote from Uniswap V3 on Base.
+ *
  * Query params:
- *   tokenIn=USDC (or 0x address)
- *   tokenOut=WETH (or 0x address)
+ *   tokenIn=USDC (symbol or 0x address)
+ *   tokenOut=WETH (symbol or 0x address)
  *   amountIn=100 (human readable amount)
- * 
+ *
  * Example: /api/v1/swap/quote?tokenIn=USDC&tokenOut=WETH&amountIn=100
  */
 export async function swapQuoteHandler(req: Request, res: Response) {
@@ -93,18 +146,24 @@ export async function swapQuoteHandler(req: Request, res: Response) {
       return res.status(400).json({
         error: "Missing required query params: tokenIn, tokenOut, amountIn",
         example: "/api/v1/swap/quote?tokenIn=USDC&tokenOut=WETH&amountIn=100",
+        supportedTokens: Object.keys(BASE_TOKENS),
       });
     }
 
-    // Resolve token symbols to addresses
     const tokenInInfo = resolveToken(tokenIn as string);
     const tokenOutInfo = resolveToken(tokenOut as string);
 
     if (!tokenInInfo) {
-      return res.status(400).json({ error: `Unknown token: ${tokenIn}` });
+      return res.status(400).json({
+        error: `Unknown token: ${tokenIn}`,
+        supportedTokens: Object.keys(BASE_TOKENS),
+      });
     }
     if (!tokenOutInfo) {
-      return res.status(400).json({ error: `Unknown token: ${tokenOut}` });
+      return res.status(400).json({
+        error: `Unknown token: ${tokenOut}`,
+        supportedTokens: Object.keys(BASE_TOKENS),
+      });
     }
 
     const amount = parseFloat(amountIn as string);
@@ -112,9 +171,8 @@ export async function swapQuoteHandler(req: Request, res: Response) {
       return res.status(400).json({ error: "Invalid amountIn" });
     }
 
-    // Determine best route
-    // In production, this queries Uniswap V3 Quoter and Aerodrome router
-    const quote = await getSwapQuote(tokenInInfo, tokenOutInfo, amount);
+    // Query Uniswap V3 Quoter for live price
+    const quote = await getUniswapQuote(tokenInInfo, tokenOutInfo, amount);
 
     trackRequest("swap_quote");
 
@@ -123,53 +181,58 @@ export async function swapQuoteHandler(req: Request, res: Response) {
         symbol: tokenInInfo.symbol,
         address: tokenInInfo.address,
         amount: amount.toString(),
+        decimals: tokenInInfo.decimals,
       },
       tokenOut: {
         symbol: tokenOutInfo.symbol,
         address: tokenOutInfo.address,
         estimatedAmount: quote.amountOut,
+        decimals: tokenOutInfo.decimals,
       },
       route: quote.route,
       dex: quote.dex,
+      feeTier: quote.feeTier,
       priceImpact: quote.priceImpact,
       executionPrice: quote.executionPrice,
-      // Transaction data the agent can submit directly
+      gasEstimate: quote.gasEstimate,
       transaction: {
         to: MANGOSWAP_CONTRACT,
-        data: quote.calldata,
-        value: tokenInInfo.symbol === "ETH" ? quote.valueWei : "0",
         chainId: 8453,
+        note: "Use MangoSwap router or submit directly to Uniswap V3 SwapRouter",
       },
       validFor: "30 seconds",
+      timestamp: new Date().toISOString(),
       _gateway: {
         provider: "spraay-x402",
         router: "mangoswap",
+        source: "uniswap-v3-quoter",
         contract: MANGOSWAP_CONTRACT,
       },
     });
   } catch (error: any) {
     console.error("Swap quote error:", error.message);
-    return res.status(500).json({ error: "Failed to get swap quote" });
+    return res.status(500).json({ error: "Failed to get swap quote", details: error.message });
   }
 }
 
 /**
  * GET /api/v1/swap/tokens
- * 
+ *
  * List all supported tokens with metadata.
- * Agents use this to discover tradeable assets.
  */
 export async function swapTokensHandler(_req: Request, res: Response) {
   try {
-    const tokens = Object.values(BASE_TOKENS).map((t) => ({
-      symbol: t.symbol,
-      name: t.name,
-      address: t.address,
-      decimals: t.decimals,
-      availablePools: t.pools,
-      network: "base",
-      chainId: 8453,
-    }));
+    const tokens = Object.entries(BASE_TOKENS)
+      .filter(([key]) => key !== "ETH") // Exclude ETH alias
+      .map(([_, t]) => ({
+        symbol: t.symbol,
+        name: t.name,
+        address: t.address,
+        decimals: t.decimals,
+        availablePools: t.pools,
+        network: "base",
+        chainId: 8453,
+      }));
 
     trackRequest("swap_tokens");
 
@@ -192,11 +255,9 @@ export async function swapTokensHandler(_req: Request, res: Response) {
 // ============================================
 
 function resolveToken(input: string): TokenInfo | null {
-  // Check if it's a symbol
   const upper = input.toUpperCase();
   if (BASE_TOKENS[upper]) return BASE_TOKENS[upper];
 
-  // Check if it's an address
   const found = Object.values(BASE_TOKENS).find(
     (t) => t.address.toLowerCase() === input.toLowerCase()
   );
@@ -204,56 +265,122 @@ function resolveToken(input: string): TokenInfo | null {
 }
 
 /**
- * Get swap quote from DEX routers.
- * 
- * In production, this would:
- * 1. Query Uniswap V3 Quoter contract for best pool/path
- * 2. Query Aerodrome Router for their quote
- * 3. Compare and return the best option
- * 4. Encode the actual swap calldata
- * 
- * For the MVP, we return simulated data to demonstrate the API structure.
+ * Query Uniswap V3 Quoter for a live swap quote on Base.
+ * Tries all fee tiers and returns the best quote.
  */
-async function getSwapQuote(
+async function getUniswapQuote(
   tokenIn: TokenInfo,
   tokenOut: TokenInfo,
   amountIn: number
 ) {
-  // Simulated pricing - replace with actual DEX queries
-  const mockPrices: Record<string, number> = {
-    USDC: 1.0,
-    WETH: 2500,
-    cbBTC: 45000,
-    AERO: 1.2,
-    DEGEN: 0.008,
-    BRETT: 0.05,
-    TOSHI: 0.0004,
-    USDbC: 1.0,
-  };
+  const quoter = new ethers.Contract(UNISWAP_QUOTER, QUOTER_ABI, provider);
+  const amountInWei = ethers.parseUnits(amountIn.toString(), tokenIn.decimals);
 
-  const priceIn = mockPrices[tokenIn.symbol] || 1;
-  const priceOut = mockPrices[tokenOut.symbol] || 1;
-  const valueUSD = amountIn * priceIn;
-  const amountOut = (valueUSD / priceOut) * 0.997; // 0.3% fee
+  let bestQuote: any = null;
+  let bestAmountOut = 0n;
+  let bestFee = 0;
 
-  // Determine which DEX has better routing
-  const sharedPools = tokenIn.pools.filter((p) => tokenOut.pools.includes(p));
-  const bestDex = sharedPools.includes("uniswap-v3")
-    ? "uniswap-v3"
-    : "aerodrome";
+  // Try each fee tier, keep the best
+  for (const fee of FEE_TIERS) {
+    try {
+      const result = await quoter.quoteExactInputSingle.staticCall({
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        amountIn: amountInWei,
+        fee,
+        sqrtPriceLimitX96: 0,
+      });
 
-  const route =
-    tokenIn.symbol === "USDC" || tokenOut.symbol === "USDC"
-      ? `${tokenIn.symbol} → ${tokenOut.symbol}`
-      : `${tokenIn.symbol} → USDC → ${tokenOut.symbol}`;
+      const amountOut = result[0];
+      if (amountOut > bestAmountOut) {
+        bestAmountOut = amountOut;
+        bestFee = fee;
+        bestQuote = {
+          amountOut,
+          gasEstimate: result[3],
+        };
+      }
+    } catch {
+      // This fee tier doesn't have a pool for this pair, skip
+      continue;
+    }
+  }
+
+  if (!bestQuote) {
+    // No direct pool found, try routing through WETH
+    const WETH = BASE_TOKENS.WETH.address;
+    if (
+      tokenIn.address.toLowerCase() !== WETH.toLowerCase() &&
+      tokenOut.address.toLowerCase() !== WETH.toLowerCase()
+    ) {
+      // Try tokenIn -> WETH -> tokenOut
+      for (const fee1 of FEE_TIERS) {
+        for (const fee2 of FEE_TIERS) {
+          try {
+            const midResult = await quoter.quoteExactInputSingle.staticCall({
+              tokenIn: tokenIn.address,
+              tokenOut: WETH,
+              amountIn: amountInWei,
+              fee: fee1,
+              sqrtPriceLimitX96: 0,
+            });
+
+            const finalResult = await quoter.quoteExactInputSingle.staticCall({
+              tokenIn: WETH,
+              tokenOut: tokenOut.address,
+              amountIn: midResult[0],
+              fee: fee2,
+              sqrtPriceLimitX96: 0,
+            });
+
+            if (finalResult[0] > bestAmountOut) {
+              bestAmountOut = finalResult[0];
+              bestFee = fee1; // Primary fee tier
+              bestQuote = {
+                amountOut: finalResult[0],
+                gasEstimate: midResult[3] + finalResult[3],
+                isMultihop: true,
+                path: `${tokenIn.symbol} → WETH → ${tokenOut.symbol}`,
+              };
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+    }
+  }
+
+  if (!bestQuote) {
+    throw new Error(
+      `No liquidity found for ${tokenIn.symbol} → ${tokenOut.symbol} on Uniswap V3`
+    );
+  }
+
+  const amountOutFormatted = ethers.formatUnits(
+    bestQuote.amountOut,
+    tokenOut.decimals
+  );
+
+  const executionPrice =
+    amountIn > 0
+      ? (parseFloat(amountOutFormatted) / amountIn).toFixed(8)
+      : "0";
+
+  const route = bestQuote.isMultihop
+    ? bestQuote.path
+    : `${tokenIn.symbol} → ${tokenOut.symbol}`;
+
+  const feeTierLabel =
+    bestFee === 500 ? "0.05%" : bestFee === 3000 ? "0.3%" : "1%";
 
   return {
-    amountOut: amountOut.toFixed(tokenOut.decimals > 6 ? 8 : 6),
+    amountOut: amountOutFormatted,
     route,
-    dex: bestDex,
-    priceImpact: amountIn * priceIn > 10000 ? "0.15%" : "0.05%",
-    executionPrice: `1 ${tokenIn.symbol} = ${(priceIn / priceOut).toFixed(8)} ${tokenOut.symbol}`,
-    calldata: `0x__mangoswap_${tokenIn.symbol}_${tokenOut.symbol}`,
-    valueWei: "0",
+    dex: "uniswap-v3",
+    feeTier: feeTierLabel,
+    priceImpact: "live", // Would need pool reserves to calculate precisely
+    executionPrice: `1 ${tokenIn.symbol} = ${executionPrice} ${tokenOut.symbol}`,
+    gasEstimate: bestQuote.gasEstimate?.toString() || "150000",
   };
 }
