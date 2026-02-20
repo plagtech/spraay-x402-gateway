@@ -1,0 +1,41 @@
+{
+  "name": "spraay-x402-gateway",
+  "version": "1.0.0",
+  "description": "Pay-per-use AI models, batch payments, and DeFi data on Base. Powered by x402 + USDC.",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "npx ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "echo \"Run: curl http://localhost:3402/health\""
+  },
+  "keywords": [
+    "x402",
+    "base",
+    "usdc",
+    "ai-agents",
+    "spraay",
+    "mangoswap",
+    "defi",
+    "batch-payments"
+  ],
+  "author": "plagtech",
+  "license": "MIT",
+  "dependencies": {
+    "@x402/core": "^2.4.0",
+    "@x402/evm": "^2.4.0",
+    "@x402/express": "^2.4.0",
+    "@x402/extensions": "^2.4.0",
+    "axios": "^1.13.5",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
