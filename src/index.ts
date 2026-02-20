@@ -4,12 +4,13 @@ import dotenv from "dotenv";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
+import { facilitator as coinbaseFacilitator } from "@coinbase/x402";
 
 // Route handlers
-import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway";
-import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments";
-import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data";
-import { healthHandler, statsHandler } from "./routes/health";
+import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
+import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
+import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
+import { healthHandler, statsHandler } from "./routes/health.js";
 
 dotenv.config();
 
@@ -22,8 +23,9 @@ app.use(express.json());
 // ============================================
 const PAY_TO = process.env.PAY_TO_ADDRESS!;
 const NETWORK = process.env.X402_NETWORK || "eip155:84532";
-const FACILITATOR_URL = (process.env.X402_FACILITATOR_URL || "https://www.x402.org/facilitator") as `${string}://${string}`;
+const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "";
 const PORT = process.env.PORT || 3402;
+const IS_MAINNET = NETWORK === "eip155:8453";
 
 // Type assertion for CAIP-2 network identifier
 const CAIP2_NETWORK = NETWORK as `${string}:${string}`;
@@ -31,9 +33,11 @@ const CAIP2_NETWORK = NETWORK as `${string}:${string}`;
 // ============================================
 // x402 FACILITATOR SETUP
 // ============================================
-const facilitatorClient = new HTTPFacilitatorClient({
-  url: FACILITATOR_URL,
-});
+// Use Coinbase's pre-configured facilitator for mainnet,
+// or custom URL for testnet
+const facilitatorClient = IS_MAINNET
+  ? new HTTPFacilitatorClient(coinbaseFacilitator)
+  : new HTTPFacilitatorClient({ url: (FACILITATOR_URL || "https://x402.org/facilitator") as `${string}://${string}` });
 
 const server = new x402ResourceServer(facilitatorClient).register(
   CAIP2_NETWORK,
@@ -166,6 +170,7 @@ app.get("/", (_req, res) => {
     network: CAIP2_NETWORK,
     payTo: PAY_TO,
     protocol: "x402",
+    mainnet: IS_MAINNET,
   });
 });
 
@@ -194,9 +199,9 @@ app.get("/api/v1/swap/tokens", swapTokensHandler);
 // ============================================
 app.listen(PORT, () => {
   console.log(`\n🥭 Spraay x402 Gateway running on port ${PORT}`);
-  console.log(`📡 Network: ${NETWORK}`);
+  console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
-  console.log(`🔗 Facilitator: ${FACILITATOR_URL}`);
+  console.log(`🔗 Facilitator: ${IS_MAINNET ? "Coinbase CDP (mainnet)" : FACILITATOR_URL || "x402.org"}`);
   console.log(`\n🌐 Endpoints ready for agent discovery via x402 Bazaar\n`);
 });
 
