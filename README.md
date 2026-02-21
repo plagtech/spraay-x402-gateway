@@ -150,6 +150,7 @@ Works with Next.js middleware variant — see `@x402/next` package.
 - [MangoSwap](https://mangoswap.xyz) — DEX on Base (Uniswap V3 + Aerodrome routing)
 - [x402 Protocol](https://x402.org) — Internet-native payment standard
 - [x402 Bazaar](https://x402.gitbook.io/x402/core-concepts/bazaar-discovery-layer) — Service discovery for agents
+- **[Spraay x402 MCP Server](https://github.com/plagtech/spraay-x402-mcp)** — MCP server wrapping all 9 gateway endpoints. Compatible with Claude Desktop, Cursor, and any MCP client.
 
 ## 📊 How the Money Flows
 
