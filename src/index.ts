@@ -1,5 +1,5 @@
 import express from "express";
-import { wrapExpress } from "@anthropic-ai/x402-express";
+import { wrapExpress } from "@x402/express";
 import { facilitator as coinbaseFacilitator } from "@coinbase/x402";
 
 // Route handlers — V2 (existing)
