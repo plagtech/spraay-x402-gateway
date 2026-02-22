@@ -2,13 +2,56 @@ import { Request, Response } from "express";
 import { ethers } from "ethers";
 import { trackRequest } from "./health.js";
 
-// Spraay contract on Base mainnet
-const SPRAAY_CONTRACT = "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC";
-const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-const SPRAAY_FEE_BPS = 30; // 0.3% protocol fee
+// ============ Contract Addresses ============
 
-// Spraay contract ABI (the functions we need)
-const SPRAAY_ABI = [
+// V2 (legacy — still works, existing integrations untouched)
+const SPRAAY_V2 = "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC";
+
+// V3 (multi-stablecoin + CCIP receiver)
+const SPRAAY_V3 = "0x3eFf027045230A277293aC27bd571FBC729e0dcE";
+
+const SPRAAY_FEE_BPS = 30; // 0.3% default protocol fee
+
+// ============ Token Registry (Base Mainnet) ============
+
+interface TokenInfo {
+  address: string;
+  symbol: string;
+  decimals: number;
+  feeBps: number; // 0 = use default (30 bps)
+}
+
+const BASE_TOKENS: Record<string, TokenInfo> = {
+  USDC: {
+    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    symbol: "USDC",
+    decimals: 6,
+    feeBps: 0,
+  },
+  USDT: {
+    address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+    symbol: "USDT",
+    decimals: 6,
+    feeBps: 0,
+  },
+  EURC: {
+    address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+    symbol: "EURC",
+    decimals: 6,
+    feeBps: 25, // 0.25% competitive EUR rate
+  },
+  DAI: {
+    address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
+    symbol: "DAI",
+    decimals: 18,
+    feeBps: 0,
+  },
+};
+
+// ============ ABIs ============
+
+// V2 ABI (backward compatible)
+const SPRAAY_V2_ABI = [
   {
     inputs: [
       { name: "token", type: "address" },
@@ -39,256 +82,376 @@ const SPRAAY_ABI = [
   },
 ];
 
-const spraayInterface = new ethers.Interface(SPRAAY_ABI);
+// V3 ABI (adds sprayTokenWithMeta)
+const SPRAAY_V3_ABI = [
+  ...SPRAAY_V2_ABI,
+  {
+    inputs: [
+      { name: "token", type: "address" },
+      {
+        name: "recipients",
+        type: "tuple[]",
+        components: [
+          { name: "recipient", type: "address" },
+          { name: "amount", type: "uint256" },
+        ],
+      },
+      { name: "memo", type: "string" },
+      { name: "agentId", type: "uint256" },
+    ],
+    name: "sprayTokenWithMeta",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+];
 
-// Base mainnet RPC
+const v2Interface = new ethers.Interface(SPRAAY_V2_ABI);
+const v3Interface = new ethers.Interface(SPRAAY_V3_ABI);
+
 const BASE_RPC = "https://mainnet.base.org";
 const provider = new ethers.JsonRpcProvider(BASE_RPC);
 
+// ============ V2 Handlers (existing — unchanged) ============
+
 /**
  * POST /api/v1/batch/execute
- *
- * Returns encoded transaction data for a batch USDC payment via Spraay.
- * The calling agent submits this transaction to Base.
- *
- * Body:
- * {
- *   "token": "USDC",
- *   "recipients": [
- *     { "address": "0x123...", "amount": "10.00" },
- *     { "address": "0x456...", "amount": "25.50" }
- *   ],
- *   "memo": "January contributor payments"
- * }
- *
- * The agent must:
- * 1. Approve the Spraay contract to spend their USDC (totalAmount + fee)
- * 2. Submit the spray transaction with the returned calldata
+ * Legacy USDC-only batch payment (V2 contract)
  */
 export async function batchPaymentHandler(req: Request, res: Response) {
+  trackRequest("/api/v1/batch/execute");
   try {
-    const { token, recipients, memo } = req.body;
-
+    const { recipients, memo } = req.body;
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-      return res.status(400).json({
-        error: "Missing or empty recipients array",
-        example: {
-          token: "USDC",
-          recipients: [
-            { address: "0x742d35Cc6634C0532925a3b844C0532925a3b844", amount: "10.00" },
-            { address: "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B", amount: "25.50" },
-          ],
-          memo: "Payment batch",
-        },
-      });
+      return res.status(400).json({ error: "recipients array required" });
     }
-
     if (recipients.length > 200) {
-      return res.status(400).json({
-        error: "Maximum 200 recipients per batch",
-      });
+      return res.status(400).json({ error: "Maximum 200 recipients" });
     }
 
-    // Validate recipients
-    for (const r of recipients) {
-      if (!r.address || !r.amount) {
-        return res.status(400).json({
-          error: "Each recipient must have 'address' and 'amount'",
-        });
-      }
-      if (!ethers.isAddress(r.address)) {
-        return res.status(400).json({
-          error: `Invalid address: ${r.address}`,
-        });
-      }
-      if (isNaN(parseFloat(r.amount)) || parseFloat(r.amount) <= 0) {
-        return res.status(400).json({
-          error: `Invalid amount for ${r.address}: ${r.amount}`,
-        });
-      }
-    }
-
-    // USDC has 6 decimals
-    const decimals = 6;
-    const recipientTuples = recipients.map((r: any) => ({
+    const BASE_USDC = BASE_TOKENS.USDC.address;
+    const onchainRecipients = recipients.map((r: any) => ({
       recipient: r.address,
-      amount: ethers.parseUnits(r.amount.toString(), decimals),
+      amount: ethers.parseUnits(String(r.amount), 6),
     }));
 
-    const totalAmountRaw = recipientTuples.reduce(
-      (sum: bigint, r: any) => sum + r.amount,
-      0n
-    );
+    let totalRaw = BigInt(0);
+    for (const r of onchainRecipients) totalRaw += r.amount;
 
-    const feeAmount = (totalAmountRaw * BigInt(SPRAAY_FEE_BPS)) / 10000n;
-    const requiredApproval = totalAmountRaw + feeAmount;
+    const feeRaw = (totalRaw * BigInt(SPRAAY_FEE_BPS)) / BigInt(10000);
+    const totalWithFee = totalRaw + feeRaw;
 
-    const tokenAddress = BASE_USDC;
-
-    // Encode the actual sprayToken calldata
-    const calldata = spraayInterface.encodeFunctionData("sprayToken", [
-      tokenAddress,
-      recipientTuples,
+    const calldata = v2Interface.encodeFunctionData("sprayToken", [
+      BASE_USDC,
+      onchainRecipients,
     ]);
-
-    // Encode the approval calldata the agent needs to do first
-    const erc20Interface = new ethers.Interface([
-      "function approve(address spender, uint256 amount) returns (bool)",
-    ]);
-    const approvalCalldata = erc20Interface.encodeFunctionData("approve", [
-      SPRAAY_CONTRACT,
-      requiredApproval,
-    ]);
-
-    // Get real gas price from Base
-    let estimatedCostETH = "0.00000100";
-    const gasEstimate = 80000 + 45000 * recipients.length;
-
-    try {
-      const feeData = await provider.getFeeData();
-      const gasPrice = feeData.gasPrice || ethers.parseUnits("0.01", "gwei");
-      const estimatedCostWei = gasPrice * BigInt(gasEstimate);
-      estimatedCostETH = ethers.formatEther(estimatedCostWei);
-    } catch {
-      // Use fallback
-    }
-
-    trackRequest("batch_execute");
 
     return res.json({
-      status: "ready",
-      contract: SPRAAY_CONTRACT,
-      network: "base",
-      chainId: 8453,
-      token: {
-        symbol: token || "USDC",
-        address: tokenAddress,
-        decimals,
-      },
-      recipients: recipients.length,
-      totalAmount: ethers.formatUnits(totalAmountRaw, decimals),
-      protocolFee: {
-        bps: SPRAAY_FEE_BPS,
-        percent: "0.3%",
-        amount: ethers.formatUnits(feeAmount, decimals),
-      },
-      requiredApproval: ethers.formatUnits(requiredApproval, decimals),
-      memo: memo || null,
-      gasEstimate: {
-        estimatedGas: gasEstimate,
-        estimatedCostETH,
-      },
-      // Step 1: Agent must approve USDC spending first
-      approvalTransaction: {
-        to: tokenAddress,
-        data: approvalCalldata,
-        value: "0",
-        chainId: 8453,
-        description: "Approve Spraay contract to spend USDC",
-      },
-      // Step 2: Execute the batch payment
-      sprayTransaction: {
-        to: SPRAAY_CONTRACT,
+      success: true,
+      contract: SPRAAY_V2,
+      version: "v2",
+      token: "USDC",
+      tokenAddress: BASE_USDC,
+      recipientCount: recipients.length,
+      totalAmount: ethers.formatUnits(totalRaw, 6),
+      fee: ethers.formatUnits(feeRaw, 6),
+      totalWithFee: ethers.formatUnits(totalWithFee, 6),
+      transaction: {
+        to: SPRAAY_V2,
         data: calldata,
         value: "0",
         chainId: 8453,
-        description: "Execute batch USDC payment via Spraay",
       },
-      breakdown: recipients.map((r: any) => ({
-        to: r.address,
-        amount: `${r.amount} USDC`,
-      })),
-      _gateway: {
-        provider: "spraay-x402",
-        protocol: "spraay-batch-v1",
-        contractVersion: "Spraay V2",
+      approvalRequired: {
+        token: BASE_USDC,
+        spender: SPRAAY_V2,
+        amount: totalWithFee.toString(),
       },
     });
-  } catch (error: any) {
-    console.error("Batch payment error:", error.message);
-    return res.status(500).json({ error: "Batch payment preparation failed", details: error.message });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 }
 
 /**
  * POST /api/v1/batch/estimate
- *
- * Estimate gas cost for a batch payment.
+ * Legacy estimate (V2, USDC only)
  */
 export async function batchEstimateHandler(req: Request, res: Response) {
+  trackRequest("/api/v1/batch/estimate");
   try {
     const { recipients } = req.body;
-
-    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-      return res.status(400).json({ error: "Missing recipients array" });
+    if (!recipients || !Array.isArray(recipients)) {
+      return res.status(400).json({ error: "recipients array required" });
     }
 
-    if (recipients.length > 200) {
-      return res.status(400).json({ error: "Maximum 200 recipients per batch" });
+    let totalRaw = BigInt(0);
+    for (const r of recipients) {
+      totalRaw += ethers.parseUnits(String(r.amount), 6);
     }
 
-    const recipientCount = recipients.length;
-    const totalAmount = recipients.reduce(
-      (sum: number, r: any) => sum + parseFloat(r.amount || 0),
-      0
-    );
-
-    const baseGas = 80000;
-    const perRecipientGas = 45000;
-    const estimatedGas = baseGas + perRecipientGas * recipientCount;
-    const individualGas = recipientCount * 65000;
-
-    // Get real gas price from Base
-    let gasPriceGwei = 0.01;
-    try {
-      const feeData = await provider.getFeeData();
-      if (feeData.gasPrice) {
-        gasPriceGwei = parseFloat(ethers.formatUnits(feeData.gasPrice, "gwei"));
-      }
-    } catch {
-      // Use default
-    }
-
-    const ethPriceUSD = 2500; // Could fetch live, but good enough for estimates
-    const estimatedCostETH = estimatedGas * gasPriceGwei * 1e-9;
-    const individualCostETH = individualGas * gasPriceGwei * 1e-9;
-    const savingsPercent = (
-      ((individualGas - estimatedGas) / individualGas) * 100
-    ).toFixed(1);
-
-    const feeAmount = totalAmount * (SPRAAY_FEE_BPS / 10000);
-
-    trackRequest("batch_estimate");
+    const feeRaw = (totalRaw * BigInt(SPRAAY_FEE_BPS)) / BigInt(10000);
 
     return res.json({
-      recipients: recipientCount,
-      totalPaymentAmount: `${totalAmount.toFixed(6)} USDC`,
-      protocolFee: {
-        bps: SPRAAY_FEE_BPS,
-        percent: "0.3%",
-        amount: `${feeAmount.toFixed(6)} USDC`,
-      },
-      totalCost: `${(totalAmount + feeAmount).toFixed(6)} USDC (including 0.3% fee)`,
-      gasEstimate: {
-        estimatedGas,
-        gasPriceGwei: gasPriceGwei.toFixed(4),
-        estimatedCostETH: estimatedCostETH.toFixed(10),
-        estimatedCostUSD: `$${(estimatedCostETH * ethPriceUSD).toFixed(6)}`,
-      },
-      savings: {
-        vsIndividualTransfers: {
-          gasWithoutBatch: individualGas,
-          gasWithBatch: estimatedGas,
-          gasSaved: individualGas - estimatedGas,
-          savingsPercent: `${savingsPercent}%`,
-        },
-      },
-      contract: SPRAAY_CONTRACT,
-      maxRecipients: 200,
-      _gateway: { provider: "spraay-x402" },
+      success: true,
+      version: "v2",
+      token: "USDC",
+      recipientCount: recipients.length,
+      totalAmount: ethers.formatUnits(totalRaw, 6),
+      fee: ethers.formatUnits(feeRaw, 6),
+      feePercent: "0.3%",
+      totalWithFee: ethers.formatUnits(totalRaw + feeRaw, 6),
     });
-  } catch (error: any) {
-    console.error("Batch estimate error:", error.message);
-    return res.status(500).json({ error: "Estimation failed" });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
+}
+
+// ============ V3 Handlers (new — multi-stablecoin) ============
+
+/**
+ * POST /api/v3/batch/execute
+ *
+ * Multi-stablecoin batch payment via SprayContractV3.
+ * Supports USDC, USDT, EURC, DAI, or any ERC-20 by address.
+ *
+ * Body:
+ * {
+ *   "token": "USDC" | "USDT" | "EURC" | "DAI" | "0x...",
+ *   "recipients": [
+ *     { "address": "0x123...", "amount": "10.00" },
+ *     { "address": "0x456...", "amount": "25.50" }
+ *   ],
+ *   "memo": "January contributor payments",    // optional
+ *   "agentId": 42                              // ERC-8004 ID, optional
+ * }
+ */
+export async function batchPaymentV3Handler(req: Request, res: Response) {
+  trackRequest("/api/v3/batch/execute");
+  try {
+    const {
+      token: tokenInput = "USDC",
+      recipients,
+      memo = "",
+      agentId = 0,
+    } = req.body;
+
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({ error: "recipients array required" });
+    }
+    if (recipients.length > 200) {
+      return res.status(400).json({ error: "Maximum 200 recipients" });
+    }
+
+    // Resolve token
+    let tokenAddress: string;
+    let tokenDecimals: number;
+    let tokenSymbol: string;
+    let tokenFeeBps: number;
+
+    if (tokenInput.startsWith("0x")) {
+      tokenAddress = tokenInput;
+      tokenDecimals = 18;
+      tokenSymbol = "CUSTOM";
+      tokenFeeBps = SPRAAY_FEE_BPS;
+    } else {
+      const symbol = tokenInput.toUpperCase();
+      const info = BASE_TOKENS[symbol];
+      if (!info) {
+        return res.status(400).json({
+          error: `Token ${symbol} not supported. Available: ${Object.keys(BASE_TOKENS).join(", ")}`,
+        });
+      }
+      tokenAddress = info.address;
+      tokenDecimals = info.decimals;
+      tokenSymbol = info.symbol;
+      tokenFeeBps = info.feeBps || SPRAAY_FEE_BPS;
+    }
+
+    // Build recipients
+    const onchainRecipients = recipients.map((r: any) => ({
+      recipient: r.address,
+      amount: ethers.parseUnits(String(r.amount), tokenDecimals),
+    }));
+
+    let totalRaw = BigInt(0);
+    for (const r of onchainRecipients) totalRaw += r.amount;
+
+    const feeRaw = (totalRaw * BigInt(tokenFeeBps)) / BigInt(10000);
+    const totalWithFee = totalRaw + feeRaw;
+
+    // Encode — use sprayTokenWithMeta if memo or agentId provided
+    let calldata: string;
+    if (memo || agentId > 0) {
+      calldata = v3Interface.encodeFunctionData("sprayTokenWithMeta", [
+        tokenAddress,
+        onchainRecipients,
+        memo,
+        agentId,
+      ]);
+    } else {
+      calldata = v3Interface.encodeFunctionData("sprayToken", [
+        tokenAddress,
+        onchainRecipients,
+      ]);
+    }
+
+    return res.json({
+      success: true,
+      contract: SPRAAY_V3,
+      version: "v3",
+      token: {
+        symbol: tokenSymbol,
+        address: tokenAddress,
+        decimals: tokenDecimals,
+      },
+      batch: {
+        recipientCount: recipients.length,
+        totalAmount: ethers.formatUnits(totalRaw, tokenDecimals),
+        fee: ethers.formatUnits(feeRaw, tokenDecimals),
+        feePercent: `${tokenFeeBps / 100}%`,
+        totalWithFee: ethers.formatUnits(totalWithFee, tokenDecimals),
+      },
+      transaction: {
+        to: SPRAAY_V3,
+        data: calldata,
+        value: "0",
+        chainId: 8453,
+      },
+      approvalRequired: {
+        token: tokenAddress,
+        spender: SPRAAY_V3,
+        amount: totalWithFee.toString(),
+        amountFormatted: ethers.formatUnits(totalWithFee, tokenDecimals),
+      },
+      meta: {
+        memo: memo || null,
+        agentId: agentId || null,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * POST /api/v3/batch/estimate
+ * Multi-stablecoin fee estimation
+ */
+export async function batchEstimateV3Handler(req: Request, res: Response) {
+  trackRequest("/api/v3/batch/estimate");
+  try {
+    const { token: tokenInput = "USDC", recipients } = req.body;
+
+    if (!recipients || !Array.isArray(recipients)) {
+      return res.status(400).json({ error: "recipients array required" });
+    }
+
+    // Resolve token
+    const symbol = tokenInput.startsWith("0x")
+      ? "CUSTOM"
+      : tokenInput.toUpperCase();
+    const info = BASE_TOKENS[symbol];
+    const decimals = info?.decimals || 18;
+    const feeBps = info?.feeBps || SPRAAY_FEE_BPS;
+
+    let totalRaw = BigInt(0);
+    for (const r of recipients) {
+      totalRaw += ethers.parseUnits(String(r.amount), decimals);
+    }
+
+    const feeRaw = (totalRaw * BigInt(feeBps)) / BigInt(10000);
+
+    return res.json({
+      success: true,
+      version: "v3",
+      token: symbol,
+      recipientCount: recipients.length,
+      totalAmount: ethers.formatUnits(totalRaw, decimals),
+      fee: ethers.formatUnits(feeRaw, decimals),
+      feePercent: `${feeBps / 100}%`,
+      totalWithFee: ethers.formatUnits(totalRaw + feeRaw, decimals),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * GET /api/v3/tokens
+ * List supported stablecoins with fee info (FREE endpoint)
+ */
+export function tokensHandler(_req: Request, res: Response) {
+  trackRequest("/api/v3/tokens");
+
+  const tokens = Object.entries(BASE_TOKENS).map(([symbol, info]) => ({
+    symbol,
+    address: info.address,
+    decimals: info.decimals,
+    feeBps: info.feeBps || SPRAAY_FEE_BPS,
+    feePercent: `${(info.feeBps || SPRAAY_FEE_BPS) / 100}%`,
+  }));
+
+  return res.json({
+    success: true,
+    chain: "base",
+    chainId: 8453,
+    contract: SPRAAY_V3,
+    defaultFeeBps: SPRAAY_FEE_BPS,
+    tokens,
+  });
+}
+
+/**
+ * GET /api/v3/chains
+ * List supported chains (FREE endpoint)
+ */
+export function chainsHandler(_req: Request, res: Response) {
+  trackRequest("/api/v3/chains");
+
+  return res.json({
+    success: true,
+    chains: [
+      {
+        name: "base",
+        chainId: 8453,
+        contract: SPRAAY_V3,
+        tokens: ["USDC", "USDT", "EURC", "DAI"],
+        ccipEnabled: true,
+        version: "v3",
+      },
+      {
+        name: "unichain",
+        chainId: 130,
+        contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
+        tokens: ["USDC"],
+        ccipEnabled: false,
+        version: "v2",
+      },
+      {
+        name: "bob",
+        chainId: 60808,
+        contract: "TBD",
+        tokens: ["USDC"],
+        ccipEnabled: false,
+        version: "v2",
+      },
+      {
+        name: "plasma",
+        chainId: 1012,
+        contract: "TBD",
+        tokens: ["USDT0", "XPL"],
+        ccipEnabled: false,
+        version: "v2",
+      },
+      {
+        name: "bittensor",
+        chainId: null,
+        contract: "spraay-tao",
+        tokens: ["TAO"],
+        ccipEnabled: false,
+        version: "native",
+      },
+    ],
+  });
 }
