@@ -10,7 +10,7 @@ import {
   declareDiscoveryExtension,
 } from "@x402/extensions/bazaar";
 
-// Route handlers — V1 (existing)
+// Route handlers
 import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
 import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
 import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
@@ -18,14 +18,6 @@ import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
 import { resolveHandler } from "./routes/resolve.js";
 import { healthHandler, statsHandler } from "./routes/health.js";
-
-// Route handlers — V3 (new multi-stablecoin)
-import {
-  batchPaymentV3Handler,
-  batchEstimateV3Handler,
-  tokensHandler,
-  chainsHandler,
-} from "./routes/batch-payments.js";
 
 dotenv.config();
 
@@ -105,17 +97,17 @@ app.use(
         },
       },
 
-      // ---- BATCH PAYMENTS (V1 — USDC only) ----
+      // ---- BATCH PAYMENTS (any ERC-20 + ETH) ----
       "POST /api/v1/batch/execute": {
         accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Execute batch USDC payments to multiple recipients in one tx on Base via Spraay protocol.",
+        description: "Execute batch payments to multiple recipients in one tx on Base via Spraay. Supports any ERC-20 token + native ETH.",
         mimeType: "application/json",
         extensions: {
           ...declareDiscoveryExtension({
             input: { token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", recipients: ["0x1234..."], amounts: ["1000000"], sender: "0xYour..." },
             inputSchema: {
               properties: {
-                token: { type: "string", description: "ERC-20 token address on Base (e.g. USDC)" },
+                token: { type: "string", description: "ERC-20 token address on Base (any token works) or address(0) for native ETH" },
                 recipients: { type: "array", description: "Recipient addresses", items: { type: "string" } },
                 amounts: { type: "array", description: "Amounts in atomic units", items: { type: "string" } },
                 sender: { type: "string", description: "Sender address for approval encoding" },
@@ -133,7 +125,7 @@ app.use(
 
       "POST /api/v1/batch/estimate": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Estimate gas costs for a batch payment on Base.",
+        description: "Estimate gas costs for a batch payment on Base. Works with any ERC-20 token or ETH.",
         mimeType: "application/json",
         extensions: {
           ...declareDiscoveryExtension({
@@ -263,58 +255,6 @@ app.use(
           }),
         },
       },
-
-      // ============================================
-      // V3 ENDPOINTS — MULTI-STABLECOIN BATCH
-      // ============================================
-
-      "POST /api/v3/batch/execute": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Multi-stablecoin batch payment via Spraay V3 on Base. Supports USDC, USDT, EURC, DAI. Optional memo and ERC-8004 agentId for onchain metadata.",
-        mimeType: "application/json",
-        extensions: {
-          ...declareDiscoveryExtension({
-            input: { token: "USDC", recipients: [{ address: "0x1234...", amount: "10.00" }, { address: "0x5678...", amount: "25.50" }], memo: "January payments", agentId: 0 },
-            inputSchema: {
-              properties: {
-                token: { type: "string", description: "Token symbol (USDC, USDT, EURC, DAI) or ERC-20 address" },
-                recipients: { type: "array", description: "Array of {address, amount} objects", items: { type: "object", properties: { address: { type: "string" }, amount: { type: "string" } } } },
-                memo: { type: "string", description: "Optional: onchain memo stored in SprayMetadata event" },
-                agentId: { type: "number", description: "Optional: ERC-8004 agent ID for onchain attribution" },
-              },
-              required: ["token", "recipients"],
-            },
-            bodyType: "json",
-            output: {
-              example: { success: true, contract: "0x3eFf027045230A277293aC27bd571FBC729e0dcE", version: "v3", token: { symbol: "USDC", address: "0x833589...", decimals: 6 }, batch: { recipientCount: 2, totalAmount: "35.50", fee: "0.1065", feePercent: "0.3%", totalWithFee: "35.6065" }, transaction: { to: "0x3eFf...", data: "0x...", value: "0", chainId: 8453 } },
-              schema: { properties: { success: { type: "boolean" }, contract: { type: "string" }, version: { type: "string" }, token: { type: "object" }, batch: { type: "object" }, transaction: { type: "object" } } },
-            },
-          }),
-        },
-      },
-
-      "POST /api/v3/batch/estimate": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Estimate multi-stablecoin batch cost with per-token fee tiers. EURC 0.25%, others 0.3%.",
-        mimeType: "application/json",
-        extensions: {
-          ...declareDiscoveryExtension({
-            input: { token: "EURC", recipients: [{ address: "0x1234...", amount: "100.00" }] },
-            inputSchema: {
-              properties: {
-                token: { type: "string", description: "Token symbol (USDC, USDT, EURC, DAI)" },
-                recipients: { type: "array", description: "Array of {address, amount} objects", items: { type: "object" } },
-              },
-              required: ["recipients"],
-            },
-            bodyType: "json",
-            output: {
-              example: { success: true, version: "v3", token: "EURC", recipientCount: 1, totalAmount: "100.00", fee: "0.25", feePercent: "0.25%", totalWithFee: "100.25" },
-              schema: { properties: { success: { type: "boolean" }, token: { type: "string" }, totalAmount: { type: "string" }, fee: { type: "string" }, feePercent: { type: "string" } } },
-            },
-          }),
-        },
-      },
     },
     server
   )
@@ -329,7 +269,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2,
     name: "Spraay x402 Gateway",
-    description: "AI models, batch payments, DeFi data, and onchain intelligence on Base. Pay USDC per request.",
+    description: "AI models, batch payments (any ERC-20 + ETH), DeFi data, and onchain intelligence on Base. Pay USDC per request.",
     homepage: BASE_URL,
     repository: "https://github.com/plagtech/spraay-x402-gateway",
     network: CAIP2_NETWORK,
@@ -338,17 +278,14 @@ app.get("/.well-known/x402.json", (_req, res) => {
     resources: [
       { resource: `${BASE_URL}/api/v1/chat/completions`, method: "POST", price: "$0.005", description: "AI chat (200+ models, OpenAI-compatible)", category: "ai" },
       { resource: `${BASE_URL}/api/v1/models`, method: "GET", price: "$0.001", description: "List AI models", category: "ai" },
-      { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.01", description: "Batch USDC payments via Spraay V2", category: "payments" },
+      { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.01", description: "Batch payments (any ERC-20 + ETH) via Spraay", category: "payments" },
       { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", description: "Estimate batch payment gas", category: "payments" },
       { resource: `${BASE_URL}/api/v1/swap/quote`, method: "GET", price: "$0.002", description: "Uniswap V3 swap quotes", category: "defi" },
       { resource: `${BASE_URL}/api/v1/swap/tokens`, method: "GET", price: "$0.001", description: "Supported tokens on Base", category: "defi" },
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", description: "Live onchain token prices", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.002", description: "Token balances for any address", category: "data" },
       { resource: `${BASE_URL}/api/v1/resolve`, method: "GET", price: "$0.001", description: "ENS/Basename resolution", category: "identity" },
-      { resource: `${BASE_URL}/api/v3/batch/execute`, method: "POST", price: "$0.01", description: "Multi-stablecoin batch (USDC/USDT/EURC/DAI) via Spraay V3", category: "payments" },
-      { resource: `${BASE_URL}/api/v3/batch/estimate`, method: "POST", price: "$0.001", description: "Multi-stablecoin batch fee estimation", category: "payments" },
-      { resource: `${BASE_URL}/api/v3/tokens`, method: "GET", price: "free", description: "Supported stablecoins and fee tiers", category: "discovery" },
-      { resource: `${BASE_URL}/api/v3/chains`, method: "GET", price: "free", description: "Supported chains and contracts", category: "discovery" },
+      { resource: `${BASE_URL}/api/v1/tokens`, method: "GET", price: "free", description: "Supported tokens and chains", category: "discovery" },
     ],
     updatedAt: new Date().toISOString(),
   });
@@ -357,8 +294,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
 app.get("/", (_req, res) => {
   res.json({
     name: "Spraay x402 Gateway",
-    version: "3.0.0",
-    description: "Pay-per-use AI, multi-stablecoin payments, DeFi data & onchain intelligence on Base. Powered by x402 + USDC.",
+    version: "2.1.0",
+    description: "Pay-per-use AI, batch payments (any ERC-20 + ETH), DeFi data & onchain intelligence on Base. Powered by x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
@@ -367,13 +304,12 @@ app.get("/", (_req, res) => {
         "GET /health": "Service health check",
         "GET /stats": "Usage statistics",
         "GET /.well-known/x402.json": "Machine-readable service discovery",
-        "GET /api/v3/tokens": "Supported stablecoins and fee tiers",
-        "GET /api/v3/chains": "Supported chains and contracts",
+        "GET /api/v1/tokens": "Supported tokens and chains",
       },
-      paid_v1: {
+      paid: {
         "POST /api/v1/chat/completions": "$0.005 - AI chat (200+ models)",
         "GET /api/v1/models": "$0.001 - List AI models",
-        "POST /api/v1/batch/execute": "$0.01 - Batch payment via Spraay V2 (USDC)",
+        "POST /api/v1/batch/execute": "$0.01 - Batch payment (any ERC-20 + ETH)",
         "POST /api/v1/batch/estimate": "$0.001 - Estimate batch cost",
         "GET /api/v1/swap/quote": "$0.002 - Swap quote (Uniswap V3)",
         "GET /api/v1/swap/tokens": "$0.001 - Supported tokens",
@@ -381,28 +317,43 @@ app.get("/", (_req, res) => {
         "GET /api/v1/balances": "$0.002 - Token balances",
         "GET /api/v1/resolve": "$0.001 - ENS/Basename resolution",
       },
-      paid_v3: {
-        "POST /api/v3/batch/execute": "$0.01 - Multi-stablecoin batch (USDC, USDT, EURC, DAI)",
-        "POST /api/v3/batch/estimate": "$0.001 - Multi-stablecoin fee estimation",
-      },
     },
-    contracts: {
-      v2: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
-      v3: "0x3eFf027045230A277293aC27bd571FBC729e0dcE",
-    },
-    supportedTokens: ["USDC", "USDT", "EURC", "DAI"],
+    contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
+    supportedTokens: "Any ERC-20 token + native ETH",
+    protocolFee: "0.3%",
     network: CAIP2_NETWORK,
     payTo: PAY_TO,
     protocol: "x402",
     mainnet: IS_MAINNET,
     bazaar: "discoverable",
-    totalEndpoints: 11,
+    totalEndpoints: 9,
   });
 });
 
-// Free V3 discovery endpoints
-app.get("/api/v3/tokens", tokensHandler);
-app.get("/api/v3/chains", chainsHandler);
+// Free token/chain discovery
+app.get("/api/v1/tokens", (_req, res) => {
+  res.json({
+    description: "Spraay supports any ERC-20 token and native ETH on Base",
+    contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
+    fee: "0.3%",
+    feeBps: 30,
+    maxRecipients: 200,
+    popularTokens: {
+      ETH: { native: true, decimals: 18 },
+      USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+      DAI: { address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals: 18 },
+      EURC: { address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6 },
+      WETH: { address: "0x4200000000000000000000000000000000000006", decimals: 18 },
+    },
+    note: "Any ERC-20 token on Base works — the list above is for convenience",
+    chains: {
+      base: { chainId: 8453, contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC", status: "live" },
+      unichain: { chainId: 130, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" },
+    },
+    network: "eip155:8453",
+  });
+});
 
 app.get("/health", healthHandler);
 app.get("/stats", statsHandler);
@@ -410,8 +361,6 @@ app.get("/stats", statsHandler);
 // ============================================
 // PAID ROUTE HANDLERS
 // ============================================
-
-// V1 (existing)
 app.post("/api/v1/chat/completions", aiChatHandler);
 app.get("/api/v1/models", aiModelsHandler);
 app.post("/api/v1/batch/execute", batchPaymentHandler);
@@ -422,24 +371,19 @@ app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
 
-// V3 (new multi-stablecoin)
-app.post("/api/v3/batch/execute", batchPaymentV3Handler);
-app.post("/api/v3/batch/estimate", batchEstimateV3Handler);
-
 // ============================================
 // START SERVER
 // ============================================
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v3.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v2.1 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🔗 Facilitator: ${IS_MAINNET ? "Coinbase CDP (mainnet)" : FACILITATOR_URL || "x402.org"}`);
   console.log(`🏪 Bazaar: Discovery extensions on all paid routes`);
   console.log(`📄 Discovery: ${BASE_URL}/.well-known/x402.json`);
-  console.log(`🪙 V3 tokens: USDC, USDT, EURC, DAI`);
-  console.log(`📋 V2: 0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC`);
-  console.log(`📋 V3: 0x3eFf027045230A277293aC27bd571FBC729e0dcE`);
-  console.log(`\n🌐 11 paid + 6 free endpoints ready\n`);
+  console.log(`📋 Contract: 0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC (V2)`);
+  console.log(`🪙 Supports: Any ERC-20 token + native ETH`);
+  console.log(`\n🌐 9 paid + 5 free endpoints ready\n`);
 });
 
 export default app;
