@@ -14,6 +14,7 @@ import {
 import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
 import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
 import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
+import { swapExecuteHandler } from "./routes/swap-execute.js"; // ← NEW
 import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
 import { resolveHandler } from "./routes/resolve.js";
@@ -184,6 +185,61 @@ app.use(
         },
       },
 
+      // ---- SWAP EXECUTE ---- ← NEW
+      "POST /api/v1/swap/execute": {
+        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Execute a token swap on Base via Uniswap V3. Returns unsigned transaction data (approval + swap) ready to sign and submit. Auto-selects best fee tier. Supports all major Base tokens.",
+        mimeType: "application/json",
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: {
+              tokenIn: "USDC",
+              tokenOut: "WETH",
+              amountIn: "100",
+              recipient: "0xYourAddress",
+              slippageBps: 50,
+            },
+            inputSchema: {
+              properties: {
+                tokenIn: { type: "string", description: "Input token symbol or address (e.g. USDC, WETH, ETH, 0x833...)" },
+                tokenOut: { type: "string", description: "Output token symbol or address" },
+                amountIn: { type: "string", description: "Human-readable input amount (e.g. '100' for 100 USDC)" },
+                recipient: { type: "string", description: "Address to receive output tokens (0x...)" },
+                slippageBps: { type: "number", description: "Slippage tolerance in basis points. Default 50 (0.5%). Range: 1-5000." },
+              },
+              required: ["tokenIn", "tokenOut", "amountIn", "recipient"],
+            },
+            bodyType: "json",
+            output: {
+              example: {
+                status: "ready",
+                quote: {
+                  tokenIn: { symbol: "USDC", amount: "100" },
+                  tokenOut: { symbol: "WETH", estimatedAmount: "0.02941176", minimumAmount: "0.02926470" },
+                  executionPrice: "0.00029412",
+                  feeTier: 500,
+                  slippageBps: 50,
+                },
+                transactions: {
+                  approval: { to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", data: "0x095ea7b3...", note: "Approve SwapRouter02 to spend USDC" },
+                  swap: { to: "0x2626664c2603336E57B271c5C0b26F421741e481", data: "0x414bf389...", chainId: 8453 },
+                },
+                instructions: ["1. Sign approval tx", "2. Sign swap tx"],
+              },
+              schema: {
+                properties: {
+                  status: { type: "string" },
+                  quote: { type: "object" },
+                  transactions: { type: "object" },
+                  execution: { type: "object" },
+                  instructions: { type: "array" },
+                },
+              },
+            },
+          }),
+        },
+      },
+
       // ---- PRICE FEED ----
       "GET /api/v1/prices": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -269,7 +325,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2,
     name: "Spraay x402 Gateway",
-    description: "AI models, batch payments (any ERC-20 + ETH), DeFi data, and onchain intelligence on Base. Pay USDC per request.",
+    description: "AI models, batch payments (any ERC-20 + ETH), DeFi swaps, and onchain intelligence on Base. Pay USDC per request.",
     homepage: BASE_URL,
     repository: "https://github.com/plagtech/spraay-x402-gateway",
     network: CAIP2_NETWORK,
@@ -282,6 +338,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", description: "Estimate batch payment gas", category: "payments" },
       { resource: `${BASE_URL}/api/v1/swap/quote`, method: "GET", price: "$0.002", description: "Uniswap V3 swap quotes", category: "defi" },
       { resource: `${BASE_URL}/api/v1/swap/tokens`, method: "GET", price: "$0.001", description: "Supported tokens on Base", category: "defi" },
+      { resource: `${BASE_URL}/api/v1/swap/execute`, method: "POST", price: "$0.01", description: "Execute swap (unsigned tx via Uniswap V3)", category: "defi" },
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", description: "Live onchain token prices", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.002", description: "Token balances for any address", category: "data" },
       { resource: `${BASE_URL}/api/v1/resolve`, method: "GET", price: "$0.001", description: "ENS/Basename resolution", category: "identity" },
@@ -294,8 +351,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
 app.get("/", (_req, res) => {
   res.json({
     name: "Spraay x402 Gateway",
-    version: "2.1.0",
-    description: "Pay-per-use AI, batch payments (any ERC-20 + ETH), DeFi data & onchain intelligence on Base. Powered by x402 + USDC.",
+    version: "2.2.0",
+    description: "Pay-per-use AI, batch payments (any ERC-20 + ETH), DeFi swaps & onchain intelligence on Base. Powered by x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
@@ -313,6 +370,7 @@ app.get("/", (_req, res) => {
         "POST /api/v1/batch/estimate": "$0.001 - Estimate batch cost",
         "GET /api/v1/swap/quote": "$0.002 - Swap quote (Uniswap V3)",
         "GET /api/v1/swap/tokens": "$0.001 - Supported tokens",
+        "POST /api/v1/swap/execute": "$0.01 - Execute swap (unsigned tx via Uniswap V3)",
         "GET /api/v1/prices": "$0.002 - Live token prices",
         "GET /api/v1/balances": "$0.002 - Token balances",
         "GET /api/v1/resolve": "$0.001 - ENS/Basename resolution",
@@ -326,7 +384,7 @@ app.get("/", (_req, res) => {
     protocol: "x402",
     mainnet: IS_MAINNET,
     bazaar: "discoverable",
-    totalEndpoints: 9,
+    totalEndpoints: 10,
   });
 });
 
@@ -367,6 +425,7 @@ app.post("/api/v1/batch/execute", batchPaymentHandler);
 app.post("/api/v1/batch/estimate", batchEstimateHandler);
 app.get("/api/v1/swap/quote", swapQuoteHandler);
 app.get("/api/v1/swap/tokens", swapTokensHandler);
+app.post("/api/v1/swap/execute", swapExecuteHandler); // ← NEW
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
@@ -375,7 +434,7 @@ app.get("/api/v1/resolve", resolveHandler);
 // START SERVER
 // ============================================
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v2.1 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v2.2 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🔗 Facilitator: ${IS_MAINNET ? "Coinbase CDP (mainnet)" : FACILITATOR_URL || "x402.org"}`);
@@ -383,7 +442,7 @@ app.listen(PORT, () => {
   console.log(`📄 Discovery: ${BASE_URL}/.well-known/x402.json`);
   console.log(`📋 Contract: 0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC (V2)`);
   console.log(`🪙 Supports: Any ERC-20 token + native ETH`);
-  console.log(`\n🌐 9 paid + 5 free endpoints ready\n`);
+  console.log(`\n🌐 10 paid + 5 free endpoints ready\n`);
 });
 
 export default app;
