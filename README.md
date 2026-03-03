@@ -1,4 +1,4 @@
-# 🥭 Spraay x402 Gateway
+# 💧 Spraay x402 Gateway
 
 **Earn USDC 24/7 by selling AI model access, batch payments, and DeFi data to autonomous agents on Base.**
 
