@@ -459,7 +459,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
     ],
     updatedAt: new Date().toISOString(),
   });
-app.get("/.well-known/mcp-server-card.json", (_req, res) => {
+app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
     description: "Full-stack DeFi infrastructure for AI agents on Base. 57 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, communication, scheduling, storage, KYC, auth, audit trail & tax. Agents pay USDC per request via x402.",
