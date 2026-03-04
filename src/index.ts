@@ -18,6 +18,22 @@ import { invoiceCreateHandler, invoiceGetHandler, invoiceListHandler } from "./r
 import { analyticsWalletHandler, analyticsTxHistoryHandler } from "./routes/analytics.js";
 import { escrowCreateHandler, escrowGetHandler, escrowFundHandler, escrowReleaseHandler, escrowCancelHandler, escrowListHandler } from "./routes/escrow.js";
 import { classifyAddressHandler, classifyTxHandler, explainContractHandler, summarizeHandler } from "./routes/inference.js";
+// NEW: Communication
+import { notifyEmailHandler, notifySmsHandler, notifyStatusHandler } from "./routes/email-sms.js";
+import { webhookRegisterHandler, webhookTestHandler, webhookListHandler, webhookDeleteHandler } from "./routes/webhook.js";
+import { xmtpSendHandler, xmtpInboxHandler } from "./routes/xmtp-relay.js";
+// NEW: Infrastructure
+import { rpcCallHandler, rpcChainsHandler } from "./routes/rpc.js";
+import { storagePinHandler, storageGetHandler, storageStatusHandler } from "./routes/ipfs.js";
+import { cronCreateHandler, cronListHandler, cronCancelHandler } from "./routes/cron.js";
+import { logsIngestHandler, logsQueryHandler } from "./routes/logging.js";
+// NEW: Identity & Access
+import { kycVerifyHandler, kycStatusHandler } from "./routes/kyc.js";
+import { authSessionHandler, authVerifyHandler } from "./routes/auth.js";
+// NEW: Compliance
+import { auditLogHandler, auditQueryHandler } from "./routes/audit.js";
+import { taxCalculateHandler, taxReportHandler } from "./routes/tax.js";
+// Existing
 import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
 import { resolveHandler } from "./routes/resolve.js";
@@ -182,23 +198,166 @@ app.use(
       // ---- INFERENCE ----
       "POST /api/v1/inference/classify-address": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "AI-powered wallet classification with risk scoring. Analyzes on-chain data to classify addresses as whale, retail, MEV bot, etc.", mimeType: "application/json",
+        description: "AI-powered wallet classification with risk scoring.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { classification: { classification: "whale", riskLevel: "low", riskScore: 15 } }, schema: { properties: { classification: { type: "object" } } } } }) },
       },
       "POST /api/v1/inference/classify-tx": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "AI-powered transaction classification with risk scoring. Decodes and analyzes any Base transaction.", mimeType: "application/json",
+        description: "AI-powered transaction classification with risk scoring.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { hash: "0xabc123..." }, inputSchema: { properties: { hash: { type: "string" } }, required: ["hash"] }, bodyType: "json", output: { example: { classification: { type: "swap", riskLevel: "low" } }, schema: { properties: { classification: { type: "object" } } } } }) },
       },
       "POST /api/v1/inference/explain-contract": {
         accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "AI-powered smart contract analysis. Explains what a verified contract does, its functions, and security properties.", mimeType: "application/json",
+        description: "AI-powered smart contract analysis.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { analysis: { type: "erc20-token", riskLevel: "low" } }, schema: { properties: { analysis: { type: "object" } } } } }) },
       },
       "POST /api/v1/inference/summarize": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "AI intelligence briefing for any address or transaction. Returns structured risk assessment and actionable insights.", mimeType: "application/json",
+        description: "AI intelligence briefing for any address or transaction.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { target: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", context: "defi" }, inputSchema: { properties: { target: { type: "string" }, context: { type: "string" } }, required: ["target"] }, bodyType: "json", output: { example: { briefing: { headline: "Active DeFi whale", riskAssessment: { level: "low" } } }, schema: { properties: { briefing: { type: "object" } } } } }) },
+      },
+
+      // ---- COMMUNICATION ----
+      "POST /api/v1/notify/email": {
+        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Send email notification for payment confirmations, alerts, receipts.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { to: "user@example.com", subject: "Payment Received", body: "Your batch payment of 500 USDC has been confirmed." }, inputSchema: { properties: { to: { type: "string" }, subject: { type: "string" }, body: { type: "string" }, cc: { type: "string" }, replyTo: { type: "string" } }, required: ["to", "body"] }, bodyType: "json", output: { example: { id: "ntf_123", status: "queued" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/notify/sms": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Send SMS notification for payment alerts.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { to: "+14155551234", body: "Spraay: 500 USDC payment confirmed. Tx: 0xabc..." }, inputSchema: { properties: { to: { type: "string" }, body: { type: "string" } }, required: ["to", "body"] }, bodyType: "json", output: { example: { id: "ntf_123", status: "queued", segments: 1 }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/notify/status": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Check notification delivery status.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "ntf_123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { id: "ntf_123", status: "delivered" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/webhook/register": {
+        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Register webhook for payment/escrow/swap events.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { url: "https://myapp.com/hooks/spraay", events: ["payment.sent", "escrow.funded"] }, inputSchema: { properties: { url: { type: "string" }, events: { type: "array" } }, required: ["url", "events"] }, bodyType: "json", output: { example: { id: "whk_123", secret: "whsec_abc", status: "active" }, schema: { properties: { id: { type: "string" }, secret: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/webhook/test": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Send test event to a registered webhook.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { webhookId: "whk_123" }, inputSchema: { properties: { webhookId: { type: "string" } }, required: ["webhookId"] }, bodyType: "json", output: { example: { delivered: true }, schema: { properties: { delivered: { type: "boolean" } } } } }) },
+      },
+      "GET /api/v1/webhook/list": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "List registered webhooks.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { webhooks: [], total: 0 }, schema: { properties: { webhooks: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/webhook/delete": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Delete a webhook.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { webhookId: "whk_123" }, inputSchema: { properties: { webhookId: { type: "string" } }, required: ["webhookId"] }, bodyType: "json", output: { example: { deleted: true }, schema: { properties: { deleted: { type: "boolean" } } } } }) },
+      },
+      "POST /api/v1/xmtp/send": {
+        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Send encrypted XMTP message to any Ethereum address.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", content: "Your payment of 500 USDC has been sent." }, inputSchema: { properties: { to: { type: "string" }, content: { type: "string" }, contentType: { type: "string" } }, required: ["to", "content"] }, bodyType: "json", output: { example: { id: "xmtp_123", status: "sent" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/xmtp/inbox": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Read XMTP inbox for an Ethereum address.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA..." }, inputSchema: { properties: { address: { type: "string" }, limit: { type: "string" } }, required: ["address"] }, output: { example: { messages: [], total: 0 }, schema: { properties: { messages: { type: "array" } } } } }) },
+      },
+
+      // ---- INFRASTRUCTURE ----
+      "POST /api/v1/rpc/call": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Premium multi-chain RPC call via Alchemy/Helius.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { chain: "base", method: "eth_getBalance", params: ["0xd8dA...", "latest"] }, inputSchema: { properties: { chain: { type: "string" }, method: { type: "string" }, params: { type: "array" } }, required: ["chain", "method"] }, bodyType: "json", output: { example: { jsonrpc: "2.0", result: "0x1234" }, schema: { properties: { result: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/rpc/chains": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "List supported RPC chains and methods.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { chains: [], allowedMethods: [] }, schema: { properties: { chains: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/storage/pin": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Pin content to IPFS or Arweave for permanent storage.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { data: "{\"receipt\":\"batch_123\"}", contentType: "application/json", provider: "ipfs" }, inputSchema: { properties: { data: { type: "string" }, contentType: { type: "string" }, provider: { type: "string" } }, required: ["data"] }, bodyType: "json", output: { example: { cid: "bafy...", status: "pinning" }, schema: { properties: { cid: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/storage/get": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Retrieve pinned content by CID.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { cid: "bafy..." }, inputSchema: { properties: { cid: { type: "string" } }, required: ["cid"] }, output: { example: { cid: "bafy...", status: "pinned" }, schema: { properties: { cid: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/storage/status": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Check pin status.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "pin_123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { status: "pinned" }, schema: { properties: { status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/cron/create": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Create scheduled job for recurring payments, DCA, reminders.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { action: "batch.execute", schedule: "0 9 * * 1", payload: { token: "USDC", recipients: ["0x..."] } }, inputSchema: { properties: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" }, maxRuns: { type: "number" } }, required: ["action", "schedule", "payload"] }, bodyType: "json", output: { example: { id: "cron_123", status: "active" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/cron/list": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "List scheduled jobs.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { jobs: [], total: 0 }, schema: { properties: { jobs: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/cron/cancel": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Cancel a scheduled job.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { jobId: "cron_123" }, inputSchema: { properties: { jobId: { type: "string" } }, required: ["jobId"] }, bodyType: "json", output: { example: { status: "cancelled" }, schema: { properties: { status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/logs/ingest": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Ingest structured logs for debugging agent workflows.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { entries: [{ level: "info", service: "batch-agent", message: "Payment sent" }] }, inputSchema: { properties: { entries: { type: "array" } }, required: ["entries"] }, bodyType: "json", output: { example: { ingested: 1, ids: ["log_123"] }, schema: { properties: { ingested: { type: "number" } } } } }) },
+      },
+      "GET /api/v1/logs/query": {
+        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Query structured logs by service, level, time.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { service: "batch-agent", level: "error" }, inputSchema: { properties: { service: { type: "string" }, level: { type: "string" }, since: { type: "string" }, limit: { type: "string" } } }, output: { example: { logs: [], total: 0 }, schema: { properties: { logs: { type: "array" } } } } }) },
+      },
+
+      // ---- IDENTITY & ACCESS ----
+      "POST /api/v1/kyc/verify": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Initiate KYC/KYB verification for compliance-gated payments.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", type: "individual", level: "basic" }, inputSchema: { properties: { address: { type: "string" }, type: { type: "string" }, level: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { id: "kyc_123", status: "pending" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/kyc/status": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Check KYC verification status.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "kyc_123" }, inputSchema: { properties: { id: { type: "string" }, address: { type: "string" } } }, output: { example: { status: "approved", checks: { identity: true, sanctions: true } }, schema: { properties: { status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/auth/session": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Create authenticated session with scoped permissions.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", permissions: ["batch:execute", "swap:execute"], ttlSeconds: 3600 }, inputSchema: { properties: { address: { type: "string" }, permissions: { type: "array" }, ttlSeconds: { type: "number" } }, required: ["address"] }, bodyType: "json", output: { example: { token: "spr_abc...", expiresAt: "2026-03-05T00:00:00Z" }, schema: { properties: { token: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/auth/verify": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Verify session token and check permissions.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { token: "spr_abc..." }, inputSchema: { properties: { token: { type: "string" } }, required: ["token"] }, output: { example: { valid: true, permissions: [] }, schema: { properties: { valid: { type: "boolean" } } } } }) },
+      },
+
+      // ---- COMPLIANCE ----
+      "POST /api/v1/audit/log": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Record immutable audit trail entry for payments, escrows, compliance.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { action: "payment.sent", actor: "0xd8dA...", resource: "batch_123", details: { amount: "500 USDC" } }, inputSchema: { properties: { action: { type: "string" }, actor: { type: "string" }, resource: { type: "string" }, details: { type: "object" }, txHash: { type: "string" } }, required: ["action", "actor", "resource"] }, bodyType: "json", output: { example: { id: "aud_123", recorded: true }, schema: { properties: { id: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/audit/query": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Query audit trail by actor, action, resource, time range.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { actor: "0xd8dA...", action: "payment.sent" }, inputSchema: { properties: { actor: { type: "string" }, action: { type: "string" }, resource: { type: "string" }, since: { type: "string" }, until: { type: "string" } } }, output: { example: { entries: [], total: 0 }, schema: { properties: { entries: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/tax/calculate": {
+        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Calculate crypto tax gain/loss using FIFO method.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { transactions: [{ type: "swap", asset: "ETH", amount: 1.5, costBasisUsd: 3000, proceedsUsd: 4500, holdingDays: 400 }] }, inputSchema: { properties: { transactions: { type: "array" } }, required: ["transactions"] }, bodyType: "json", output: { example: { summary: { totalGainLossUsd: 1500 } }, schema: { properties: { summary: { type: "object" } } } } }) },
+      },
+      "GET /api/v1/tax/report": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Retrieve tax report with IRS 8949-compatible data.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { reportId: "tax_123" }, inputSchema: { properties: { reportId: { type: "string" } } }, output: { example: { events: [], total: 0 }, schema: { properties: { events: { type: "array" } } } } }) },
       },
 
       // ---- EXISTING ----
@@ -226,7 +385,7 @@ app.use(
 app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2, name: "Spraay x402 Gateway",
-    description: "AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics & onchain intelligence.",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, identity, compliance & scheduling.",
     homepage: BASE_URL, repository: "https://github.com/plagtech/spraay-x402-gateway",
     network: CAIP2_NETWORK, payTo: PAY_TO,
     facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
@@ -261,6 +420,38 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/inference/classify-tx`, method: "POST", price: "$0.008", category: "inference" },
       { resource: `${BASE_URL}/api/v1/inference/explain-contract`, method: "POST", price: "$0.01", category: "inference" },
       { resource: `${BASE_URL}/api/v1/inference/summarize`, method: "POST", price: "$0.008", category: "inference" },
+      // Communication
+      { resource: `${BASE_URL}/api/v1/notify/email`, method: "POST", price: "$0.003", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/notify/sms`, method: "POST", price: "$0.005", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/notify/status`, method: "GET", price: "$0.001", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/webhook/register`, method: "POST", price: "$0.003", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/webhook/test`, method: "POST", price: "$0.002", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/webhook/list`, method: "GET", price: "$0.001", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/webhook/delete`, method: "POST", price: "$0.001", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/xmtp/send`, method: "POST", price: "$0.003", category: "communication" },
+      { resource: `${BASE_URL}/api/v1/xmtp/inbox`, method: "GET", price: "$0.002", category: "communication" },
+      // Infrastructure
+      { resource: `${BASE_URL}/api/v1/rpc/call`, method: "POST", price: "$0.001", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/rpc/chains`, method: "GET", price: "$0.001", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/storage/pin`, method: "POST", price: "$0.005", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/storage/get`, method: "GET", price: "$0.002", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/storage/status`, method: "GET", price: "$0.001", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/cron/create`, method: "POST", price: "$0.005", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/cron/list`, method: "GET", price: "$0.001", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/cron/cancel`, method: "POST", price: "$0.001", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/logs/ingest`, method: "POST", price: "$0.001", category: "infrastructure" },
+      { resource: `${BASE_URL}/api/v1/logs/query`, method: "GET", price: "$0.003", category: "infrastructure" },
+      // Identity & Access
+      { resource: `${BASE_URL}/api/v1/kyc/verify`, method: "POST", price: "$0.05", category: "identity" },
+      { resource: `${BASE_URL}/api/v1/kyc/status`, method: "GET", price: "$0.005", category: "identity" },
+      { resource: `${BASE_URL}/api/v1/auth/session`, method: "POST", price: "$0.005", category: "identity" },
+      { resource: `${BASE_URL}/api/v1/auth/verify`, method: "GET", price: "$0.001", category: "identity" },
+      // Compliance
+      { resource: `${BASE_URL}/api/v1/audit/log`, method: "POST", price: "$0.001", category: "compliance" },
+      { resource: `${BASE_URL}/api/v1/audit/query`, method: "GET", price: "$0.005", category: "compliance" },
+      { resource: `${BASE_URL}/api/v1/tax/calculate`, method: "POST", price: "$0.01", category: "compliance" },
+      { resource: `${BASE_URL}/api/v1/tax/report`, method: "GET", price: "$0.02", category: "compliance" },
+      // Existing data
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.002", category: "data" },
       { resource: `${BASE_URL}/api/v1/resolve`, method: "GET", price: "$0.001", category: "identity" },
@@ -272,43 +463,85 @@ app.get("/.well-known/x402.json", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "2.9.0",
-    description: "Pay-per-use AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics & onchain intelligence. x402 + USDC.",
+    name: "Spraay x402 Gateway", version: "3.0.0",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail & tax. x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
       free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens" },
       paid: {
+        // AI
         "POST /api/v1/chat/completions": "$0.005 - AI chat",
         "GET /api/v1/models": "$0.001 - AI models",
+        // Payments
         "POST /api/v1/batch/execute": "$0.01 - Batch payment",
         "POST /api/v1/batch/estimate": "$0.001 - Batch estimate",
+        // DeFi
         "GET /api/v1/swap/quote": "$0.002 - Swap quote",
         "GET /api/v1/swap/tokens": "$0.001 - Swap tokens",
         "POST /api/v1/swap/execute": "$0.01 - Execute swap",
+        // Oracle
         "GET /api/v1/oracle/prices": "$0.003 - Price feed",
         "GET /api/v1/oracle/gas": "$0.001 - Gas prices",
         "GET /api/v1/oracle/fx": "$0.002 - Stablecoin FX",
+        // Bridge
         "GET /api/v1/bridge/quote": "$0.005 - Bridge quote",
         "GET /api/v1/bridge/chains": "$0.001 - Bridge chains",
+        // Payroll
         "POST /api/v1/payroll/execute": "$0.02 - Payroll",
         "POST /api/v1/payroll/estimate": "$0.002 - Payroll estimate",
         "GET /api/v1/payroll/tokens": "$0.001 - Payroll tokens",
+        // Invoice
         "POST /api/v1/invoice/create": "$0.005 - Create invoice",
         "GET /api/v1/invoice/list": "$0.002 - List invoices",
         "GET /api/v1/invoice/:id": "$0.001 - Invoice lookup",
+        // Analytics
         "GET /api/v1/analytics/wallet": "$0.005 - Wallet profile",
         "GET /api/v1/analytics/txhistory": "$0.003 - Tx history",
+        // Escrow
         "POST /api/v1/escrow/create": "$0.008 - Create escrow",
         "GET /api/v1/escrow/list": "$0.002 - List escrows",
         "GET /api/v1/escrow/:id": "$0.001 - Escrow status",
         "POST /api/v1/escrow/fund": "$0.002 - Fund escrow",
         "POST /api/v1/escrow/release": "$0.005 - Release escrow",
         "POST /api/v1/escrow/cancel": "$0.002 - Cancel escrow",
+        // Inference
         "POST /api/v1/inference/classify-address": "$0.008 - Classify wallet",
         "POST /api/v1/inference/classify-tx": "$0.008 - Classify transaction",
         "POST /api/v1/inference/explain-contract": "$0.01 - Explain contract",
         "POST /api/v1/inference/summarize": "$0.008 - Intelligence briefing",
+        // Communication
+        "POST /api/v1/notify/email": "$0.003 - Send email",
+        "POST /api/v1/notify/sms": "$0.005 - Send SMS",
+        "GET /api/v1/notify/status": "$0.001 - Notification status",
+        "POST /api/v1/webhook/register": "$0.003 - Register webhook",
+        "POST /api/v1/webhook/test": "$0.002 - Test webhook",
+        "GET /api/v1/webhook/list": "$0.001 - List webhooks",
+        "POST /api/v1/webhook/delete": "$0.001 - Delete webhook",
+        "POST /api/v1/xmtp/send": "$0.003 - Send XMTP message",
+        "GET /api/v1/xmtp/inbox": "$0.002 - XMTP inbox",
+        // Infrastructure
+        "POST /api/v1/rpc/call": "$0.001 - RPC call",
+        "GET /api/v1/rpc/chains": "$0.001 - RPC chains",
+        "POST /api/v1/storage/pin": "$0.005 - Pin to IPFS/Arweave",
+        "GET /api/v1/storage/get": "$0.002 - Get pinned content",
+        "GET /api/v1/storage/status": "$0.001 - Pin status",
+        "POST /api/v1/cron/create": "$0.005 - Create scheduled job",
+        "GET /api/v1/cron/list": "$0.001 - List jobs",
+        "POST /api/v1/cron/cancel": "$0.001 - Cancel job",
+        "POST /api/v1/logs/ingest": "$0.001 - Ingest logs",
+        "GET /api/v1/logs/query": "$0.003 - Query logs",
+        // Identity & Access
+        "POST /api/v1/kyc/verify": "$0.05 - KYC verification",
+        "GET /api/v1/kyc/status": "$0.005 - KYC status",
+        "POST /api/v1/auth/session": "$0.005 - Create session",
+        "GET /api/v1/auth/verify": "$0.001 - Verify token",
+        // Compliance
+        "POST /api/v1/audit/log": "$0.001 - Audit log entry",
+        "GET /api/v1/audit/query": "$0.005 - Query audit trail",
+        "POST /api/v1/tax/calculate": "$0.01 - Tax calculation",
+        "GET /api/v1/tax/report": "$0.02 - Tax report",
+        // Data
         "GET /api/v1/prices": "$0.002 - Token prices",
         "GET /api/v1/balances": "$0.002 - Balances",
         "GET /api/v1/resolve": "$0.001 - ENS resolution",
@@ -316,7 +549,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 33,
+    totalEndpoints: 57,
   });
 });
 
@@ -337,45 +570,87 @@ app.get("/health", healthHandler);
 app.get("/stats", statsHandler);
 
 // PAID ROUTE HANDLERS
+// AI
 app.post("/api/v1/chat/completions", aiChatHandler);
 app.get("/api/v1/models", aiModelsHandler);
+// Payments
 app.post("/api/v1/batch/execute", batchPaymentHandler);
 app.post("/api/v1/batch/estimate", batchEstimateHandler);
+// DeFi
 app.get("/api/v1/swap/quote", swapQuoteHandler);
 app.get("/api/v1/swap/tokens", swapTokensHandler);
 app.post("/api/v1/swap/execute", swapExecuteHandler);
+// Oracle
 app.get("/api/v1/oracle/prices", oraclePricesHandler);
 app.get("/api/v1/oracle/gas", oracleGasHandler);
 app.get("/api/v1/oracle/fx", oracleFxHandler);
+// Bridge
 app.get("/api/v1/bridge/quote", bridgeQuoteHandler);
 app.get("/api/v1/bridge/chains", bridgeChainsHandler);
+// Payroll
 app.post("/api/v1/payroll/execute", payrollExecuteHandler);
 app.post("/api/v1/payroll/estimate", payrollEstimateHandler);
 app.get("/api/v1/payroll/tokens", payrollTokensHandler);
+// Invoice
 app.post("/api/v1/invoice/create", invoiceCreateHandler);
 app.get("/api/v1/invoice/list", invoiceListHandler);
 app.get("/api/v1/invoice/:id", invoiceGetHandler);
+// Analytics
 app.get("/api/v1/analytics/wallet", analyticsWalletHandler);
 app.get("/api/v1/analytics/txhistory", analyticsTxHistoryHandler);
+// Escrow
 app.post("/api/v1/escrow/create", escrowCreateHandler);
 app.get("/api/v1/escrow/list", escrowListHandler);
 app.post("/api/v1/escrow/fund", escrowFundHandler);
 app.post("/api/v1/escrow/release", escrowReleaseHandler);
 app.post("/api/v1/escrow/cancel", escrowCancelHandler);
 app.get("/api/v1/escrow/:id", escrowGetHandler);
+// Inference
 app.post("/api/v1/inference/classify-address", classifyAddressHandler);
 app.post("/api/v1/inference/classify-tx", classifyTxHandler);
 app.post("/api/v1/inference/explain-contract", explainContractHandler);
 app.post("/api/v1/inference/summarize", summarizeHandler);
+// Communication
+app.post("/api/v1/notify/email", notifyEmailHandler);
+app.post("/api/v1/notify/sms", notifySmsHandler);
+app.get("/api/v1/notify/status", notifyStatusHandler);
+app.post("/api/v1/webhook/register", webhookRegisterHandler);
+app.post("/api/v1/webhook/test", webhookTestHandler);
+app.get("/api/v1/webhook/list", webhookListHandler);
+app.post("/api/v1/webhook/delete", webhookDeleteHandler);
+app.post("/api/v1/xmtp/send", xmtpSendHandler);
+app.get("/api/v1/xmtp/inbox", xmtpInboxHandler);
+// Infrastructure
+app.post("/api/v1/rpc/call", rpcCallHandler);
+app.get("/api/v1/rpc/chains", rpcChainsHandler);
+app.post("/api/v1/storage/pin", storagePinHandler);
+app.get("/api/v1/storage/get", storageGetHandler);
+app.get("/api/v1/storage/status", storageStatusHandler);
+app.post("/api/v1/cron/create", cronCreateHandler);
+app.get("/api/v1/cron/list", cronListHandler);
+app.post("/api/v1/cron/cancel", cronCancelHandler);
+app.post("/api/v1/logs/ingest", logsIngestHandler);
+app.get("/api/v1/logs/query", logsQueryHandler);
+// Identity & Access
+app.post("/api/v1/kyc/verify", kycVerifyHandler);
+app.get("/api/v1/kyc/status", kycStatusHandler);
+app.post("/api/v1/auth/session", authSessionHandler);
+app.get("/api/v1/auth/verify", authVerifyHandler);
+// Compliance
+app.post("/api/v1/audit/log", auditLogHandler);
+app.get("/api/v1/audit/query", auditQueryHandler);
+app.post("/api/v1/tax/calculate", taxCalculateHandler);
+app.get("/api/v1/tax/report", taxReportHandler);
+// Data
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v2.9.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v3.0.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
-  console.log(`\n🌐 33 paid + 5 free endpoints ready\n`);
+  console.log(`\n🌐 57 paid + 5 free endpoints ready\n`);
 });
 
 export default app;
