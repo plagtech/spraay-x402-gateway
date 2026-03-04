@@ -16,6 +16,7 @@ import { bridgeQuoteHandler, bridgeChainsHandler } from "./routes/bridge.js";
 import { payrollExecuteHandler, payrollEstimateHandler, payrollTokensHandler } from "./routes/payroll.js";
 import { invoiceCreateHandler, invoiceGetHandler, invoiceListHandler } from "./routes/invoice.js";
 import { analyticsWalletHandler, analyticsTxHistoryHandler } from "./routes/analytics.js";
+import { escrowCreateHandler, escrowGetHandler, escrowFundHandler, escrowReleaseHandler, escrowCancelHandler, escrowListHandler } from "./routes/escrow.js";
 import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
 import { resolveHandler } from "./routes/resolve.js";
@@ -49,8 +50,7 @@ app.use(
     {
       "POST /api/v1/chat/completions": {
         accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "AI chat completions via 200+ models. OpenAI-compatible.",
-        mimeType: "application/json",
+        description: "AI chat completions via 200+ models.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { model: "openai/gpt-4o-mini", messages: [{ role: "user", content: "Hello" }] }, inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { choices: [{ message: { content: "Hello!" } }] }, schema: { properties: { choices: { type: "array" } } } } }) },
       },
       "GET /api/v1/models": {
@@ -60,7 +60,7 @@ app.use(
       },
       "POST /api/v1/batch/execute": {
         accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Batch payments via Spraay. Any ERC-20 + ETH.", mimeType: "application/json",
+        description: "Batch payments via Spraay.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", recipients: ["0x..."], amounts: ["1000000"], sender: "0x..." }, inputSchema: { properties: { token: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, sender: { type: "string" } }, required: ["token", "recipients", "amounts", "sender"] }, bodyType: "json", output: { example: { transactions: [] }, schema: { properties: { transactions: { type: "array" } } } } }) },
       },
       "POST /api/v1/batch/estimate": {
@@ -80,8 +80,8 @@ app.use(
       },
       "POST /api/v1/swap/execute": {
         accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Execute swap via Uniswap V3. Unsigned tx.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { tokenIn: "USDC", tokenOut: "WETH", amountIn: "100", recipient: "0x..." }, inputSchema: { properties: { tokenIn: { type: "string" }, tokenOut: { type: "string" }, amountIn: { type: "string" }, recipient: { type: "string" } }, required: ["tokenIn", "tokenOut", "amountIn", "recipient"] }, bodyType: "json", output: { example: { status: "ready", transactions: {} }, schema: { properties: { status: { type: "string" } } } } }) },
+        description: "Execute swap via Uniswap V3.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { tokenIn: "USDC", tokenOut: "WETH", amountIn: "100", recipient: "0x..." }, inputSchema: { properties: { tokenIn: { type: "string" }, tokenOut: { type: "string" }, amountIn: { type: "string" }, recipient: { type: "string" } }, required: ["tokenIn", "tokenOut", "amountIn", "recipient"] }, bodyType: "json", output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
       },
       "GET /api/v1/oracle/prices": {
         accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -91,17 +91,17 @@ app.use(
       "GET /api/v1/oracle/gas": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Gas prices on Base.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { gas: { gasPrice: { gwei: "0.005" } } }, schema: { properties: { gas: { type: "object" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ output: { example: { gas: {} }, schema: { properties: { gas: { type: "object" } } } } }) },
       },
       "GET /api/v1/oracle/fx": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Stablecoin FX rates.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { base: "USDC" }, inputSchema: { properties: { base: { type: "string" } } }, output: { example: { base: "USDC", rates: {} }, schema: { properties: { rates: { type: "object" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ input: { base: "USDC" }, inputSchema: { properties: { base: { type: "string" } } }, output: { example: { rates: {} }, schema: { properties: { rates: { type: "object" } } } } }) },
       },
       "GET /api/v1/bridge/quote": {
         accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Cross-chain bridge quote via LI.FI.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { fromChain: "base", toChain: "ethereum", token: "USDC", amount: "1000000000", fromAddress: "0x..." }, inputSchema: { properties: { fromChain: { type: "string" }, toChain: { type: "string" }, token: { type: "string" }, amount: { type: "string" }, fromAddress: { type: "string" } }, required: ["fromChain", "toChain", "token", "amount", "fromAddress"] }, output: { example: { status: "ready", route: {} }, schema: { properties: { status: { type: "string" } } } } }) },
+        description: "Cross-chain bridge quote.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { fromChain: "base", toChain: "ethereum", token: "USDC", amount: "1000000000", fromAddress: "0x..." }, inputSchema: { properties: { fromChain: { type: "string" }, toChain: { type: "string" }, token: { type: "string" }, amount: { type: "string" }, fromAddress: { type: "string" } }, required: ["fromChain", "toChain", "token", "amount", "fromAddress"] }, output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
       },
       "GET /api/v1/bridge/chains": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -111,7 +111,7 @@ app.use(
       "POST /api/v1/payroll/execute": {
         accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Execute payroll via Spraay V2.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", sender: "0x...", employees: [{ address: "0x...", amount: "3000" }] }, inputSchema: { properties: { token: { type: "string" }, sender: { type: "string" }, employees: { type: "array" } }, required: ["token", "sender", "employees"] }, bodyType: "json", output: { example: { status: "ready", payroll: {} }, schema: { properties: { status: { type: "string" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", sender: "0x...", employees: [{ address: "0x...", amount: "3000" }] }, inputSchema: { properties: { token: { type: "string" }, sender: { type: "string" }, employees: { type: "array" } }, required: ["token", "sender", "employees"] }, bodyType: "json", output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
       },
       "POST /api/v1/payroll/estimate": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -121,12 +121,12 @@ app.use(
       "GET /api/v1/payroll/tokens": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Payroll stablecoins.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { tokens: [], tokenCount: 5 }, schema: { properties: { tokens: { type: "array" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ output: { example: { tokens: [] }, schema: { properties: { tokens: { type: "array" } } } } }) },
       },
       "POST /api/v1/invoice/create": {
         accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Create invoice with payment tx.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { creator: "0x...", token: "USDC", amount: "1500" }, inputSchema: { properties: { creator: { type: "string" }, token: { type: "string" }, amount: { type: "string" } }, required: ["creator", "token", "amount"] }, bodyType: "json", output: { example: { status: "created", invoice: { id: "INV-A1B2" } }, schema: { properties: { status: { type: "string" }, invoice: { type: "object" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ input: { creator: "0x...", token: "USDC", amount: "1500" }, inputSchema: { properties: { creator: { type: "string" }, token: { type: "string" }, amount: { type: "string" } }, required: ["creator", "token", "amount"] }, bodyType: "json", output: { example: { status: "created", invoice: { id: "INV-A1B2" } }, schema: { properties: { status: { type: "string" } } } } }) },
       },
       "GET /api/v1/invoice/list": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -135,22 +135,53 @@ app.use(
       },
       "GET /api/v1/invoice/:id": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Invoice lookup with status check.", mimeType: "application/json",
+        description: "Invoice lookup with status.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { id: "INV-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { invoice: { status: "pending" } }, schema: { properties: { invoice: { type: "object" } } } } }) },
       },
-
-      // ---- ANALYTICS ---- ← NEW
       "GET /api/v1/analytics/wallet": {
         accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Comprehensive wallet profile: ETH + token balances, tx count, wallet age, classification (virgin/new/casual/active/power-user), portfolio breakdown.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" }, inputSchema: { properties: { address: { type: "string", description: "Wallet address to profile" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", classification: { walletType: "power-user", txCount: 1500 }, balances: { eth: { balance: "1.5" }, stablecoinsUSD: "5000.00" } }, schema: { properties: { address: { type: "string" }, classification: { type: "object" }, balances: { type: "object" }, activity: { type: "object" } } } } }) },
+        description: "Wallet profile: balances, tx count, classification, age.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { classification: { walletType: "active" } }, schema: { properties: { classification: { type: "object" } } } } }) },
       },
       "GET /api/v1/analytics/txhistory": {
         accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Recent transaction history with decoded types (eth-send, erc20-transfer, swap, contract-call), direction, gas costs, and success rates.",
+        description: "Transaction history with decoded types.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", limit: "10" }, inputSchema: { properties: { address: { type: "string" }, limit: { type: "string" } }, required: ["address"] }, output: { example: { transactions: [], summary: {} }, schema: { properties: { transactions: { type: "array" } } } } }) },
+      },
+
+      // ---- ESCROW ---- ← NEW
+      "POST /api/v1/escrow/create": {
+        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Create a conditional escrow. Depositor locks funds, released to beneficiary when conditions met. Optional arbiter for disputes. Supports milestones and expiry.",
         mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", limit: "10" }, inputSchema: { properties: { address: { type: "string", description: "Wallet address" }, limit: { type: "string", description: "Number of txs (default 10, max 50)" } }, required: ["address"] }, output: { example: { transactions: [{ hash: "0x...", type: "swap", direction: "outgoing" }], summary: { outgoing: 7, incoming: 3, successRate: "90%" } }, schema: { properties: { transactions: { type: "array" }, summary: { type: "object" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ input: { depositor: "0xClient", beneficiary: "0xFreelancer", token: "USDC", amount: "5000", description: "Website project", conditions: ["Design approved", "Dev complete"], expiresIn: 336 }, inputSchema: { properties: { depositor: { type: "string" }, beneficiary: { type: "string" }, token: { type: "string" }, amount: { type: "string" }, arbiter: { type: "string" }, description: { type: "string" }, conditions: { type: "array" }, expiresIn: { type: "number" } }, required: ["depositor", "beneficiary", "token", "amount"] }, bodyType: "json", output: { example: { status: "created", escrow: { id: "ESC-A1B2C3D4" } }, schema: { properties: { status: { type: "string" }, escrow: { type: "object" }, actions: { type: "object" } } } } }) },
+      },
+      "GET /api/v1/escrow/list": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "List escrows by depositor, beneficiary, or arbiter address.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0x...", status: "funded" }, inputSchema: { properties: { address: { type: "string" }, status: { type: "string" } }, required: ["address"] }, output: { example: { escrows: [], count: 0 }, schema: { properties: { escrows: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/escrow/:id": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get escrow status and details.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "ESC-A1B2C3D4" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { escrow: { status: "funded" } }, schema: { properties: { escrow: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/escrow/:id/fund": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Mark escrow as funded after depositor transfers tokens.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ inputSchema: { properties: { txHash: { type: "string" } } }, bodyType: "json", output: { example: { status: "funded" }, schema: { properties: { status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/escrow/:id/release": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Release escrowed funds to beneficiary. Returns unsigned transfer tx. Depositor or arbiter only.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { caller: "0xDepositor" }, inputSchema: { properties: { caller: { type: "string", description: "Depositor or arbiter address" } }, required: ["caller"] }, bodyType: "json", output: { example: { status: "released", transaction: { to: "0x...", data: "0x..." } }, schema: { properties: { status: { type: "string" }, transaction: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/escrow/:id/cancel": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Cancel escrow. Depositor only if unfunded; depositor or arbiter if funded.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { caller: "0xDepositor" }, inputSchema: { properties: { caller: { type: "string" } }, required: ["caller"] }, bodyType: "json", output: { example: { status: "cancelled" }, schema: { properties: { status: { type: "string" } } } } }) },
       },
 
       // ---- EXISTING ----
@@ -161,7 +192,7 @@ app.use(
       },
       "GET /api/v1/balances": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
-        description: "Token balances for any address.", mimeType: "application/json",
+        description: "Token balances.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { balances: [] }, schema: { properties: { balances: { type: "array" } } } } }) },
       },
       "GET /api/v1/resolve": {
@@ -180,7 +211,7 @@ app.use(
 app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2, name: "Spraay x402 Gateway",
-    description: "AI, payments, swaps, oracle, bridge, payroll, invoicing, analytics & onchain intelligence. Pay USDC per request.",
+    description: "AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, analytics & onchain intelligence. Pay USDC per request.",
     homepage: BASE_URL, repository: "https://github.com/plagtech/spraay-x402-gateway",
     network: CAIP2_NETWORK, payTo: PAY_TO,
     facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
@@ -205,6 +236,12 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/invoice/:id`, method: "GET", price: "$0.001", category: "invoice" },
       { resource: `${BASE_URL}/api/v1/analytics/wallet`, method: "GET", price: "$0.005", category: "analytics" },
       { resource: `${BASE_URL}/api/v1/analytics/txhistory`, method: "GET", price: "$0.003", category: "analytics" },
+      { resource: `${BASE_URL}/api/v1/escrow/create`, method: "POST", price: "$0.008", category: "escrow" },
+      { resource: `${BASE_URL}/api/v1/escrow/list`, method: "GET", price: "$0.002", category: "escrow" },
+      { resource: `${BASE_URL}/api/v1/escrow/:id`, method: "GET", price: "$0.001", category: "escrow" },
+      { resource: `${BASE_URL}/api/v1/escrow/:id/fund`, method: "POST", price: "$0.002", category: "escrow" },
+      { resource: `${BASE_URL}/api/v1/escrow/:id/release`, method: "POST", price: "$0.005", category: "escrow" },
+      { resource: `${BASE_URL}/api/v1/escrow/:id/cancel`, method: "POST", price: "$0.002", category: "escrow" },
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.002", category: "data" },
       { resource: `${BASE_URL}/api/v1/resolve`, method: "GET", price: "$0.001", category: "identity" },
@@ -216,8 +253,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "2.7.0",
-    description: "Pay-per-use AI, payments, swaps, oracle, bridge, payroll, invoicing, analytics & onchain intelligence. x402 + USDC.",
+    name: "Spraay x402 Gateway", version: "2.8.0",
+    description: "Pay-per-use AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, analytics & onchain intelligence. x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
@@ -243,6 +280,12 @@ app.get("/", (_req, res) => {
         "GET /api/v1/invoice/:id": "$0.001 - Invoice lookup",
         "GET /api/v1/analytics/wallet": "$0.005 - Wallet profile",
         "GET /api/v1/analytics/txhistory": "$0.003 - Tx history",
+        "POST /api/v1/escrow/create": "$0.008 - Create escrow",
+        "GET /api/v1/escrow/list": "$0.002 - List escrows",
+        "GET /api/v1/escrow/:id": "$0.001 - Escrow status",
+        "POST /api/v1/escrow/:id/fund": "$0.002 - Fund escrow",
+        "POST /api/v1/escrow/:id/release": "$0.005 - Release escrow",
+        "POST /api/v1/escrow/:id/cancel": "$0.002 - Cancel escrow",
         "GET /api/v1/prices": "$0.002 - Token prices",
         "GET /api/v1/balances": "$0.002 - Balances",
         "GET /api/v1/resolve": "$0.001 - ENS resolution",
@@ -250,7 +293,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 23,
+    totalEndpoints: 29,
   });
 });
 
@@ -291,18 +334,24 @@ app.get("/api/v1/payroll/tokens", payrollTokensHandler);
 app.post("/api/v1/invoice/create", invoiceCreateHandler);
 app.get("/api/v1/invoice/list", invoiceListHandler);
 app.get("/api/v1/invoice/:id", invoiceGetHandler);
-app.get("/api/v1/analytics/wallet", analyticsWalletHandler);       // ← NEW
-app.get("/api/v1/analytics/txhistory", analyticsTxHistoryHandler); // ← NEW
+app.get("/api/v1/analytics/wallet", analyticsWalletHandler);
+app.get("/api/v1/analytics/txhistory", analyticsTxHistoryHandler);
+app.post("/api/v1/escrow/create", escrowCreateHandler);          // ← NEW
+app.get("/api/v1/escrow/list", escrowListHandler);                // ← NEW (before :id!)
+app.get("/api/v1/escrow/:id", escrowGetHandler);                  // ← NEW
+app.post("/api/v1/escrow/:id/fund", escrowFundHandler);           // ← NEW
+app.post("/api/v1/escrow/:id/release", escrowReleaseHandler);     // ← NEW
+app.post("/api/v1/escrow/:id/cancel", escrowCancelHandler);       // ← NEW
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v2.7 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v2.8 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🔗 Facilitator: ${IS_MAINNET ? "Coinbase CDP (mainnet)" : FACILITATOR_URL || "x402.org"}`);
-  console.log(`\n🌐 23 paid + 5 free endpoints ready\n`);
+  console.log(`\n🌐 29 paid + 5 free endpoints ready\n`);
 });
 
 export default app;
