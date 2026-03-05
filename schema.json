@@ -1,0 +1,1 @@
+﻿{"type":"object","required":["EVM_PRIVATE_KEY"],"properties":{"EVM_PRIVATE_KEY":{"type":"string","title":"EVM Private Key","description":"Private key of a wallet with USDC on Base mainnet"}}}
