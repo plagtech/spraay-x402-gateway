@@ -5,7 +5,7 @@
 [![x402](https://img.shields.io/badge/protocol-x402-orange)](https://x402.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Full-stack DeFi infrastructure for AI agents — 57 pay-per-use endpoints on Base.**
+**Full-stack DeFi infrastructure for AI agents — 33 pay-per-use endpoints on Base.**
 
 The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly.
 
@@ -27,7 +27,7 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 
 ---
 
-## 57 Endpoints
+## Endpoints
 
 ### Free Discovery
 | Endpoint | Description |
@@ -35,9 +35,9 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 | `GET /.well-known/x402.json` | Bazaar discovery manifest |
 | `GET /health` | Gateway health check |
 | `GET /api/v1/info` | Gateway info and version |
-| `GET /api/v1/models` | List available AI models (free) |
-| `GET /api/v1/swap/tokens` | List supported swap tokens (free) |
-| `GET /api/v1/bridge/chains` | List supported bridge chains (free) |
+| `GET /api/v1/models` | List available AI models |
+| `GET /api/v1/swap/tokens` | List supported swap tokens |
+| `GET /api/v1/bridge/chains` | List supported bridge chains |
 
 ### AI ($0.001–$0.005)
 | Endpoint | Method | Cost |
@@ -106,59 +106,6 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 | `/api/v1/inference/classify-tx` | POST | $0.008 |
 | `/api/v1/inference/explain-contract` | POST | $0.01 |
 | `/api/v1/inference/summarize` | POST | $0.008 |
-
-### Webhooks ($0.001–$0.005)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/webhook/create` | POST | $0.005 |
-| `/api/v1/webhook/list` | GET | $0.001 |
-| `/api/v1/webhook/:id` | DELETE | $0.001 |
-
-### XMTP Messaging ($0.001–$0.005)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/xmtp/send` | POST | $0.005 |
-| `/api/v1/xmtp/inbox` | GET | $0.002 |
-| `/api/v1/xmtp/broadcast` | POST | $0.005 |
-
-### Scheduler ($0.001–$0.005)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/schedule/create` | POST | $0.005 |
-| `/api/v1/schedule/list` | GET | $0.001 |
-| `/api/v1/schedule/:id` | DELETE | $0.001 |
-
-### IPFS / Storage ($0.002–$0.01)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/ipfs/pin` | POST | $0.01 |
-| `/api/v1/ipfs/:cid` | GET | $0.002 |
-| `/api/v1/storage/arweave` | POST | $0.01 |
-
-### KYC / Identity ($0.005–$0.02)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/kyc/verify` | POST | $0.02 |
-| `/api/v1/kyc/status` | GET | $0.005 |
-
-### Auth ($0.001–$0.005)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/auth/session` | POST | $0.005 |
-| `/api/v1/auth/verify` | GET | $0.001 |
-
-### Audit Trail ($0.002–$0.005)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/audit/log` | POST | $0.005 |
-| `/api/v1/audit/query` | GET | $0.002 |
-
-### Tax ($0.005–$0.01)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/tax/calculate` | POST | $0.01 |
-| `/api/v1/tax/report` | POST | $0.01 |
-| `/api/v1/tax/cost-basis` | GET | $0.005 |
 
 ### Data ($0.001–$0.002)
 | Endpoint | Method | Cost |
