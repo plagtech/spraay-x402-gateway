@@ -1,6 +1,19 @@
 import { Request, Response } from "express";
+import { AgentMailClient } from "agentmail";
 
 // x402 Email/SMS — POST /notify/email ($0.003), POST /notify/sms ($0.005), GET /notify/status ($0.001)
+
+const AGENTMAIL_API_KEY = process.env.AGENTMAIL_API_KEY || "";
+const AGENTMAIL_INBOX_ID = process.env.AGENTMAIL_INBOX_ID || "";
+
+// Lazy-init AgentMail client
+let agentmailClient: AgentMailClient | null = null;
+function getAgentMail(): AgentMailClient {
+  if (!agentmailClient) {
+    agentmailClient = new AgentMailClient({ apiKey: AGENTMAIL_API_KEY });
+  }
+  return agentmailClient;
+}
 
 interface NotificationRecord {
   id: string;
@@ -24,6 +37,38 @@ export async function notifyEmailHandler(req: Request, res: Response) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: "Invalid email address" });
 
     const id = genId();
+
+    // If AgentMail is configured, send real email
+    if (AGENTMAIL_API_KEY && AGENTMAIL_INBOX_ID) {
+      try {
+        const client = getAgentMail();
+        const result = await client.inboxes.messages.send(AGENTMAIL_INBOX_ID, {
+          to: [to, ...(cc ? [cc] : [])],
+          subject: subject || "(no subject)",
+          text: body,
+          replyTo: replyTo || undefined,
+        });
+
+        const record: NotificationRecord = {
+          id, type: "email", to, subject: subject || "(no subject)", body,
+          status: "delivered", createdAt: new Date().toISOString(),
+          deliveredAt: new Date().toISOString(),
+          metadata: { ...metadata, agentmailMessageId: result.messageId, agentmailThreadId: result.threadId },
+        };
+        notifications.set(id, record);
+
+        return res.json({
+          id, type: "email", to, subject: record.subject, status: "delivered",
+          messageId: result.messageId, threadId: result.threadId,
+          provider: "agentmail",
+          _gateway: { provider: "spraay-x402", version: "2.9.0", live: true }, timestamp: new Date().toISOString(),
+        });
+      } catch (emailErr: any) {
+        return res.status(500).json({ error: "AgentMail delivery failed", details: emailErr.message });
+      }
+    }
+
+    // Fallback: simulated if AgentMail not configured
     const record: NotificationRecord = {
       id, type: "email", to, subject: subject || "(no subject)", body,
       status: "queued", createdAt: new Date().toISOString(),
@@ -34,8 +79,8 @@ export async function notifyEmailHandler(req: Request, res: Response) {
 
     return res.json({
       id, type: "email", to, subject: record.subject, status: "queued",
-      note: "Email queued. Production integrates with SendGrid/Resend/SES.",
-      _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),
+      note: "Email queued (simulated). Set AGENTMAIL_API_KEY and AGENTMAIL_INBOX_ID for real delivery.",
+      _gateway: { provider: "spraay-x402", version: "2.9.0", live: false }, timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to send email", details: error.message });
@@ -57,7 +102,7 @@ export async function notifySmsHandler(req: Request, res: Response) {
     return res.json({
       id, type: "sms", to, segments: Math.ceil(body.length / 160), status: "queued",
       note: "SMS queued. Production integrates with Twilio/Vonage.",
-      _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),
+      _gateway: { provider: "spraay-x402", version: "2.9.0", live: false }, timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to send SMS", details: error.message });
