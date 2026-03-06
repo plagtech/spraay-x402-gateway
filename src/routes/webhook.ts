@@ -1,22 +1,5 @@
 import { Request, Response } from "express";
-
-// x402 Webhook — POST /webhook/register ($0.003), POST /webhook/test ($0.002), GET /webhook/list ($0.001), DELETE via POST /webhook/delete ($0.001)
-
-interface WebhookRecord {
-  id: string;
-  url: string;
-  events: string[];
-  secret: string;
-  status: "active" | "paused" | "failed";
-  createdAt: string;
-  lastTriggered?: string;
-  failCount: number;
-  metadata?: Record<string, any>;
-}
-
-const webhooks: Map<string, WebhookRecord> = new Map();
-function genId(): string { return `whk_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`; }
-function genSecret(): string { return `whsec_${Array.from({ length: 32 }, () => Math.random().toString(36)[2]).join("")}`; }
+import { webhookDb } from "../db.js";
 
 const VALID_EVENTS = [
   "payment.sent", "payment.received", "payment.failed",
@@ -27,6 +10,9 @@ const VALID_EVENTS = [
   "bridge.completed", "bridge.failed",
   "payroll.completed", "payroll.failed",
 ];
+
+function genId(): string { return `whk_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`; }
+function genSecret(): string { return `whsec_${Array.from({ length: 32 }, () => Math.random().toString(36)[2]).join("")}`; }
 
 export async function webhookRegisterHandler(req: Request, res: Response) {
   try {
@@ -43,10 +29,10 @@ export async function webhookRegisterHandler(req: Request, res: Response) {
 
     const id = genId();
     const secret = genSecret();
-    const record: WebhookRecord = {
-      id, url, events, secret, status: "active", createdAt: new Date().toISOString(), failCount: 0, metadata: metadata || {},
-    };
-    webhooks.set(id, record);
+    await webhookDb.create({
+      id, url, events, secret, status: "active",
+      createdAt: new Date().toISOString(), failCount: 0, metadata: metadata || {},
+    });
 
     return res.json({
       id, url, events, secret, status: "active",
@@ -62,7 +48,7 @@ export async function webhookTestHandler(req: Request, res: Response) {
   try {
     const { webhookId } = req.body;
     if (!webhookId) return res.status(400).json({ error: "Missing required field: webhookId" });
-    const record = webhooks.get(webhookId);
+    const record = await webhookDb.get(webhookId);
     if (!record) return res.status(404).json({ error: "Webhook not found", webhookId });
 
     const testPayload = {
@@ -71,7 +57,7 @@ export async function webhookTestHandler(req: Request, res: Response) {
       data: { message: "This is a test event from Spraay x402 Gateway", timestamp: new Date().toISOString() },
     };
 
-    record.lastTriggered = new Date().toISOString();
+    await webhookDb.update(webhookId, { lastTriggered: new Date().toISOString() });
 
     return res.json({
       webhookId: record.id, url: record.url, testPayload, delivered: true,
@@ -86,15 +72,13 @@ export async function webhookTestHandler(req: Request, res: Response) {
 export async function webhookListHandler(req: Request, res: Response) {
   try {
     const { status } = req.query;
-    let results = Array.from(webhooks.values());
-    if (status && typeof status === "string") {
-      results = results.filter((w) => w.status === status);
-    }
+    const statusFilter = status && typeof status === "string" ? status : null;
+    const results = await webhookDb.list(statusFilter);
 
     return res.json({
-      webhooks: results.map((w) => ({
+      webhooks: results.map((w: any) => ({
         id: w.id, url: w.url, events: w.events, status: w.status,
-        createdAt: w.createdAt, lastTriggered: w.lastTriggered || null, failCount: w.failCount,
+        createdAt: w.created_at, lastTriggered: w.last_triggered || null, failCount: w.fail_count,
       })),
       total: results.length,
       _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),
@@ -108,10 +92,10 @@ export async function webhookDeleteHandler(req: Request, res: Response) {
   try {
     const { webhookId } = req.body;
     if (!webhookId) return res.status(400).json({ error: "Missing required field: webhookId" });
-    const record = webhooks.get(webhookId);
+    const record = await webhookDb.get(webhookId);
     if (!record) return res.status(404).json({ error: "Webhook not found", webhookId });
 
-    webhooks.delete(webhookId);
+    await webhookDb.delete(webhookId);
     return res.json({
       deleted: true, webhookId,
       _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),

@@ -1,20 +1,6 @@
 import { Request, Response } from "express";
+import { taxDb } from "../db.js";
 
-// x402 Tax — POST /tax/calculate ($0.01), GET /tax/report ($0.02)
-
-interface TaxEvent {
-  type: "swap" | "send" | "receive" | "bridge" | "payroll" | "escrow_release";
-  txHash: string;
-  timestamp: string;
-  asset: string;
-  amount: number;
-  costBasisUsd: number;
-  proceedsUsd: number;
-  gainLoss: number;
-  holdingPeriod: "short" | "long";
-}
-
-const taxReports: Map<string, TaxEvent[]> = new Map();
 function genId(): string { return `tax_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`; }
 
 export async function taxCalculateHandler(req: Request, res: Response) {
@@ -25,7 +11,7 @@ export async function taxCalculateHandler(req: Request, res: Response) {
     }
     if (transactions.length > 500) return res.status(400).json({ error: "Max 500 transactions per batch" });
 
-    const events: TaxEvent[] = transactions.map((tx: any) => {
+    const events = transactions.map((tx: any) => {
       const costBasis = tx.costBasisUsd || tx.amount * (tx.priceAtAcquisition || 1);
       const proceeds = tx.proceedsUsd || tx.amount * (tx.priceAtDisposal || tx.priceAtAcquisition || 1);
       const gainLoss = proceeds - costBasis;
@@ -44,24 +30,23 @@ export async function taxCalculateHandler(req: Request, res: Response) {
       };
     });
 
-    const totalGainLoss = events.reduce((sum, e) => sum + e.gainLoss, 0);
-    const shortTerm = events.filter((e) => e.holdingPeriod === "short");
-    const longTerm = events.filter((e) => e.holdingPeriod === "long");
+    const totalGainLoss = events.reduce((sum: number, e: any) => sum + e.gainLoss, 0);
+    const shortTerm = events.filter((e: any) => e.holdingPeriod === "short");
+    const longTerm = events.filter((e: any) => e.holdingPeriod === "long");
 
     const reportId = genId();
-    taxReports.set(reportId, events);
+    const summary = {
+      totalTransactions: events.length,
+      totalGainLossUsd: Math.round(totalGainLoss * 100) / 100,
+      shortTermGainLoss: Math.round(shortTerm.reduce((s: number, e: any) => s + e.gainLoss, 0) * 100) / 100,
+      longTermGainLoss: Math.round(longTerm.reduce((s: number, e: any) => s + e.gainLoss, 0) * 100) / 100,
+      shortTermCount: shortTerm.length,
+      longTermCount: longTerm.length,
+    };
+    await taxDb.create(reportId, events, summary);
 
     return res.json({
-      reportId,
-      summary: {
-        totalTransactions: events.length,
-        totalGainLossUsd: Math.round(totalGainLoss * 100) / 100,
-        shortTermGainLoss: Math.round(shortTerm.reduce((s, e) => s + e.gainLoss, 0) * 100) / 100,
-        longTermGainLoss: Math.round(longTerm.reduce((s, e) => s + e.gainLoss, 0) * 100) / 100,
-        shortTermCount: shortTerm.length,
-        longTermCount: longTerm.length,
-      },
-      events,
+      reportId, summary, events,
       note: "Tax calculation uses FIFO method. Production integrates with CoinTracker/TokenTax APIs. Not financial advice.",
       _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),
     });
@@ -72,22 +57,21 @@ export async function taxCalculateHandler(req: Request, res: Response) {
 
 export async function taxReportHandler(req: Request, res: Response) {
   try {
-    const { reportId, year, address } = req.query;
+    const { reportId } = req.query;
 
     if (reportId && typeof reportId === "string") {
-      const events = taxReports.get(reportId);
-      if (!events) return res.status(404).json({ error: "Report not found", reportId });
+      const report = await taxDb.get(reportId);
+      if (!report) return res.status(404).json({ error: "Report not found", reportId });
 
       return res.json({
-        reportId, events, total: events.length,
+        reportId, events: report.events, total: Array.isArray(report.events) ? report.events.length : 0,
         _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),
       });
     }
 
+    const reports = await taxDb.listIds();
     return res.json({
-      reports: Array.from(taxReports.keys()).map((id) => ({
-        reportId: id, transactions: taxReports.get(id)!.length,
-      })),
+      reports,
       note: "Pass reportId to retrieve full report. Production generates IRS 8949 / Schedule D compatible exports.",
       _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: new Date().toISOString(),
     });

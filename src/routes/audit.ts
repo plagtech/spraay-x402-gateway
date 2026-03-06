@@ -1,19 +1,6 @@
 import { Request, Response } from "express";
+import { auditDb } from "../db.js";
 
-// x402 Audit Trail — POST /audit/log ($0.001), GET /audit/query ($0.005)
-
-interface AuditEntry {
-  id: string;
-  action: string;
-  actor: string;
-  resource: string;
-  details: Record<string, any>;
-  txHash?: string;
-  ip?: string;
-  timestamp: string;
-}
-
-const auditLog: AuditEntry[] = [];
 function genId(): string { return `aud_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`; }
 
 const VALID_AUDIT_ACTIONS = [
@@ -36,16 +23,15 @@ export async function auditLogHandler(req: Request, res: Response) {
     }
 
     const id = genId();
-    const entry: AuditEntry = {
+    const entry = {
       id, action, actor, resource, details: details || {},
       txHash: txHash || undefined, timestamp: new Date().toISOString(),
     };
-    auditLog.push(entry);
-    if (auditLog.length > 50000) auditLog.shift();
+    await auditDb.create(entry);
 
     return res.json({
       id, action, actor, resource, recorded: true,
-      note: "Audit entry recorded. Production uses append-only storage (Postgres + optional on-chain anchoring).",
+      note: "Audit entry recorded in persistent storage.",
       _gateway: { provider: "spraay-x402", version: "2.9.0" }, timestamp: entry.timestamp,
     });
   } catch (error: any) {
@@ -56,15 +42,16 @@ export async function auditLogHandler(req: Request, res: Response) {
 export async function auditQueryHandler(req: Request, res: Response) {
   try {
     const { actor, action, resource, since, until, limit } = req.query;
-    let results = [...auditLog];
-    if (actor && typeof actor === "string") results = results.filter((e) => e.actor.toLowerCase() === actor.toLowerCase());
-    if (action && typeof action === "string") results = results.filter((e) => e.action === action);
-    if (resource && typeof resource === "string") results = results.filter((e) => e.resource.toLowerCase().includes(resource.toLowerCase()));
-    if (since && typeof since === "string") results = results.filter((e) => new Date(e.timestamp) >= new Date(since));
-    if (until && typeof until === "string") results = results.filter((e) => new Date(e.timestamp) <= new Date(until));
-
     const maxResults = Math.min(parseInt(limit as string) || 50, 500);
-    results = results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, maxResults);
+
+    const results = await auditDb.query({
+      actor: actor as string,
+      action: action as string,
+      resource: resource as string,
+      since: since as string,
+      until: until as string,
+      limit: maxResults,
+    });
 
     return res.json({
       entries: results, total: results.length,

@@ -23,6 +23,7 @@
   "license": "MIT",
   "dependencies": {
     "@coinbase/x402": "^2.1.0",
+    "@supabase/supabase-js": "^2.98.0",
     "@x402/core": "^2.4.0",
     "@x402/evm": "^2.4.0",
     "@x402/express": "^2.4.0",
