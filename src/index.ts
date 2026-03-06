@@ -33,6 +33,8 @@ import { authSessionHandler, authVerifyHandler } from "./routes/auth.js";
 // NEW: Compliance
 import { auditLogHandler, auditQueryHandler } from "./routes/audit.js";
 import { taxCalculateHandler, taxReportHandler } from "./routes/tax.js";
+// NEW: GPU/Compute
+import { gpuRunHandler, gpuStatusHandler, gpuModelsHandler } from "./routes/gpu.js";
 // Existing
 import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
@@ -360,6 +362,18 @@ app.use(
         extensions: { ...declareDiscoveryExtension({ input: { reportId: "tax_123" }, inputSchema: { properties: { reportId: { type: "string" } } }, output: { example: { events: [], total: 0 }, schema: { properties: { events: { type: "array" } } } } }) },
       },
 
+      // ---- GPU/COMPUTE ----
+      "POST /api/v1/gpu/run": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "GPU/Compute — run AI model inference via Replicate (image, video, LLM, audio, utility).", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { model: "flux-pro", input: { prompt: "a serene mountain lake at sunset" } }, inputSchema: { properties: { model: { type: "string" }, input: { type: "object" }, version: { type: "string" }, webhook: { type: "string" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { id: "abc123", status: "succeeded", model: "black-forest-labs/flux-1.1-pro", output: ["https://replicate.delivery/..."] }, schema: { properties: { id: { type: "string" }, status: { type: "string" }, output: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/gpu/status/:id": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "GPU/Compute — check prediction status for async jobs.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "abc123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { id: "abc123", status: "succeeded", output: [] }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+
       // ---- EXISTING ----
       "GET /api/v1/prices": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -385,7 +399,7 @@ app.use(
 app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2, name: "Spraay x402 Gateway",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, identity, compliance & scheduling.",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, identity, compliance, scheduling, GPU/Compute & more.",
     homepage: BASE_URL, repository: "https://github.com/plagtech/spraay-x402-gateway",
     network: CAIP2_NETWORK, payTo: PAY_TO,
     facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
@@ -451,6 +465,10 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/audit/query`, method: "GET", price: "$0.005", category: "compliance" },
       { resource: `${BASE_URL}/api/v1/tax/calculate`, method: "POST", price: "$0.01", category: "compliance" },
       { resource: `${BASE_URL}/api/v1/tax/report`, method: "GET", price: "$0.02", category: "compliance" },
+      // GPU/Compute
+      { resource: `${BASE_URL}/api/v1/gpu/run`, method: "POST", price: "$0.05", category: "gpu" },
+      { resource: `${BASE_URL}/api/v1/gpu/status/:id`, method: "GET", price: "$0.002", category: "gpu" },
+      { resource: `${BASE_URL}/api/v1/gpu/models`, method: "GET", price: "free", category: "gpu" },
       // Existing data
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.002", category: "data" },
@@ -462,8 +480,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 57 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, communication, scheduling, storage, KYC, auth, audit trail & tax. Agents pay USDC per request via x402.",
-    version: "3.1.0",
+    description: "Full-stack DeFi infrastructure for AI agents on Base. 60 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, communication, scheduling, storage, KYC, auth, audit trail & tax. Agents pay USDC per request via x402.",
+    version: "3.2.0",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
     repository: "https://github.com/plagtech/spraay-x402-mcp",
@@ -533,6 +551,9 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_audit_query", description: "Query audit trail", price: "$0.005" },
       { name: "spraay_tax_calculate", description: "Tax gain/loss calc", price: "$0.01" },
       { name: "spraay_tax_report", description: "Tax report", price: "$0.02" },
+      { name: "spraay_gpu_run", description: "Run GPU inference (image, video, LLM, audio)", price: "$0.05" },
+      { name: "spraay_gpu_status", description: "Check GPU prediction status", price: "$0.002" },
+      { name: "spraay_gpu_models", description: "List GPU model shortcuts", price: "free" },
       { name: "spraay_prices", description: "Token prices", price: "$0.002" },
       { name: "spraay_balances", description: "Token balances", price: "$0.002" },
       { name: "spraay_resolve", description: "ENS resolution", price: "$0.001" },
@@ -543,12 +564,12 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "3.0.0",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail & tax. x402 + USDC.",
+    name: "Spraay x402 Gateway", version: "3.1.0",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax & GPU/Compute. x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
-      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens" },
+      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models" },
       paid: {
         // AI
         "POST /api/v1/chat/completions": "$0.005 - AI chat",
@@ -621,6 +642,10 @@ app.get("/", (_req, res) => {
         "GET /api/v1/audit/query": "$0.005 - Query audit trail",
         "POST /api/v1/tax/calculate": "$0.01 - Tax calculation",
         "GET /api/v1/tax/report": "$0.02 - Tax report",
+        // GPU/Compute
+        "POST /api/v1/gpu/run": "$0.05 - GPU inference via Replicate",
+        "GET /api/v1/gpu/status/:id": "$0.002 - GPU prediction status",
+        "GET /api/v1/gpu/models": "FREE - GPU model shortcuts",
         // Data
         "GET /api/v1/prices": "$0.002 - Token prices",
         "GET /api/v1/balances": "$0.002 - Balances",
@@ -629,7 +654,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 57,
+    totalEndpoints: 60,
   });
 });
 
@@ -721,16 +746,20 @@ app.post("/api/v1/audit/log", auditLogHandler);
 app.get("/api/v1/audit/query", auditQueryHandler);
 app.post("/api/v1/tax/calculate", taxCalculateHandler);
 app.get("/api/v1/tax/report", taxReportHandler);
+// GPU/Compute
+app.post("/api/v1/gpu/run", gpuRunHandler);
+app.get("/api/v1/gpu/status/:id", gpuStatusHandler);
+app.get("/api/v1/gpu/models", gpuModelsHandler);
 // Data
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v3.0.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v3.1.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
-  console.log(`\n🌐 57 paid + 5 free endpoints ready\n`);
+  console.log(`\n🌐 59 paid + 6 free endpoints ready\n`);
 });
 
 export default app;
