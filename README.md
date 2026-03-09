@@ -1,18 +1,19 @@
 # Spraay x402 Gateway
 
 [![Live](https://img.shields.io/badge/status-live-brightgreen)](https://gateway.spraay.app)
-[![Version](https://img.shields.io/badge/version-3.2.0-blue)](https://gateway.spraay.app)
-[![Tools](https://img.shields.io/badge/tools-57%20(56%20active)-blueviolet)](https://gateway.spraay.app)
+[![Version](https://img.shields.io/badge/version-3.3.0-blue)](https://gateway.spraay.app)
+[![Endpoints](https://img.shields.io/badge/endpoints-62%20paid%20+%205%20free-blueviolet)](https://gateway.spraay.app)
 [![x402](https://img.shields.io/badge/protocol-x402-orange)](https://x402.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Full-stack DeFi infrastructure for AI agents — 57 pay-per-use endpoints (56 active) on Base with persistent Supabase storage.**
+**Full-stack DeFi infrastructure for AI agents — 62 pay-per-use endpoints on Base with dual-provider AI inference and persistent Supabase storage.**
 
 The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly.
 
 - **Gateway**: [gateway.spraay.app](https://gateway.spraay.app)
-- **MCP Server**: [mcp.spraay.app](https://mcp.spraay.app)
+- **MCP Server**: [mcp.spraay.app](https://mcp.spraay.app) · [GitHub](https://github.com/plagtech/spraay-x402-mcp)
 - **Bazaar Discovery**: [gateway.spraay.app/.well-known/x402.json](https://gateway.spraay.app/.well-known/x402.json)
+- **Agent Card (A2A)**: [agent.spraay.app](https://agent.spraay.app/.well-known/agent-card.json)
 
 ---
 
@@ -28,6 +29,44 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 
 ---
 
+## AI Inference — Dual Provider
+
+The gateway offers AI inference through two providers. Agents choose with a single `provider` parameter:
+
+| Provider | Models | Auth | Payment |
+|----------|--------|------|---------|
+| **OpenRouter** (default) | 50+ models | API key (server-side) | Agent → Spraay (x402) |
+| **BlockRun** | 43+ models | x402 wallet (no API key) | Agent → Spraay (x402) → BlockRun (x402) |
+
+### Smart Routing
+
+Set `model: "blockrun/auto"` with `provider: "blockrun"` to let ClawRouter pick the cheapest capable model automatically. Saves up to 78% on inference costs.
+
+```json
+{
+  "model": "blockrun/auto",
+  "messages": [{ "role": "user", "content": "What is x402?" }],
+  "provider": "blockrun",
+  "routing_profile": "auto"
+}
+```
+
+**Routing profiles:** `free` (NVIDIA free models) · `eco` (budget optimized) · `auto` (balanced, default) · `premium` (best quality)
+
+### Direct Model Call
+
+```json
+{
+  "model": "deepseek/deepseek-chat",
+  "messages": [{ "role": "user", "content": "Hello" }],
+  "provider": "blockrun"
+}
+```
+
+Omit `provider` to use OpenRouter (backward compatible).
+
+---
+
 ## Endpoints
 
 ### Free Discovery
@@ -39,11 +78,11 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 | `GET /api/v1/tokens` | Supported tokens and chains |
 | `GET /stats` | Gateway statistics |
 
-### AI ($0.001–$0.005)
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/chat/completions` | POST | $0.005 |
-| `/api/v1/models` | GET | $0.001 |
+### AI ($0.001–$0.04)
+| Endpoint | Method | Cost | Notes |
+|----------|--------|------|-------|
+| `/api/v1/chat/completions` | POST | $0.04 | Dual-provider: OpenRouter (default) or BlockRun |
+| `/api/v1/models` | GET | $0.001 | Returns models from both providers |
 
 ### Payments ($0.001–$0.01)
 | Endpoint | Method | Cost |
@@ -113,7 +152,7 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 | Endpoint | Method | Cost | Status |
 |----------|--------|------|--------|
 | `/api/v1/notify/email` | POST | $0.003 | ✅ Live (AgentMail) |
-| `/api/v1/notify/sms` | POST | $0.005 | ⏳ Simulated (Twilio later) |
+| `/api/v1/notify/sms` | POST | $0.005 | ⏳ Simulated (Twilio pending) |
 | `/api/v1/notify/status` | GET | $0.001 | ✅ Live |
 
 ### Communication — Webhook ($0.001–$0.003) — Supabase persistent
@@ -136,7 +175,7 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 | `/api/v1/rpc/call` | POST | $0.001 |
 | `/api/v1/rpc/chains` | GET | $0.001 |
 
-### Infrastructure — IPFS/Arweave ($0.001–$0.005)
+### Infrastructure — IPFS ($0.001–$0.005)
 | Endpoint | Method | Cost |
 |----------|--------|------|
 | `/api/v1/storage/pin` | POST | $0.005 |
@@ -189,6 +228,19 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 
 ---
 
+## Agent Registrations
+
+| Registry | ID / Link |
+|----------|-----------|
+| **Dexter (ERC-8004)** | Agent #27567 |
+| **Virtuals ACP** | Provider on [agdp.io](https://agdp.io) — batch payments as a service |
+| **ERC-8004 Agents** | MangoSwap #26345, Spraay #26346 |
+| **XMTP** | Agent Mango — inbound/outbound on Fly.io |
+| **Bazaar** | [gateway.spraay.app/.well-known/x402.json](https://gateway.spraay.app/.well-known/x402.json) |
+| **A2A** | [agent.spraay.app](https://agent.spraay.app/.well-known/agent-card.json) |
+
+---
+
 ## Tech Stack
 
 - **Runtime**: Node.js / Express / TypeScript
@@ -196,9 +248,10 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 - **Facilitator**: Coinbase CDP
 - **Chain**: Base mainnet
 - **Payment token**: USDC
+- **AI Providers**: BlockRun (`@blockrun/llm` — x402 wallet auth), OpenRouter (API key)
 - **Database**: Supabase (Postgres) — persistent storage for escrow, invoices, webhooks, cron, auth, KYC, audit, tax, logs
 - **Hosting**: Railway
-- **Real providers**: Alchemy (RPC), AgentMail (email), Pinata (IPFS), XMTP (Fly.io), LI.FI (bridge), OpenRouter (AI)
+- **Real providers**: Alchemy (RPC across 7 chains), AgentMail (email), Pinata (IPFS), XMTP via Fly.io (messaging), LI.FI (bridge), OpenRouter (AI), BlockRun (AI)
 
 ---
 
@@ -210,6 +263,9 @@ All payments settle on Base. Coinbase CDP handles facilitation. No API keys requ
 | `X402_NETWORK` | Yes | `eip155:8453` for Base mainnet |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_KEY` | Yes | Supabase service_role key |
+| `OPENROUTER_API_KEY` | Yes | OpenRouter API key for AI (default provider) |
+| `BLOCKRUN_WALLET_KEY` | No | Private key for BlockRun x402 payments (enables dual-provider AI) |
+| `BLOCKRUN_ENABLED` | No | Set to `"false"` to disable BlockRun (default: enabled if wallet key exists) |
 | `ALCHEMY_API_KEY` | Yes | Alchemy API key for multi-chain RPC |
 | `AGENTMAIL_API_KEY` | Yes | AgentMail API key for email |
 | `AGENTMAIL_INBOX_ID` | Yes | AgentMail inbox ID |
@@ -232,13 +288,33 @@ npm start
 
 ---
 
+## Ecosystem
+
+**Merged PRs:**
+- [coinbase/x402](https://github.com/coinbase/x402) — ecosystem listing
+- [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)
+- [Block Goose #7525](https://github.com/block/goose/pull/7525)
+
+**Open PRs:**
+- [Coinbase AgentKit #944](https://github.com/coinbase/agentkit/pull/944)
+- [LangChain #557](https://github.com/langchain-ai/langchain/pull/557)
+- [ElizaOS #274](https://github.com/elizaos/eliza/pull/274)
+- [CrewAI #314](https://github.com/crewAIInc/crewAI/pull/314)
+- [smolagents #1997](https://github.com/huggingface/smolagents/pull/1997)
+- [BlockRun awesome-blockrun](https://github.com/BlockRunAI/awesome-blockrun/pulls)
+- [BlockRun awesome-OpenClaw-Money-Maker](https://github.com/BlockRunAI/awesome-OpenClaw-Money-Maker/pulls)
+
+---
+
 ## Related
 
-- **MCP Server**: [github.com/plagtech/spraay-x402-mcp](https://github.com/plagtech/spraay-x402-mcp) — connect any AI agent via MCP
+- **MCP Server**: [github.com/plagtech/spraay-x402-mcp](https://github.com/plagtech/spraay-x402-mcp) — 60 tools, connect any AI agent via MCP
 - **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI on 11 chains
+- **Spraay Base App**: [spraay-base-dapp.vercel.app](https://spraay-base-dapp.vercel.app) — Farcaster mini app + onramp
 - **StablePay**: [stablepay.me](https://stablepay.me) — crypto payroll dashboard
+- **MangoSwap**: [mangoswap.xyz](https://mangoswap.xyz) — DEX on Base
 - **x402 Protocol**: [x402.org](https://x402.org)
-- **Coinbase CDP**: [docs.cdp.coinbase.com](https://docs.cdp.coinbase.com)
+- **BlockRun**: [blockrun.ai](https://blockrun.ai)
 
 ## License
 
