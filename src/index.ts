@@ -35,6 +35,8 @@ import { auditLogHandler, auditQueryHandler } from "./routes/audit.js";
 import { taxCalculateHandler, taxReportHandler } from "./routes/tax.js";
 // NEW: GPU/Compute
 import { gpuRunHandler, gpuStatusHandler, gpuModelsHandler } from "./routes/gpu.js";
+// NEW: Wallet Provisioning (Category 14)
+import { walletCreateHandler, walletGetHandler, walletListHandler, walletSignMessageHandler, walletSendTxHandler, walletAddressesHandler } from "./routes/wallet.js";
 // NEW: Search/RAG
 import { searchWebHandler, searchExtractHandler, searchQnaHandler } from "./routes/search.js";
 // Existing
@@ -408,6 +410,31 @@ app.use(
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "ENS/Basename resolution.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { name: "vitalik.eth" }, inputSchema: { properties: { name: { type: "string" } }, required: ["name"] }, output: { example: { address: "0xd8dA..." }, schema: { properties: { address: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/wallet/list": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "List agent wallets with pagination.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { wallets: [], pagination: {} }, schema: { properties: { wallets: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/wallet/:walletId": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get agent wallet details.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { walletId: "", addresses: {} }, schema: { properties: { walletId: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/wallet/:walletId/addresses": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get chain-specific addresses for a wallet.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { addresses: {} }, schema: { properties: { addresses: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/wallet/sign-message": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Sign a message with an agent wallet.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { walletId: "...", message: "Hello" }, inputSchema: { properties: { walletId: { type: "string" }, message: { type: "string" } }, required: ["walletId", "message"] }, bodyType: "json", output: { example: { signature: "..." }, schema: { properties: { signature: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/wallet/send-transaction": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Sign and broadcast a transaction from an agent wallet.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { walletId: "...", transaction: {}, networkId: "base-mainnet" }, inputSchema: { properties: { walletId: { type: "string" }, transaction: { type: "object" }, networkId: { type: "string" } }, required: ["walletId", "transaction", "networkId"] }, bodyType: "json", output: { example: { signature: "..." }, schema: { properties: { signature: { type: "string" } } } } }) },
       },
     },
     server
@@ -784,6 +811,13 @@ app.get("/api/v1/gpu/models", gpuModelsHandler);
 app.post("/api/v1/search/web", searchWebHandler);
 app.post("/api/v1/search/extract", searchExtractHandler);
 app.post("/api/v1/search/qna", searchQnaHandler);
+// Wallet Provisioning (Category 14)
+app.post("/api/v1/wallet/create", walletCreateHandler);
+app.get("/api/v1/wallet/list", walletListHandler);
+app.post("/api/v1/wallet/sign-message", walletSignMessageHandler);
+app.post("/api/v1/wallet/send-transaction", walletSendTxHandler);
+app.get("/api/v1/wallet/:walletId/addresses", walletAddressesHandler);
+app.get("/api/v1/wallet/:walletId", walletGetHandler);
 // Data
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
@@ -793,7 +827,7 @@ app.listen(PORT, () => {
   console.log(`\n🥭 Spraay x402 Gateway v3.3.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
-  console.log(`\n🌐 62 paid + 6 free endpoints ready\n`);
+  console.log(`\n🌐 67 paid + 7 free endpoints ready\n`);
 });
 
 export default app;
