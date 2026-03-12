@@ -83,7 +83,7 @@ export async function robotRegisterHandler(req: Request, res: Response) {
     await supabase.from("audit_log").insert({
       event: "robot_registered", details: { robot_id: robotId, name, capabilities, price_per_task },
       timestamp: new Date().toISOString(),
-    }).catch(() => {});
+    });
 
     res.status(201).json({
       status: "registered",
@@ -125,7 +125,7 @@ export async function robotTaskHandler(req: Request, res: Response) {
       token: robot.currency, amount: robot.price_per_task, chain: robot.chain,
       status: "held", conditions: [{ type: "rtp_task", task_id: taskId }],
       created_at: new Date().toISOString(),
-    }).catch(() => {});
+    });
 
     // Create task record
     await supabase.from("robot_tasks").insert({
@@ -171,13 +171,13 @@ export async function robotTaskHandler(req: Request, res: Response) {
       const { data: current } = await supabase.from("robot_tasks").select("status").eq("task_id", taskId).single();
       if (current && !["COMPLETED", "FAILED", "TIMEOUT"].includes(current.status)) {
         await supabase.from("robot_tasks").update({ status: "TIMEOUT", completed_at: new Date().toISOString() }).eq("task_id", taskId);
-        await supabase.from("escrows").update({ status: "refunded" }).eq("escrow_id", escrowId).catch(() => {});
-        if (callback_url) { axios.post(callback_url, { rtp_version: "1.0", task_id: taskId, status: "TIMEOUT", result: { success: false, error: "Timed out" } }).catch(() => {}); }
+        try { await supabase.from("escrows").update({ status: "refunded" }).eq("escrow_id", escrowId); } catch {}
+        if (callback_url) { try { axios.post(callback_url, { rtp_version: "1.0", task_id: taskId, status: "TIMEOUT", result: { success: false, error: "Timed out" } }); } catch {} }
       }
     }, timeout * 1000);
 
     // Audit
-    await supabase.from("audit_log").insert({ event: "robot_task_dispatched", details: { task_id: taskId, robot_id: robotId, task, payment: robot.price_per_task }, timestamp: new Date().toISOString() }).catch(() => {});
+    await supabase.from("audit_log").insert({ event: "robot_task_dispatched", details: { task_id: taskId, robot_id: robotId, task, payment: robot.price_per_task }, timestamp: new Date().toISOString() });
 
     res.json({ status, task_id: taskId, robot_id: robotId, escrow_id: escrowId, rtp_version: "1.0", dispatched_at: new Date().toISOString() });
   } catch (err: any) {
@@ -212,10 +212,10 @@ export async function robotCompleteHandler(req: Request, res: Response) {
 
     // Fire callback
     if (task.callback_url) {
-      axios.post(task.callback_url, { rtp_version: "1.0", task_id, robot_id: robot_id || task.robot_id, status, result, completed_at: new Date().toISOString() }).catch(() => {});
+      axios.post(task.callback_url, { rtp_version: "1.0", task_id, robot_id: robot_id || task.robot_id, status, result, completed_at: new Date().toISOString() });
     }
 
-    await supabase.from("audit_log").insert({ event: `robot_task_${status.toLowerCase()}`, details: { task_id, status, output: result?.output || result?.error }, timestamp: new Date().toISOString() }).catch(() => {});
+    await supabase.from("audit_log").insert({ event: `robot_task_${status.toLowerCase()}`, details: { task_id, status, output: result?.output || result?.error }, timestamp: new Date().toISOString() });
 
     res.json({ task_id, status, escrow: escrowAction });
   } catch (err: any) {
@@ -327,7 +327,7 @@ export async function robotDeregisterHandler(req: Request, res: Response) {
     const { error } = await supabase.from("robots").delete().eq("robot_id", robot_id);
     if (error) return res.status(500).json({ error: "Deregistration failed" });
 
-    await supabase.from("audit_log").insert({ event: "robot_deregistered", details: { robot_id }, timestamp: new Date().toISOString() }).catch(() => {});
+    await supabase.from("audit_log").insert({ event: "robot_deregistered", details: { robot_id }, timestamp: new Date().toISOString() });
     res.json({ robot_id, deregistered: true });
   } catch (err: any) {
     res.status(500).json({ error: "Internal server error" });
