@@ -39,6 +39,8 @@ import { gpuRunHandler, gpuStatusHandler, gpuModelsHandler } from "./routes/gpu.
 import { walletCreateHandler, walletGetHandler, walletListHandler, walletSignMessageHandler, walletSendTxHandler, walletAddressesHandler } from "./routes/wallet.js";
 // NEW: Search/RAG
 import { searchWebHandler, searchExtractHandler, searchQnaHandler } from "./routes/search.js";
+// NEW: Robotics / RTP (Category 15)
+import { robotRegisterHandler, robotTaskHandler, robotCompleteHandler, robotListHandler, robotTaskStatusHandler, robotProfileHandler, robotUpdateHandler, robotDeregisterHandler } from "./routes/robots.js";
 // Existing
 import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
@@ -436,6 +438,27 @@ app.use(
         description: "Sign and broadcast a transaction from an agent wallet.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { walletId: "...", transaction: {}, networkId: "base-mainnet" }, inputSchema: { properties: { walletId: { type: "string" }, transaction: { type: "object" }, networkId: { type: "string" } }, required: ["walletId", "transaction", "networkId"] }, bodyType: "json", output: { example: { signature: "..." }, schema: { properties: { signature: { type: "string" } } } } }) },
       },
+      // Robotics / RTP (Category 15)
+      "POST /api/v1/robots/task": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Dispatch a paid task to an RTP-registered robot. x402 payment held in escrow until completion.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { robot_id: "robo_abc123", task: "pick", parameters: { item: "SKU-00421", from_location: "bin_A3" } }, inputSchema: { properties: { robot_id: { type: "string" }, task: { type: "string" }, parameters: { type: "object" }, callback_url: { type: "string" }, timeout_seconds: { type: "number" } }, required: ["robot_id", "task"] }, bodyType: "json", output: { example: { status: "DISPATCHED", task_id: "task_xyz789", escrow_id: "escrow_001" }, schema: { properties: { status: { type: "string" }, task_id: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/robots/list": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Discover RTP robots. Filter by capability, chain, price, status.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { capability: "pick", max_price: "0.10" }, inputSchema: { properties: { capability: { type: "string" }, chain: { type: "string" }, max_price: { type: "string" }, status: { type: "string" } } }, output: { example: { robots: [], total: 0 }, schema: { properties: { robots: { type: "array" }, total: { type: "number" } } } } }) },
+      },
+      "GET /api/v1/robots/status": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Poll RTP task status: PENDING, DISPATCHED, IN_PROGRESS, COMPLETED, FAILED, TIMEOUT.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { task_id: "task_xyz789" }, inputSchema: { properties: { task_id: { type: "string" } }, required: ["task_id"] }, output: { example: { task_id: "task_xyz789", status: "COMPLETED", result: {} }, schema: { properties: { status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/robots/profile": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Full RTP robot profile: capabilities, pricing, connection type.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { robot_id: "robo_abc123" }, inputSchema: { properties: { robot_id: { type: "string" } }, required: ["robot_id"] }, output: { example: { robot_id: "robo_abc123", capabilities: ["pick", "place"] }, schema: { properties: { robot_id: { type: "string" }, capabilities: { type: "array" } } } } }) },
+      },
     },
     server
   )
@@ -519,6 +542,15 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/search/web`, method: "POST", price: "$0.02", category: "search" },
       { resource: `${BASE_URL}/api/v1/search/extract`, method: "POST", price: "$0.02", category: "search" },
       { resource: `${BASE_URL}/api/v1/search/qna`, method: "POST", price: "$0.03", category: "search" },
+      // Robotics / RTP
+      { resource: `${BASE_URL}/api/v1/robots/register`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
+      { resource: `${BASE_URL}/api/v1/robots/task`, method: "POST", price: "$0.05", category: "rtp", rtp: { version: "1.0", description: "Dispatch paid task to robot" } },
+      { resource: `${BASE_URL}/api/v1/robots/complete`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
+      { resource: `${BASE_URL}/api/v1/robots/list`, method: "GET", price: "$0.005", category: "rtp", rtp: { version: "1.0", description: "Discover robots by capability" } },
+      { resource: `${BASE_URL}/api/v1/robots/status`, method: "GET", price: "$0.002", category: "rtp", rtp: { version: "1.0" } },
+      { resource: `${BASE_URL}/api/v1/robots/profile`, method: "GET", price: "$0.002", category: "rtp", rtp: { version: "1.0" } },
+      { resource: `${BASE_URL}/api/v1/robots/update`, method: "PATCH", price: "free", category: "rtp", rtp: { version: "1.0" } },
+      { resource: `${BASE_URL}/api/v1/robots/deregister`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
       // Existing data
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.005", category: "data" },
@@ -607,6 +639,13 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_search_web", description: "Web search with LLM-ready results", price: "$0.02" },
       { name: "spraay_search_extract", description: "Extract content from URLs for RAG", price: "$0.02" },
       { name: "spraay_search_qna", description: "Question answering with sources", price: "$0.03" },
+      // Robotics / RTP
+      { name: "spraay_robot_register", description: "Register a robot on the RTP network", price: "free" },
+      { name: "spraay_robot_task", description: "Dispatch paid task to a robot", price: "$0.05" },
+      { name: "spraay_robot_complete", description: "Report robot task completion", price: "free" },
+      { name: "spraay_robot_list", description: "Discover robots by capability/price", price: "$0.005" },
+      { name: "spraay_robot_status", description: "Poll RTP task status", price: "$0.002" },
+      { name: "spraay_robot_profile", description: "Get robot capability profile", price: "$0.002" },
       { name: "spraay_prices", description: "Token prices", price: "$0.005" },
       { name: "spraay_balances", description: "Token balances", price: "$0.005" },
       { name: "spraay_resolve", description: "ENS resolution", price: "$0.002" },
@@ -622,7 +661,7 @@ app.get("/", (_req, res) => {
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
-      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models" },
+      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models", "POST /api/v1/robots/register": "Register Robot (RTP)", "POST /api/v1/robots/complete": "Report Task Complete (RTP)", "PATCH /api/v1/robots/update": "Update Robot (RTP)", "POST /api/v1/robots/deregister": "Remove Robot (RTP)" },
       paid: {
         // AI
         "POST /api/v1/chat/completions": "$0.04 - AI chat",
@@ -703,6 +742,11 @@ app.get("/", (_req, res) => {
         "POST /api/v1/search/web": "$0.02 - Web search (Tavily)",
         "POST /api/v1/search/extract": "$0.02 - Extract content from URLs",
         "POST /api/v1/search/qna": "$0.03 - Question answering",
+        // Robotics / RTP
+        "POST /api/v1/robots/task": "$0.05 - Dispatch robot task (RTP)",
+        "GET /api/v1/robots/list": "$0.005 - Discover robots",
+        "GET /api/v1/robots/status": "$0.002 - Poll task status",
+        "GET /api/v1/robots/profile": "$0.002 - Robot profile",
         // Data
         "GET /api/v1/prices": "$0.005 - Token prices",
         "GET /api/v1/balances": "$0.005 - Balances",
@@ -711,7 +755,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 63,
+    totalEndpoints: 71,
   });
 });
 
@@ -811,6 +855,15 @@ app.get("/api/v1/gpu/models", gpuModelsHandler);
 app.post("/api/v1/search/web", searchWebHandler);
 app.post("/api/v1/search/extract", searchExtractHandler);
 app.post("/api/v1/search/qna", searchQnaHandler);
+// Robotics / RTP (Category 15)
+app.post("/api/v1/robots/register", robotRegisterHandler);
+app.post("/api/v1/robots/task", robotTaskHandler);
+app.post("/api/v1/robots/complete", robotCompleteHandler);
+app.get("/api/v1/robots/list", robotListHandler);
+app.get("/api/v1/robots/status", robotTaskStatusHandler);
+app.get("/api/v1/robots/profile", robotProfileHandler);
+app.patch("/api/v1/robots/update", robotUpdateHandler);
+app.post("/api/v1/robots/deregister", robotDeregisterHandler);
 // Wallet Provisioning (Category 14)
 app.post("/api/v1/wallet/create", walletCreateHandler);
 app.get("/api/v1/wallet/list", walletListHandler);
@@ -824,10 +877,11 @@ app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v3.3.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v3.4.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
-  console.log(`\n🌐 67 paid + 7 free endpoints ready\n`);
+  console.log(`🤖 RTP Robot Task Protocol endpoints active`);
+  console.log(`\n🌐 71 paid + 11 free endpoints ready\n`);
 });
 
 export default app;
