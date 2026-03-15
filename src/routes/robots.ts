@@ -1,335 +1,634 @@
-/**
- * RTP — Robot Task Protocol Routes
- * Spraay x402 Gateway — Category 15: Robotics / RTP
- *
- * Endpoints:
- *   POST /api/v1/robots/register      — Register a robot (FREE, API key auth)
- *   POST /api/v1/robots/task           — Dispatch task to robot (x402 paid)
- *   POST /api/v1/robots/complete       — Report task completion (FREE, API key auth)
- *   GET  /api/v1/robots/list           — Discover robots (x402 paid)
- *   GET  /api/v1/robots/status         — Poll task status (x402 paid)
- *   GET  /api/v1/robots/profile        — Robot profile (x402 paid)
- *   PATCH /api/v1/robots/update        — Update robot (FREE, API key auth)
- *   POST /api/v1/robots/deregister     — Remove robot (FREE, API key auth)
- */
+// routes/robots.ts — RTP Category 16: Robot Task Protocol
+// 8 named exports matching index.ts line 43
 
-import { Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
-import axios from "axios";
+import { Request, Response } from 'express';
+import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || ""
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
-// ---- Helpers ----
+const BASE_URL = process.env.BASE_URL || 'https://gateway.spraay.app';
 
-function genId(prefix: string): string {
-  return `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
+function generateId(prefix: string): string {
+  return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 }
 
-function getAssetContract(chain: string, currency: string): string {
-  const c: Record<string, Record<string, string>> = {
-    base: { USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
-    arbitrum: { USDC: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
-    ethereum: { USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
-    polygon: { USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
-  };
-  return c[chain]?.[currency] || "";
-}
-
-// ---- POST /api/v1/robots/register ----
-
+// ============================================================
+// 1. POST /api/v1/robots/register (FREE)
+// ============================================================
 export async function robotRegisterHandler(req: Request, res: Response) {
   try {
-    const { name, description, capabilities, price_per_task, currency, chain, payment_address, connection, tags, metadata } = req.body;
+    const {
+      name, description, capabilities, price_per_task,
+      currency, chain, payment_address,
+      connection, tags, metadata
+    } = req.body;
 
-    if (!name || !capabilities?.length || !price_per_task || !payment_address || !connection?.type) {
-      return res.status(400).json({ error: "Missing required: name, capabilities, price_per_task, payment_address, connection.type" });
+    if (!name || !capabilities || !Array.isArray(capabilities) || !payment_address || !connection) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['name', 'capabilities', 'payment_address', 'connection'],
+        optional: ['description', 'price_per_task', 'currency', 'chain', 'tags', 'metadata'],
+        connection_format: '{ type: "webhook"|"xmtp"|"wifi"|"websocket", webhookUrl: "..." }',
+        example: {
+          name: 'WarehouseBot-01',
+          capabilities: ['pick', 'place', 'scan'],
+          price_per_task: '0.05',
+          payment_address: '0xYourWallet',
+          connection: { type: 'webhook', webhookUrl: 'https://yourserver.com/rtp/task' }
+        }
+      });
     }
 
-    const validTypes = ["webhook", "xmtp", "wifi", "websocket"];
-    if (!validTypes.includes(connection.type)) {
-      return res.status(400).json({ error: `Invalid connection type. Use: ${validTypes.join(", ")}` });
-    }
+    const robotId = generateId('robo');
+    const connType = connection.type || 'webhook';
+    const connConfig = { ...connection };
+    delete connConfig.type;
 
-    const robotId = genId("robo");
-    const BASE_URL = process.env.BASE_URL || "https://gateway.spraay.app";
-
-    const { data, error } = await supabase.from("robots").insert({
-      robot_id: robotId,
-      name,
-      description: description || null,
-      capabilities,
-      price_per_task: String(price_per_task),
-      currency: currency || "USDC",
-      chain: chain || "base",
-      payment_address,
-      connection_type: connection.type,
-      connection_config: connection,
-      tags: tags || [],
-      metadata: metadata || {},
-      status: "online",
-      registered_at: new Date().toISOString(),
-    }).select().single();
+    const { data, error } = await supabase
+      .from('robots')
+      .insert({
+        robot_id: robotId,
+        name,
+        description: description || null,
+        capabilities,
+        price_per_task: price_per_task || '0.05',
+        currency: currency || 'USDC',
+        chain: chain || 'base',
+        payment_address,
+        connection_type: connType,
+        connection_config: connConfig,
+        tags: tags || [],
+        metadata: metadata || {},
+        status: 'online'
+      })
+      .select()
+      .single();
 
     if (error) {
-      console.error("Robot registration error:", error);
-      return res.status(500).json({ error: "Registration failed", details: error.message });
+      console.error('[RTP] Register error:', error);
+      return res.status(500).json({ error: 'Failed to register robot', details: error.message });
     }
 
-    // Audit
-    await supabase.from("audit_log").insert({
-      event: "robot_registered", details: { robot_id: robotId, name, capabilities, price_per_task },
-      timestamp: new Date().toISOString(),
-    });
+    const rtpUri = `rtp://${BASE_URL.replace(/^https?:\/\//, '')}/${robotId}`;
 
-    res.status(201).json({
-      status: "registered",
+    return res.status(201).json({
+      status: 'registered',
       robot_id: robotId,
-      rtp_uri: `rtp://gateway.spraay.app/${robotId}`,
-      x402_endpoint: `${BASE_URL}/api/v1/robots/task?robot_id=${robotId}`,
-      registered_at: data?.registered_at,
+      rtp_uri: rtpUri,
+      x402_endpoint: `${BASE_URL}/api/v1/robots/task`,
+      robot: {
+        robot_id: data.robot_id,
+        name: data.name,
+        description: data.description,
+        capabilities: data.capabilities,
+        price_per_task: data.price_per_task,
+        currency: data.currency,
+        chain: data.chain,
+        payment_address: data.payment_address,
+        connection: { type: data.connection_type, ...data.connection_config },
+        tags: data.tags,
+        status: data.status,
+        registered_at: data.registered_at
+      }
     });
   } catch (err: any) {
-    console.error("Robot register error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] Register exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ---- POST /api/v1/robots/task (x402 paid) ----
-
+// ============================================================
+// 2. POST /api/v1/robots/task (x402: $0.05)
+// ============================================================
 export async function robotTaskHandler(req: Request, res: Response) {
   try {
-    const robotId = req.body.robot_id || req.query.robot_id;
-    if (!robotId) return res.status(400).json({ error: "robot_id required" });
+    const { robot_id, task, parameters, callback_url, timeout_seconds } = req.body;
 
-    const { data: robot } = await supabase.from("robots").select("*").eq("robot_id", robotId).single();
-    if (!robot) return res.status(404).json({ error: "Robot not found" });
-    if (robot.status === "offline") return res.status(503).json({ error: "RTP_ROBOT_OFFLINE", message: "Robot is currently offline" });
+    if (!robot_id || !task) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['robot_id', 'task'],
+        optional: ['parameters', 'callback_url', 'timeout_seconds'],
+        example_tasks: ['pick', 'place', 'scan', 'deliver', 'navigate', 'inspect']
+      });
+    }
 
-    const { task, parameters, callback_url, timeout_seconds } = req.body;
+    const { data: robot, error: robotErr } = await supabase
+      .from('robots')
+      .select('*')
+      .eq('robot_id', robot_id)
+      .single();
+
+    if (robotErr || !robot) {
+      return res.status(404).json({ error: 'Robot not found', robot_id });
+    }
+
+    if (robot.status !== 'online') {
+      return res.status(409).json({
+        error: 'Robot is not available',
+        current_status: robot.status,
+        hint: 'Wait for robot to come online or choose another robot'
+      });
+    }
+
+    if (!robot.capabilities.includes(task)) {
+      return res.status(400).json({
+        error: `Robot does not support task "${task}"`,
+        available_capabilities: robot.capabilities
+      });
+    }
+
+    const taskId = generateId('task');
+    const escrowId = generateId('escrow');
     const timeout = timeout_seconds || 60;
 
-    if (task && !robot.capabilities.includes(task)) {
-      return res.status(400).json({ error: "RTP_UNKNOWN_CAPABILITY", message: `Robot does not support: ${task}`, supported: robot.capabilities });
+    const { data: taskData, error: taskErr } = await supabase
+      .from('robot_tasks')
+      .insert({
+        task_id: taskId,
+        robot_id,
+        task_type: task,
+        parameters: parameters || {},
+        callback_url: callback_url || null,
+        timeout_seconds: timeout,
+        escrow_id: escrowId,
+        payment_amount: robot.price_per_task,
+        payment_currency: robot.currency,
+        payment_chain: robot.chain,
+        status: 'DISPATCHED',
+        dispatched_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (taskErr) {
+      console.error('[RTP] Task create error:', taskErr);
+      return res.status(500).json({ error: 'Failed to create task', details: taskErr.message });
     }
 
-    const taskId = genId("task");
-    const escrowId = genId("escrow");
+    await supabase
+      .from('robots')
+      .update({ status: 'busy', updated_at: new Date().toISOString() })
+      .eq('robot_id', robot_id);
 
-    // Create escrow record
-    await supabase.from("escrows").insert({
-      escrow_id: escrowId, depositor: "x402-agent", beneficiary: robot.payment_address,
-      token: robot.currency, amount: robot.price_per_task, chain: robot.chain,
-      status: "held", conditions: [{ type: "rtp_task", task_id: taskId }],
-      created_at: new Date().toISOString(),
-    });
+    dispatchToRobot(robot, taskData).catch(err =>
+      console.error('[RTP] Dispatch to robot failed:', err.message)
+    );
 
-    // Create task record
-    await supabase.from("robot_tasks").insert({
-      task_id: taskId, robot_id: robotId, task_type: task || "custom",
-      parameters: parameters || {}, callback_url: callback_url || null,
-      timeout_seconds: timeout, escrow_id: escrowId,
-      payment_amount: robot.price_per_task, payment_currency: robot.currency,
-      payment_chain: robot.chain, status: "PENDING",
-      issued_at: new Date().toISOString(),
-    });
-
-    // Build task envelope
-    const envelope = {
-      rtp_version: "1.0", task_id: taskId, robot_id: robotId, task: task || "custom",
-      parameters: parameters || {},
-      payment: { amount: robot.price_per_task, currency: robot.currency, chain: robot.chain },
-      callback_url: callback_url || null, timeout_seconds: timeout,
-      issued_at: new Date().toISOString(),
-    };
-
-    // Dispatch to robot
-    let dispatched = false;
-    try {
-      if (robot.connection_type === "webhook" && robot.connection_config?.webhookUrl) {
-        const body = JSON.stringify(envelope);
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (robot.connection_config.secret) {
-          headers["X-RTP-Signature"] = "sha256=" + crypto.createHmac("sha256", robot.connection_config.secret).update(body).digest("hex");
-        }
-        await axios.post(robot.connection_config.webhookUrl, envelope, { headers, timeout: 10000 });
-        dispatched = true;
-      }
-      // TODO: xmtp, wifi, websocket dispatch
-    } catch (dispatchErr: any) {
-      console.warn(`Dispatch to ${robotId} failed: ${dispatchErr.message}`);
+    if (timeout > 0) {
+      setTimeout(() => handleTaskTimeout(taskId, robot_id), timeout * 1000);
     }
 
-    const status = dispatched ? "DISPATCHED" : "PENDING";
-    await supabase.from("robot_tasks").update({ status, dispatched_at: dispatched ? new Date().toISOString() : null }).eq("task_id", taskId);
-
-    // Timeout watchdog
-    setTimeout(async () => {
-      const { data: current } = await supabase.from("robot_tasks").select("status").eq("task_id", taskId).single();
-      if (current && !["COMPLETED", "FAILED", "TIMEOUT"].includes(current.status)) {
-        await supabase.from("robot_tasks").update({ status: "TIMEOUT", completed_at: new Date().toISOString() }).eq("task_id", taskId);
-        try { await supabase.from("escrows").update({ status: "refunded" }).eq("escrow_id", escrowId); } catch {}
-        if (callback_url) { try { axios.post(callback_url, { rtp_version: "1.0", task_id: taskId, status: "TIMEOUT", result: { success: false, error: "Timed out" } }); } catch {} }
-      }
-    }, timeout * 1000);
-
-    // Audit
-    await supabase.from("audit_log").insert({ event: "robot_task_dispatched", details: { task_id: taskId, robot_id: robotId, task, payment: robot.price_per_task }, timestamp: new Date().toISOString() });
-
-    res.json({ status, task_id: taskId, robot_id: robotId, escrow_id: escrowId, rtp_version: "1.0", dispatched_at: new Date().toISOString() });
+    return res.status(201).json({
+      status: 'DISPATCHED',
+      task_id: taskId,
+      escrow_id: escrowId,
+      robot_id,
+      task,
+      timeout_seconds: timeout,
+      poll_url: `${BASE_URL}/api/v1/robots/status?task_id=${taskId}`
+    });
   } catch (err: any) {
-    console.error("Robot task error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] Task dispatch exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ---- POST /api/v1/robots/complete ----
-
+// ============================================================
+// 3. POST /api/v1/robots/complete (FREE)
+// ============================================================
 export async function robotCompleteHandler(req: Request, res: Response) {
   try {
-    const { task_id, robot_id, status, result } = req.body;
-    if (!task_id || !status || !result) return res.status(400).json({ error: "Missing: task_id, status, result" });
+    const { task_id, status, result } = req.body;
 
-    const { data: task } = await supabase.from("robot_tasks").select("*").eq("task_id", task_id).single();
-    if (!task) return res.status(404).json({ error: "Task not found" });
-    if (["COMPLETED", "FAILED", "TIMEOUT"].includes(task.status)) {
-      return res.status(409).json({ error: "Task already terminal", current_status: task.status });
+    if (!task_id || !status) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['task_id', 'status'],
+        optional: ['result'],
+        allowed_statuses: ['COMPLETED', 'FAILED']
+      });
     }
 
-    await supabase.from("robot_tasks").update({ status, result, completed_at: new Date().toISOString() }).eq("task_id", task_id);
-
-    let escrowAction = null;
-    if (status === "COMPLETED" && task.escrow_id) {
-      await supabase.from("escrows").update({ status: "released" }).eq("escrow_id", task.escrow_id);
-      escrowAction = "released";
-    } else if (["FAILED", "TIMEOUT"].includes(status) && task.escrow_id) {
-      await supabase.from("escrows").update({ status: "refunded" }).eq("escrow_id", task.escrow_id);
-      escrowAction = "refunded";
+    if (!['COMPLETED', 'FAILED'].includes(status)) {
+      return res.status(400).json({
+        error: 'Invalid status — must be COMPLETED or FAILED',
+        provided: status
+      });
     }
 
-    // Fire callback
+    const { data: task, error: taskErr } = await supabase
+      .from('robot_tasks')
+      .select('*')
+      .eq('task_id', task_id)
+      .single();
+
+    if (taskErr || !task) {
+      return res.status(404).json({ error: 'Task not found', task_id });
+    }
+
+    if (['COMPLETED', 'FAILED', 'TIMEOUT', 'CANCELLED'].includes(task.status)) {
+      return res.status(409).json({
+        error: 'Task already finalized',
+        current_status: task.status
+      });
+    }
+
+    const escrowAction = status === 'COMPLETED' ? 'released' : 'refunded';
+
+    const { error: updateErr } = await supabase
+      .from('robot_tasks')
+      .update({
+        status,
+        result: result || null,
+        completed_at: new Date().toISOString()
+      })
+      .eq('task_id', task_id);
+
+    if (updateErr) {
+      console.error('[RTP] Complete update error:', updateErr);
+      return res.status(500).json({ error: 'Failed to update task' });
+    }
+
+    await supabase
+      .from('robots')
+      .update({ status: 'online', updated_at: new Date().toISOString() })
+      .eq('robot_id', task.robot_id);
+
     if (task.callback_url) {
-      axios.post(task.callback_url, { rtp_version: "1.0", task_id, robot_id: robot_id || task.robot_id, status, result, completed_at: new Date().toISOString() });
+      fireCallback(task.callback_url, {
+        event: 'task.completed',
+        task_id,
+        robot_id: task.robot_id,
+        status,
+        result: result || null,
+        escrow: escrowAction,
+        timestamp: new Date().toISOString()
+      }).catch(err => console.error('[RTP] Callback failed:', err.message));
     }
 
-    await supabase.from("audit_log").insert({ event: `robot_task_${status.toLowerCase()}`, details: { task_id, status, output: result?.output || result?.error }, timestamp: new Date().toISOString() });
-
-    res.json({ task_id, status, escrow: escrowAction });
+    return res.json({
+      task_id,
+      status,
+      escrow: escrowAction,
+      result: result || null
+    });
   } catch (err: any) {
-    console.error("Robot complete error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] Complete exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ---- GET /api/v1/robots/list ----
-
+// ============================================================
+// 4. GET /api/v1/robots/list (x402: $0.005)
+// ============================================================
 export async function robotListHandler(req: Request, res: Response) {
   try {
-    let query = supabase.from("robots").select("robot_id, name, description, capabilities, price_per_task, currency, chain, status, tags, registered_at").order("registered_at", { ascending: false });
-    if (req.query.capability) query = query.contains("capabilities", [req.query.capability as string]);
-    if (req.query.chain) query = query.eq("chain", req.query.chain as string);
-    if (req.query.max_price) query = query.lte("price_per_task", req.query.max_price as string);
-    if (req.query.status) query = query.eq("status", req.query.status as string);
+    const { capability, chain, max_price, status } = req.query;
 
-    const { data: robots, error } = await query;
-    if (error) return res.status(500).json({ error: "Query failed" });
+    let query = supabase
+      .from('robots')
+      .select('*')
+      .order('registered_at', { ascending: false });
 
-    const BASE_URL = process.env.BASE_URL || "https://gateway.spraay.app";
-    res.json({
-      robots: (robots || []).map((r: any) => ({
-        ...r,
-        rtp_uri: `rtp://gateway.spraay.app/${r.robot_id}`,
-        x402_endpoint: `${BASE_URL}/api/v1/robots/task?robot_id=${r.robot_id}`,
-      })),
-      total: robots?.length || 0,
+    if (status) query = query.eq('status', status as string);
+    if (capability) query = query.contains('capabilities', [capability as string]);
+    if (max_price) query = query.lte('price_per_task', max_price as string);
+    if (chain) query = query.eq('chain', chain as string);
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[RTP] List error:', error);
+      return res.status(500).json({ error: 'Failed to list robots', details: error.message });
+    }
+
+    const robots = (data || []).map(r => ({
+      robot_id: r.robot_id,
+      name: r.name,
+      capabilities: r.capabilities,
+      price_per_task: r.price_per_task,
+      currency: r.currency,
+      chain: r.chain,
+      payment_address: r.payment_address,
+      status: r.status,
+      connection_type: r.connection_type,
+      tags: r.tags,
+      rtp_uri: `rtp://${BASE_URL.replace(/^https?:\/\//, '')}/${r.robot_id}`
+    }));
+
+    return res.json({
+      robots,
+      total: robots.length,
+      filters: {
+        capability: capability || null,
+        chain: chain || 'base',
+        max_price: max_price || null,
+        status: status || null
+      }
     });
   } catch (err: any) {
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] List exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ---- GET /api/v1/robots/status ----
-
+// ============================================================
+// 5. GET /api/v1/robots/status (x402: $0.002)
+// ============================================================
 export async function robotTaskStatusHandler(req: Request, res: Response) {
   try {
-    const taskId = req.query.task_id as string;
-    if (!taskId) return res.status(400).json({ error: "task_id query param required" });
+    const { task_id } = req.query;
 
-    const { data: task } = await supabase.from("robot_tasks").select("task_id, robot_id, task_type, status, parameters, result, issued_at, dispatched_at, completed_at").eq("task_id", taskId).single();
-    if (!task) return res.status(404).json({ error: "Task not found" });
+    if (!task_id) {
+      return res.status(400).json({
+        error: 'Missing required query param: task_id',
+        example: '/api/v1/robots/status?task_id=task_abc123'
+      });
+    }
 
-    res.json(task);
-  } catch (err: any) {
-    res.status(500).json({ error: "Internal server error" });
-  }
-}
+    const { data: task, error } = await supabase
+      .from('robot_tasks')
+      .select('*')
+      .eq('task_id', task_id as string)
+      .single();
 
-// ---- GET /api/v1/robots/profile ----
+    if (error || !task) {
+      return res.status(404).json({ error: 'Task not found', task_id });
+    }
 
-export async function robotProfileHandler(req: Request, res: Response) {
-  try {
-    const robotId = req.query.robot_id as string;
-    if (!robotId) return res.status(400).json({ error: "robot_id query param required" });
-
-    const { data: robot } = await supabase.from("robots").select("*").eq("robot_id", robotId).single();
-    if (!robot) return res.status(404).json({ error: "Robot not found" });
-
-    const BASE_URL = process.env.BASE_URL || "https://gateway.spraay.app";
-    res.json({
-      ...robot,
-      rtp_uri: `rtp://gateway.spraay.app/${robot.robot_id}`,
-      x402_endpoint: `${BASE_URL}/api/v1/robots/task?robot_id=${robot.robot_id}`,
+    return res.json({
+      task_id: task.task_id,
+      robot_id: task.robot_id,
+      task: task.task_type,
+      status: task.status,
+      escrow_id: task.escrow_id,
+      result: task.result,
+      issued_at: task.issued_at,
+      dispatched_at: task.dispatched_at,
+      completed_at: task.completed_at,
+      is_terminal: ['COMPLETED', 'FAILED', 'TIMEOUT', 'CANCELLED'].includes(task.status)
     });
   } catch (err: any) {
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] Status exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ---- PATCH /api/v1/robots/update ----
+// ============================================================
+// 6. GET /api/v1/robots/profile (x402: $0.002)
+// ============================================================
+export async function robotProfileHandler(req: Request, res: Response) {
+  try {
+    const { robot_id } = req.query;
 
+    if (!robot_id) {
+      return res.status(400).json({
+        error: 'Missing required query param: robot_id',
+        example: '/api/v1/robots/profile?robot_id=robo_abc123'
+      });
+    }
+
+    const { data: robot, error } = await supabase
+      .from('robots')
+      .select('*')
+      .eq('robot_id', robot_id as string)
+      .single();
+
+    if (error || !robot) {
+      return res.status(404).json({ error: 'Robot not found', robot_id });
+    }
+
+    const { count: totalTasks } = await supabase
+      .from('robot_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('robot_id', robot_id as string);
+
+    const { count: completedTasks } = await supabase
+      .from('robot_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('robot_id', robot_id as string)
+      .eq('status', 'COMPLETED');
+
+    return res.json({
+      robot_id: robot.robot_id,
+      name: robot.name,
+      description: robot.description,
+      capabilities: robot.capabilities,
+      price_per_task: robot.price_per_task,
+      currency: robot.currency,
+      chain: robot.chain,
+      payment_address: robot.payment_address,
+      status: robot.status,
+      connection: { type: robot.connection_type, ...robot.connection_config },
+      tags: robot.tags,
+      metadata: robot.metadata,
+      rtp_uri: `rtp://${BASE_URL.replace(/^https?:\/\//, '')}/${robot.robot_id}`,
+      stats: {
+        total_tasks: totalTasks || 0,
+        completed_tasks: completedTasks || 0
+      },
+      registered_at: robot.registered_at
+    });
+  } catch (err: any) {
+    console.error('[RTP] Profile exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ============================================================
+// 7. PATCH /api/v1/robots/update (FREE)
+// ============================================================
 export async function robotUpdateHandler(req: Request, res: Response) {
   try {
-    const { robot_id, ...updates } = req.body;
-    if (!robot_id) return res.status(400).json({ error: "robot_id required" });
+    const { robot_id, ...fields } = req.body;
 
-    const allowed = ["name", "description", "capabilities", "price_per_task", "currency", "chain", "payment_address", "connection", "tags", "metadata", "status"];
-    const patch: Record<string, any> = {};
-    for (const k of allowed) {
-      if (updates[k] !== undefined) {
-        if (k === "connection") { patch.connection_type = updates[k].type; patch.connection_config = updates[k]; }
-        else patch[k] = updates[k];
+    if (!robot_id) {
+      return res.status(400).json({
+        error: 'Missing required field: robot_id',
+        updatable_fields: ['name', 'description', 'capabilities', 'price_per_task', 'currency', 'chain', 'payment_address', 'connection', 'tags', 'status', 'metadata']
+      });
+    }
+
+    const allowed: Record<string, string> = {
+      name: 'name',
+      description: 'description',
+      capabilities: 'capabilities',
+      price_per_task: 'price_per_task',
+      currency: 'currency',
+      chain: 'chain',
+      payment_address: 'payment_address',
+      tags: 'tags',
+      status: 'status',
+      metadata: 'metadata'
+    };
+
+    const updates: Record<string, any> = {};
+
+    for (const [key, col] of Object.entries(allowed)) {
+      if (fields[key] !== undefined) {
+        updates[col] = fields[key];
       }
     }
-    patch.updated_at = new Date().toISOString();
 
-    const { error } = await supabase.from("robots").update(patch).eq("robot_id", robot_id);
-    if (error) return res.status(500).json({ error: "Update failed" });
+    // Handle connection → split into connection_type + connection_config
+    if (fields.connection) {
+      const conn = fields.connection;
+      if (conn.type) updates.connection_type = conn.type;
+      const config = { ...conn };
+      delete config.type;
+      if (Object.keys(config).length > 0) updates.connection_config = config;
+    }
 
-    res.json({ robot_id, updated: Object.keys(patch), updated_at: patch.updated_at });
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        error: 'No valid fields to update',
+        updatable_fields: [...Object.keys(allowed), 'connection']
+      });
+    }
+
+    updates.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('robots')
+      .update(updates)
+      .eq('robot_id', robot_id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'Robot not found or update failed', robot_id });
+    }
+
+    return res.json({
+      status: 'updated',
+      robot_id,
+      updated_fields: Object.keys(updates).filter(k => k !== 'updated_at'),
+      robot: {
+        robot_id: data.robot_id,
+        name: data.name,
+        capabilities: data.capabilities,
+        price_per_task: data.price_per_task,
+        status: data.status,
+        updated_at: data.updated_at
+      }
+    });
   } catch (err: any) {
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] Update exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ---- POST /api/v1/robots/deregister ----
-
+// ============================================================
+// 8. POST /api/v1/robots/deregister (FREE)
+// ============================================================
 export async function robotDeregisterHandler(req: Request, res: Response) {
   try {
     const { robot_id } = req.body;
-    if (!robot_id) return res.status(400).json({ error: "robot_id required" });
 
-    const { data: active } = await supabase.from("robot_tasks").select("task_id").eq("robot_id", robot_id).in("status", ["PENDING", "DISPATCHED", "IN_PROGRESS"]);
-    if (active && active.length > 0) return res.status(409).json({ error: "Robot has active tasks", active_tasks: active.length });
+    if (!robot_id) {
+      return res.status(400).json({ error: 'Missing required field: robot_id' });
+    }
 
-    const { error } = await supabase.from("robots").delete().eq("robot_id", robot_id);
-    if (error) return res.status(500).json({ error: "Deregistration failed" });
+    const { count } = await supabase
+      .from('robot_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('robot_id', robot_id)
+      .in('status', ['PENDING', 'DISPATCHED', 'IN_PROGRESS']);
 
-    await supabase.from("audit_log").insert({ event: "robot_deregistered", details: { robot_id }, timestamp: new Date().toISOString() });
-    res.json({ robot_id, deregistered: true });
+    if (count && count > 0) {
+      return res.status(409).json({
+        error: 'Cannot deregister robot with active tasks',
+        active_tasks: count,
+        hint: 'Complete or cancel active tasks first'
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('robots')
+      .delete()
+      .eq('robot_id', robot_id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'Robot not found', robot_id });
+    }
+
+    return res.json({
+      status: 'deregistered',
+      robot_id,
+      name: data.name
+    });
   } catch (err: any) {
-    res.status(500).json({ error: "Internal server error" });
+    console.error('[RTP] Deregister exception:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+async function dispatchToRobot(robot: any, task: any): Promise<void> {
+  if (robot.connection_type === 'webhook' && robot.connection_config?.webhookUrl) {
+    const response = await fetch(robot.connection_config.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_id: task.task_id,
+        task: task.task_type,
+        parameters: task.parameters,
+        timeout_seconds: task.timeout_seconds,
+        complete_url: `${BASE_URL}/api/v1/robots/complete`
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (response.ok) {
+      await supabase
+        .from('robot_tasks')
+        .update({ status: 'IN_PROGRESS' })
+        .eq('task_id', task.task_id);
+    }
+  }
+}
+
+async function handleTaskTimeout(taskId: string, robotId: string): Promise<void> {
+  try {
+    const { data: task } = await supabase
+      .from('robot_tasks')
+      .select('status')
+      .eq('task_id', taskId)
+      .single();
+
+    if (task && !['COMPLETED', 'FAILED', 'TIMEOUT', 'CANCELLED'].includes(task.status)) {
+      await supabase
+        .from('robot_tasks')
+        .update({ status: 'TIMEOUT', completed_at: new Date().toISOString() })
+        .eq('task_id', taskId);
+
+      await supabase
+        .from('robots')
+        .update({ status: 'online', updated_at: new Date().toISOString() })
+        .eq('robot_id', robotId);
+
+      console.log(`[RTP] Task ${taskId} timed out`);
+    }
+  } catch (err: any) {
+    console.error('[RTP] Timeout handler error:', err.message);
+  }
+}
+
+async function fireCallback(url: string, payload: any): Promise<void> {
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10000)
+  });
 }
