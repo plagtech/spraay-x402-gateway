@@ -37,6 +37,8 @@ import { taxCalculateHandler, taxReportHandler } from "./routes/tax.js";
 import { gpuRunHandler, gpuStatusHandler, gpuModelsHandler } from "./routes/gpu.js";
 // NEW: Wallet Provisioning (Category 14)
 import { walletCreateHandler, walletGetHandler, walletListHandler, walletSignMessageHandler, walletSendTxHandler, walletAddressesHandler } from "./routes/wallet.js";
+// NEW: Agent Wallet (Category 17)
+import { agentWalletProvisionHandler, agentWalletSessionKeyHandler, agentWalletInfoHandler, agentWalletRevokeKeyHandler, agentWalletPredictHandler } from "./routes/agent-wallet.js";
 // NEW: Search/RAG
 import { searchWebHandler, searchExtractHandler, searchQnaHandler } from "./routes/search.js";
 // NEW: Robotics / RTP (Category 15)
@@ -459,6 +461,32 @@ app.use(
         description: "Full RTP robot profile: capabilities, pricing, connection type.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { robot_id: "robo_abc123" }, inputSchema: { properties: { robot_id: { type: "string" } }, required: ["robot_id"] }, output: { example: { robot_id: "robo_abc123", capabilities: ["pick", "place"] }, schema: { properties: { robot_id: { type: "string" }, capabilities: { type: "array" } } } } }) },
       },
+      // ---- AGENT WALLET (Category 17) ----
+      "POST /api/v1/agent-wallet/provision": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Create a smart contract wallet for an AI agent on Base. Returns wallet address and optional encrypted key.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { agentId: "trading-bot-007", agentType: "langchain", mode: "managed" }, inputSchema: { properties: { agentId: { type: "string" }, agentType: { type: "string" }, mode: { type: "string" }, ownerAddress: { type: "string" } }, required: ["agentId"] }, bodyType: "json", output: { example: { status: "created", wallet: { walletAddress: "0x...", chainId: 8453 } }, schema: { properties: { status: { type: "string" }, wallet: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/agent-wallet/session-key": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Add a session key with spending limits and time bounds to an agent wallet.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { walletAddress: "0x...", sessionKeyAddress: "0x...", spendLimitEth: "0.5", durationHours: 24 }, inputSchema: { properties: { walletAddress: { type: "string" }, sessionKeyAddress: { type: "string" }, spendLimitEth: { type: "string" }, durationHours: { type: "number" }, allowedTargets: { type: "array" } }, required: ["walletAddress", "sessionKeyAddress", "spendLimitEth", "durationHours"] }, bodyType: "json", output: { example: { status: "created", session: { expiresAt: "2025-01-01T00:00:00Z" } }, schema: { properties: { status: { type: "string" }, session: { type: "object" } } } } }) },
+      },
+      "GET /api/v1/agent-wallet/info": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get agent wallet info including balance, metadata, and session keys.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0x..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { wallet: { balanceEth: "0.5", agentId: "bot-001" } }, schema: { properties: { wallet: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/agent-wallet/revoke-key": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Revoke a session key immediately.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { walletAddress: "0x...", sessionKeyAddress: "0x..." }, inputSchema: { properties: { walletAddress: { type: "string" }, sessionKeyAddress: { type: "string" } }, required: ["walletAddress", "sessionKeyAddress"] }, bodyType: "json", output: { example: { status: "revoked", txHash: "0x..." }, schema: { properties: { status: { type: "string" }, txHash: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/agent-wallet/predict": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Predict agent wallet address before deployment.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { ownerAddress: "0x...", agentId: "bot-001" }, inputSchema: { properties: { ownerAddress: { type: "string" }, agentId: { type: "string" } }, required: ["ownerAddress", "agentId"] }, output: { example: { predictedAddress: "0x..." }, schema: { properties: { predictedAddress: { type: "string" } } } } }) },
+      },
     },
     server
   )
@@ -551,6 +579,12 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/robots/profile`, method: "GET", price: "$0.002", category: "rtp", rtp: { version: "1.0" } },
       { resource: `${BASE_URL}/api/v1/robots/update`, method: "PATCH", price: "free", category: "rtp", rtp: { version: "1.0" } },
       { resource: `${BASE_URL}/api/v1/robots/deregister`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
+      // Agent Wallet (Category 17)
+      { resource: `${BASE_URL}/api/v1/agent-wallet/provision`, method: "POST", price: "$0.05", category: "agent-wallet" },
+      { resource: `${BASE_URL}/api/v1/agent-wallet/session-key`, method: "POST", price: "$0.02", category: "agent-wallet" },
+      { resource: `${BASE_URL}/api/v1/agent-wallet/info`, method: "GET", price: "$0.005", category: "agent-wallet" },
+      { resource: `${BASE_URL}/api/v1/agent-wallet/revoke-key`, method: "POST", price: "$0.02", category: "agent-wallet" },
+      { resource: `${BASE_URL}/api/v1/agent-wallet/predict`, method: "GET", price: "$0.001", category: "agent-wallet" },
       // Existing data
       { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", category: "defi" },
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.005", category: "data" },
@@ -562,8 +596,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 63 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail & tax. Agents pay USDC per request via x402.",
-    version: "3.3.0",
+    description: "Full-stack DeFi infrastructure for AI agents on Base. 68 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax & agent wallets. Agents pay USDC per request via x402.",
+    version: "3.5.0",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
     repository: "https://github.com/plagtech/spraay-x402-mcp",
@@ -646,6 +680,12 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_robot_list", description: "Discover robots by capability/price", price: "$0.005" },
       { name: "spraay_robot_status", description: "Poll RTP task status", price: "$0.002" },
       { name: "spraay_robot_profile", description: "Get robot capability profile", price: "$0.002" },
+      // Agent Wallet (Category 17)
+      { name: "spraay_agent_wallet_provision", description: "Create smart contract wallet for AI agent", price: "$0.05" },
+      { name: "spraay_agent_wallet_session_key", description: "Add session key with spend limits", price: "$0.02" },
+      { name: "spraay_agent_wallet_info", description: "Get agent wallet info + balance", price: "$0.005" },
+      { name: "spraay_agent_wallet_revoke_key", description: "Revoke session key", price: "$0.02" },
+      { name: "spraay_agent_wallet_predict", description: "Predict wallet address before deploy", price: "$0.001" },
       { name: "spraay_prices", description: "Token prices", price: "$0.005" },
       { name: "spraay_balances", description: "Token balances", price: "$0.005" },
       { name: "spraay_resolve", description: "ENS resolution", price: "$0.002" },
@@ -656,8 +696,8 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "3.3.0",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute & Search/RAG. x402 + USDC.",
+    name: "Spraay x402 Gateway", version: "3.5.0",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG & Agent Wallets. x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
@@ -747,6 +787,12 @@ app.get("/", (_req, res) => {
         "GET /api/v1/robots/list": "$0.005 - Discover robots",
         "GET /api/v1/robots/status": "$0.002 - Poll task status",
         "GET /api/v1/robots/profile": "$0.002 - Robot profile",
+        // Agent Wallet (Category 17)
+        "POST /api/v1/agent-wallet/provision": "$0.05 - Provision agent wallet",
+        "POST /api/v1/agent-wallet/session-key": "$0.02 - Add session key",
+        "GET /api/v1/agent-wallet/info": "$0.005 - Agent wallet info",
+        "POST /api/v1/agent-wallet/revoke-key": "$0.02 - Revoke session key",
+        "GET /api/v1/agent-wallet/predict": "$0.001 - Predict wallet address",
         // Data
         "GET /api/v1/prices": "$0.005 - Token prices",
         "GET /api/v1/balances": "$0.005 - Balances",
@@ -755,7 +801,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 71,
+    totalEndpoints: 76,
   });
 });
 
@@ -871,17 +917,24 @@ app.post("/api/v1/wallet/sign-message", walletSignMessageHandler);
 app.post("/api/v1/wallet/send-transaction", walletSendTxHandler);
 app.get("/api/v1/wallet/:walletId/addresses", walletAddressesHandler);
 app.get("/api/v1/wallet/:walletId", walletGetHandler);
+// Agent Wallet (Category 17)
+app.post("/api/v1/agent-wallet/provision", agentWalletProvisionHandler);
+app.post("/api/v1/agent-wallet/session-key", agentWalletSessionKeyHandler);
+app.get("/api/v1/agent-wallet/info", agentWalletInfoHandler);
+app.post("/api/v1/agent-wallet/revoke-key", agentWalletRevokeKeyHandler);
+app.get("/api/v1/agent-wallet/predict", agentWalletPredictHandler);
 // Data
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v3.4.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v3.5.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🤖 RTP Robot Task Protocol endpoints active`);
-  console.log(`\n🌐 71 paid + 11 free endpoints ready\n`);
+  console.log(`👛 Agent Wallet provisioning active (Category 17)`);
+  console.log(`\n🌐 76 paid + 11 free endpoints ready\n`);
 });
 
 export default app;
