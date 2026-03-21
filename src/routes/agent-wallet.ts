@@ -2,8 +2,8 @@
  * Spraay Agent Wallet Routes (Category 17)
  * 
  * Smart contract wallet provisioning for AI agents on Base.
- * Factory: 0xe483F189af41FB5479cd8695DbbA16cc5CF1071D (Base Sepolia)
- * Implementation: 0xb6843955D914aD61dc6A4C819E0734d96467a391 (Base Sepolia)
+ * Factory: 0xFBD832Db6D9a05A0434cd497707a1bDC43389CfD (Base Mainnet)
+ * Implementation: 0x61818Ae8bC161D1884Fd8823985B80e6733C34E7 (Base Mainnet)
  */
 
 import { Request, Response } from "express";
@@ -12,12 +12,12 @@ import { createClient } from "@supabase/supabase-js";
 
 // ─── Config ──────────────────────────────────────────
 
-const BASE_RPC = process.env.BASE_RPC_URL || "https://sepolia.base.org";
-const FACTORY_ADDRESS = process.env.AGENT_WALLET_FACTORY || "0xe483F189af41FB5479cd8695DbbA16cc5CF1071D";
+const BASE_RPC = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+const FACTORY_ADDRESS = process.env.AGENT_WALLET_FACTORY || "0xFBD832Db6D9a05A0434cd497707a1bDC43389CfD";
 const FACILITATOR_KEY = process.env.FACILITATOR_PRIVATE_KEY || process.env.AGENT_WALLET_DEPLOYER_KEY || "";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || "";
-const CHAIN_ID = parseInt(process.env.AGENT_WALLET_CHAIN_ID || "84532");
+const CHAIN_ID = parseInt(process.env.AGENT_WALLET_CHAIN_ID || "8453");
 
 // ─── Contracts ───────────────────────────────────────
 
@@ -129,7 +129,7 @@ export async function agentWalletProvisionHandler(req: Request, res: Response) {
     // Store in Supabase
     try {
       const sb = getSupabase();
-      await sb.from("agent_wallets").insert({
+      await (sb.from("agent_wallets") as any).insert({
         wallet_address: walletAddress,
         owner_address: owner,
         agent_id: agentId,
@@ -140,7 +140,7 @@ export async function agentWalletProvisionHandler(req: Request, res: Response) {
       });
 
       if (mode === "managed" && encryptedKey) {
-        await sb.from("managed_keys").insert({
+        await (sb.from("managed_keys") as any).insert({
           wallet_address: walletAddress,
           encrypted_key: encryptedKey,
         });
@@ -191,7 +191,7 @@ export async function agentWalletSessionKeyHandler(req: Request, res: Response) 
     // Log in Supabase
     try {
       const sb = getSupabase();
-      await sb.from("session_keys").insert({
+      await (sb.from("session_keys") as any).insert({
         wallet_address: walletAddress,
         session_key: sessionKeyAddress,
         spend_limit_wei: spendLimitWei.toString(),
@@ -284,7 +284,7 @@ export async function agentWalletRevokeKeyHandler(req: Request, res: Response) {
     // Update Supabase
     try {
       const sb = getSupabase();
-      await sb.from("session_keys")
+      await (sb.from("session_keys") as any)
         .update({ revoked: true, revoked_at: new Date().toISOString() })
         .eq("wallet_address", walletAddress)
         .eq("session_key", sessionKeyAddress);
