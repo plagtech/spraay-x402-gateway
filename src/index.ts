@@ -6,10 +6,11 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { facilitator as coinbaseFacilitator } from "@coinbase/x402";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
-
+import { xrpBatchHandler, xrpEstimateHandler, xrpInfoHandler } from "./routes/xrp-batch.js";
 import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
 import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
 import { stellarBatchHandler, stellarEstimateHandler } from "./routes/stellar-batch.js";
+
 import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
 import { swapExecuteHandler } from "./routes/swap-execute.js";
 import { oraclePricesHandler, oracleGasHandler, oracleFxHandler } from "./routes/oracle.js";
@@ -100,6 +101,14 @@ app.use(
       "POST /api/v1/stellar/estimate": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Estimate Stellar batch cost.", mimeType: "application/json",
+      },
+      "POST /api/v1/xrp/batch": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Batch XRP payments on XRP Ledger.", mimeType: "application/json",
+      },
+      "POST /api/v1/xrp/estimate": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Estimate XRP batch cost.", mimeType: "application/json",
       },
       "GET /api/v1/swap/quote": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -840,6 +849,10 @@ app.post("/api/v1/batch/estimate", batchEstimateHandler);
 // Stellar (Chain #14)
 app.post("/api/v1/stellar/batch", stellarBatchHandler);
 app.post("/api/v1/stellar/estimate", stellarEstimateHandler);
+// XRP Ledger (Chain #15)
+app.post("/api/v1/xrp/batch", xrpBatchHandler);
+app.post("/api/v1/xrp/estimate", xrpEstimateHandler);
+app.get("/api/v1/xrp/info", xrpInfoHandler);
 // DeFi
 app.get("/api/v1/swap/quote", swapQuoteHandler);
 app.get("/api/v1/swap/tokens", swapTokensHandler);
