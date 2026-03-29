@@ -24,6 +24,7 @@
   "dependencies": {
     "@blockrun/llm": "^1.0.0",
     "@coinbase/x402": "^2.1.0",
+    "@stellar/stellar-sdk": "^14.6.1",
     "@supabase/supabase-js": "^2.98.0",
     "@x402/core": "^2.4.0",
     "@x402/evm": "^2.4.0",

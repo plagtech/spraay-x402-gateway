@@ -9,6 +9,7 @@ import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/
 
 import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
 import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
+import { stellarBatchHandler, stellarEstimateHandler } from "./routes/stellar-batch.js";
 import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
 import { swapExecuteHandler } from "./routes/swap-execute.js";
 import { oraclePricesHandler, oracleGasHandler, oracleFxHandler } from "./routes/oracle.js";
@@ -91,6 +92,14 @@ app.use(
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Estimate batch gas.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { recipientCount: 5 }, inputSchema: { properties: { recipientCount: { type: "number" } }, required: ["recipientCount"] }, bodyType: "json", output: { example: { estimatedGas: "185000" }, schema: { properties: { estimatedGas: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/stellar/batch": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Batch XLM payments on Stellar.", mimeType: "application/json",
+      },
+      "POST /api/v1/stellar/estimate": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Estimate Stellar batch cost.", mimeType: "application/json",
       },
       "GET /api/v1/swap/quote": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -828,6 +837,9 @@ app.get("/api/v1/models", aiModelsHandler);
 // Payments
 app.post("/api/v1/batch/execute", batchPaymentHandler);
 app.post("/api/v1/batch/estimate", batchEstimateHandler);
+// Stellar (Chain #14)
+app.post("/api/v1/stellar/batch", stellarBatchHandler);
+app.post("/api/v1/stellar/estimate", stellarEstimateHandler);
 // DeFi
 app.get("/api/v1/swap/quote", swapQuoteHandler);
 app.get("/api/v1/swap/tokens", swapTokensHandler);
