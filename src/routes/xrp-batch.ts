@@ -226,7 +226,7 @@ export async function xrpEstimateHandler(req: Request, res: Response) {
           ledger_index: 'validated',
         });
         const balanceDrops = BigInt((accountInfo.result.account_data as any).Balance as string);
-        balance = xrpl.dropsToXrp(balanceDrops.toString());
+        balance = String(xrpl.dropsToXrp(balanceDrops.toString()));
         const reserveDrops = BigInt(1_000_000);
         sufficient = balanceDrops >= (totalPaymentDrops + spraayFeeDrops + totalNetworkFeesDrops + reserveDrops);
         await client.disconnect();
