@@ -358,7 +358,7 @@ export async function sctpInvoiceVerifyHandler(req: Request, res: Response) {
     }
 
     // ── SLOW PATH: fuzzy mismatch → ask AI ────────────
-    let verification;
+    let verification: any;
 
     try {
       const prompt = buildVerificationPrompt(invoice, po);
