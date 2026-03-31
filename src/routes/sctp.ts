@@ -44,10 +44,10 @@ const USDC_ADDRESSES: Record<string, string> = {
 
 // ─── Lazy Supabase init ──────────────────────────────
 
-let _supabase: ReturnType<typeof createClient> | null = null;
+let _supabase: any = null;
 function db() {
   if (!_supabase) _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  return _supabase;
+  return _supabase as any;
 }
 
 // ─── 1. POST /api/v1/sctp/supplier ───────────────────
