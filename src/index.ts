@@ -50,6 +50,8 @@ import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
 import { resolveHandler } from "./routes/resolve.js";
 import { healthHandler, statsHandler } from "./routes/health.js";
+// NEW: Supply Chain Task Protocol (Category 18)
+import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
 
 dotenv.config();
 const app = express();
@@ -608,14 +610,23 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.005", category: "data" },
       { resource: `${BASE_URL}/api/v1/resolve`, method: "GET", price: "$0.002", category: "identity" },
       { resource: `${BASE_URL}/api/v1/tokens`, method: "GET", price: "free", category: "discovery" },
+      // Supply Chain / SCTP (Category 18)
+      { resource: `${BASE_URL}/api/v1/sctp/supplier`, method: "POST", price: "$0.02", category: "supply-chain", sctp: { version: "0.1" } },
+      { resource: `${BASE_URL}/api/v1/sctp/supplier/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
+      { resource: `${BASE_URL}/api/v1/sctp/po`, method: "POST", price: "$0.02", category: "supply-chain", sctp: { version: "0.1" } },
+      { resource: `${BASE_URL}/api/v1/sctp/po/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
+      { resource: `${BASE_URL}/api/v1/sctp/invoice`, method: "POST", price: "$0.02", category: "supply-chain", sctp: { version: "0.1" } },
+      { resource: `${BASE_URL}/api/v1/sctp/invoice/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
+      { resource: `${BASE_URL}/api/v1/sctp/invoice/verify`, method: "POST", price: "$0.03", category: "supply-chain", sctp: { version: "0.1", description: "AI-powered invoice verification" } },
+      { resource: `${BASE_URL}/api/v1/sctp/pay`, method: "POST", price: "$0.10", category: "supply-chain", sctp: { version: "0.1", description: "Execute supplier payment via Spraay batch contracts" } },
     ],
     updatedAt: new Date().toISOString(),
   });
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 68 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax & agent wallets. Agents pay USDC per request via x402.",
-    version: "3.5.0",
+    description: "Full-stack DeFi infrastructure for AI agents on Base. 76 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay USDC per request via x402.",
+    version: "3.6.0",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
     repository: "https://github.com/plagtech/spraay-x402-mcp",
@@ -707,6 +718,15 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_prices", description: "Token prices", price: "$0.005" },
       { name: "spraay_balances", description: "Token balances", price: "$0.005" },
       { name: "spraay_resolve", description: "ENS resolution", price: "$0.002" },
+      // Supply Chain Task Protocol (Category 18)
+      { name: "spraay_sctp_supplier_create", description: "Register supplier with wallet + payment prefs", price: "$0.02" },
+      { name: "spraay_sctp_supplier_get", description: "Get supplier details", price: "$0.005" },
+      { name: "spraay_sctp_po_create", description: "Create purchase order", price: "$0.02" },
+      { name: "spraay_sctp_po_get", description: "Get purchase order", price: "$0.005" },
+      { name: "spraay_sctp_invoice_submit", description: "Submit invoice for verification", price: "$0.02" },
+      { name: "spraay_sctp_invoice_get", description: "Get invoice + verification result", price: "$0.005" },
+      { name: "spraay_sctp_invoice_verify", description: "AI-powered invoice verification against PO", price: "$0.03" },
+      { name: "spraay_sctp_pay", description: "Execute supplier payment (single or batch)", price: "$0.10" },
     ],
   });
 });
@@ -714,8 +734,8 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "3.5.0",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG & Agent Wallets. x402 + USDC.",
+    name: "Spraay x402 Gateway", version: "3.6.0",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG, Agent Wallets & Supply Chain (SCTP). x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
@@ -815,11 +835,20 @@ app.get("/", (_req, res) => {
         "GET /api/v1/prices": "$0.005 - Token prices",
         "GET /api/v1/balances": "$0.005 - Balances",
         "GET /api/v1/resolve": "$0.002 - ENS resolution",
+        // Supply Chain / SCTP (Category 18)
+        "POST /api/v1/sctp/supplier": "$0.02 - Register supplier",
+        "GET /api/v1/sctp/supplier/:id": "$0.005 - Get supplier",
+        "POST /api/v1/sctp/po": "$0.02 - Create purchase order",
+        "GET /api/v1/sctp/po/:id": "$0.005 - Get purchase order",
+        "POST /api/v1/sctp/invoice": "$0.02 - Submit invoice",
+        "GET /api/v1/sctp/invoice/:id": "$0.005 - Get invoice",
+        "POST /api/v1/sctp/invoice/verify": "$0.03 - Verify invoice (AI)",
+        "POST /api/v1/sctp/pay": "$0.10 - Execute supplier payment",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 76,
+    totalEndpoints: 84,
   });
 });
 
@@ -952,14 +981,24 @@ app.get("/api/v1/agent-wallet/predict", agentWalletPredictHandler);
 app.get("/api/v1/prices", pricesHandler);
 app.get("/api/v1/balances", balancesHandler);
 app.get("/api/v1/resolve", resolveHandler);
+// Supply Chain / SCTP (Category 18)
+app.post("/api/v1/sctp/supplier", sctpSupplierCreateHandler);
+app.get("/api/v1/sctp/supplier/:id", sctpSupplierGetHandler);
+app.post("/api/v1/sctp/po", sctpPoCreateHandler);
+app.get("/api/v1/sctp/po/:id", sctpPoGetHandler);
+app.post("/api/v1/sctp/invoice", sctpInvoiceSubmitHandler);
+app.get("/api/v1/sctp/invoice/:id", sctpInvoiceGetHandler);
+app.post("/api/v1/sctp/invoice/verify", sctpInvoiceVerifyHandler);
+app.post("/api/v1/sctp/pay", sctpPayExecuteHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v3.5.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v3.6.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🤖 RTP Robot Task Protocol endpoints active`);
   console.log(`👛 Agent Wallet provisioning active (Category 17)`);
-  console.log(`\n🌐 76 paid + 11 free endpoints ready\n`);
+  console.log(`📦 SCTP Supply Chain endpoints active (Category 18)`);
+  console.log(`\n🌐 84 paid + 11 free endpoints ready\n`);
 });
 
 export default app;
