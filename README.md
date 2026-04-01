@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./1600x900-spraay.png" width="500" />
+</p>
+
 # Spraay x402 Gateway
 
 [![Live](https://img.shields.io/badge/status-live-brightgreen)](https://gateway.spraay.app)
