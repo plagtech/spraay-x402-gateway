@@ -52,6 +52,8 @@ import { resolveHandler } from "./routes/resolve.js";
 import { healthHandler, statsHandler } from "./routes/health.js";
 // NEW: Supply Chain Task Protocol (Category 18)
 import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
+// NEW: Bittensor Drop-in API (Category 19)
+import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
 
 dotenv.config();
 const app = express();
@@ -507,6 +509,28 @@ app.use(
         description: "Predict agent wallet address before deployment.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { ownerAddress: "0x...", agentId: "bot-001" }, inputSchema: { properties: { ownerAddress: { type: "string" }, agentId: { type: "string" } }, required: ["ownerAddress", "agentId"] }, output: { example: { predictedAddress: "0x..." }, schema: { properties: { predictedAddress: { type: "string" } } } } }) },
       },
+
+      // ---- CATEGORY 19: BITTENSOR DROP-IN API (OpenAI-compatible) ----
+      "GET /bittensor/v1/models": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "List all AI models on Bittensor. OpenAI /v1/models compatible. Drop-in: just change base_url to gateway.spraay.app/bittensor/v1", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ output: { example: { object: "list", data: [{ id: "deepseek-ai/DeepSeek-R1-0528", object: "model" }] }, schema: { properties: { object: { type: "string" }, data: { type: "array" } } } } }) },
+      },
+      "POST /bittensor/v1/chat/completions": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Chat completions via Bittensor decentralized AI. Fully OpenAI-compatible. 43+ models (DeepSeek, Qwen, Llama, Mistral). Streaming, function calling, TEE-verified. Drop-in: just change base_url.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { model: "deepseek-ai/DeepSeek-V3-0324", messages: [{ role: "user", content: "What is decentralized AI?" }], max_tokens: 256 }, inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" }, max_tokens: { type: "number" }, temperature: { type: "number" }, stream: { type: "boolean" }, tools: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { id: "chatcmpl-abc", choices: [{ message: { role: "assistant", content: "..." } }], usage: { total_tokens: 57 } }, schema: { properties: { choices: { type: "array" }, usage: { type: "object" } } } } }) },
+      },
+      "POST /bittensor/v1/images/generations": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Image generation via Bittensor Subnet 19 (Nineteen AI). OpenAI /v1/images/generations compatible.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { prompt: "A cyberpunk city powered by decentralized AI" }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, n: { type: "number" }, size: { type: "string" } }, required: ["prompt"] }, bodyType: "json", output: { example: { data: [{ url: "https://..." }] }, schema: { properties: { data: { type: "array" } } } } }) },
+      },
+      "POST /bittensor/v1/embeddings": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Text embeddings via Bittensor. OpenAI /v1/embeddings compatible. Use for RAG, semantic search, similarity.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { model: "BAAI/bge-large-en-v1.5", input: "Decentralized AI" }, inputSchema: { properties: { model: { type: "string" }, input: { type: "string" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { object: "list", data: [{ embedding: [0.0023] }] }, schema: { properties: { data: { type: "array" } } } } }) },
+      },
     },
     server
   )
@@ -619,6 +643,11 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/sctp/invoice/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
       { resource: `${BASE_URL}/api/v1/sctp/invoice/verify`, method: "POST", price: "$0.03", category: "supply-chain", sctp: { version: "0.1", description: "AI-powered invoice verification" } },
       { resource: `${BASE_URL}/api/v1/sctp/pay`, method: "POST", price: "$0.10", category: "supply-chain", sctp: { version: "0.1", description: "Execute supplier payment via Spraay batch contracts" } },
+      // Bittensor Drop-in API (Category 19)
+      { resource: `${BASE_URL}/bittensor/v1/models`, method: "GET", price: "$0.001", category: "bittensor", bittensor: { openaiCompat: true, description: "List decentralized AI models" } },
+      { resource: `${BASE_URL}/bittensor/v1/chat/completions`, method: "POST", price: "$0.03", category: "bittensor", bittensor: { openaiCompat: true, description: "Chat completions via Bittensor SN64" } },
+      { resource: `${BASE_URL}/bittensor/v1/images/generations`, method: "POST", price: "$0.05", category: "bittensor", bittensor: { openaiCompat: true, description: "Image generation via Bittensor SN19" } },
+      { resource: `${BASE_URL}/bittensor/v1/embeddings`, method: "POST", price: "$0.005", category: "bittensor", bittensor: { openaiCompat: true, description: "Text embeddings via Bittensor" } },
     ],
     updatedAt: new Date().toISOString(),
   });
@@ -739,7 +768,7 @@ app.get("/", (_req, res) => {
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
-      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models", "POST /api/v1/robots/register": "Register Robot (RTP)", "POST /api/v1/robots/complete": "Report Task Complete (RTP)", "PATCH /api/v1/robots/update": "Update Robot (RTP)", "POST /api/v1/robots/deregister": "Remove Robot (RTP)" },
+      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models", "POST /api/v1/robots/register": "Register Robot (RTP)", "POST /api/v1/robots/complete": "Report Task Complete (RTP)", "PATCH /api/v1/robots/update": "Update Robot (RTP)", "POST /api/v1/robots/deregister": "Remove Robot (RTP)", "GET /bittensor/v1/health": "Bittensor health" },
       paid: {
         // AI
         "POST /api/v1/chat/completions": "$0.04 - AI chat",
@@ -844,11 +873,16 @@ app.get("/", (_req, res) => {
         "GET /api/v1/sctp/invoice/:id": "$0.005 - Get invoice",
         "POST /api/v1/sctp/invoice/verify": "$0.03 - Verify invoice (AI)",
         "POST /api/v1/sctp/pay": "$0.10 - Execute supplier payment",
+        // Bittensor Drop-in API (Category 19)
+        "GET /bittensor/v1/models": "$0.001 - Bittensor models",
+        "POST /bittensor/v1/chat/completions": "$0.03 - Bittensor inference",
+        "POST /bittensor/v1/images/generations": "$0.05 - Bittensor image gen",
+        "POST /bittensor/v1/embeddings": "$0.005 - Bittensor embeddings",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 84,
+    totalEndpoints: 88,
   });
 });
 
@@ -990,15 +1024,22 @@ app.post("/api/v1/sctp/invoice", sctpInvoiceSubmitHandler);
 app.get("/api/v1/sctp/invoice/:id", sctpInvoiceGetHandler);
 app.post("/api/v1/sctp/invoice/verify", sctpInvoiceVerifyHandler);
 app.post("/api/v1/sctp/pay", sctpPayExecuteHandler);
+// Bittensor Drop-in API (Category 19) — OpenAI-compatible
+app.get("/bittensor/v1/models", dropinModelsHandler);
+app.post("/bittensor/v1/chat/completions", dropinChatHandler);
+app.post("/bittensor/v1/images/generations", dropinImageHandler);
+app.post("/bittensor/v1/embeddings", dropinEmbeddingsHandler);
+app.get("/bittensor/v1/health", dropinHealthHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🥭 Spraay x402 Gateway v3.6.0 running on port ${PORT}`);
+  console.log(`\n🥭 Spraay x402 Gateway v3.7.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🤖 RTP Robot Task Protocol endpoints active`);
   console.log(`👛 Agent Wallet provisioning active (Category 17)`);
   console.log(`📦 SCTP Supply Chain endpoints active (Category 18)`);
-  console.log(`\n🌐 84 paid + 11 free endpoints ready\n`);
+  console.log(`τ  Bittensor Drop-in API active (Category 19) — SN64 Chutes AI`);
+  console.log(`\n🌐 88 paid + 12 free endpoints ready\n`);
 });
 
 export default app;
