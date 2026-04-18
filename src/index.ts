@@ -54,6 +54,7 @@ import { healthHandler, statsHandler } from "./routes/health.js";
 import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
 // NEW: Bittensor Drop-in API (Category 19)
 import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
+import { enrich402Middleware } from "./middleware/enrich402.js";
 
 dotenv.config();
 const app = express();
@@ -74,7 +75,7 @@ const facilitatorClient = IS_MAINNET
 
 const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK, new ExactEvmScheme());
 server.registerExtension(bazaarResourceServerExtension);
-
+app.use(enrich402Middleware);
 app.use(
   paymentMiddleware(
     {
