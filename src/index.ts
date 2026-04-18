@@ -532,6 +532,47 @@ app.use(
         description: "Text embeddings via Bittensor. OpenAI /v1/embeddings compatible. Use for RAG, semantic search, similarity.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { model: "BAAI/bge-large-en-v1.5", input: "Decentralized AI" }, inputSchema: { properties: { model: { type: "string" }, input: { type: "string" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { object: "list", data: [{ embedding: [0.0023] }] }, schema: { properties: { data: { type: "array" } } } } }) },
       },
+      // ---- CATEGORY 18: SCTP (Supply Chain Task Protocol) ----
+      "POST /api/v1/sctp/supplier": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Register a supplier in the SCTP directory.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { name: "Acme Corp", wallet: "0x...", paymentPrefs: { token: "USDC" } }, inputSchema: { properties: { name: { type: "string" }, wallet: { type: "string" }, paymentPrefs: { type: "object" } }, required: ["name", "wallet"] }, bodyType: "json", output: { example: { status: "created", supplier: { id: "SUP-A1B2" } }, schema: { properties: { status: { type: "string" }, supplier: { type: "object" } } } } }) },
+      },
+      "GET /api/v1/sctp/supplier/:id": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get supplier details by ID.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "SUP-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { supplier: { id: "SUP-A1B2", name: "Acme Corp" } }, schema: { properties: { supplier: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/sctp/po": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Create a purchase order with line items and supplier.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { supplierId: "SUP-A1B2", lineItems: [{ sku: "ABC", qty: 10, price: "100" }], currency: "USDC" }, inputSchema: { properties: { supplierId: { type: "string" }, lineItems: { type: "array" }, currency: { type: "string" } }, required: ["supplierId", "lineItems"] }, bodyType: "json", output: { example: { status: "created", po: { id: "PO-A1B2" } }, schema: { properties: { status: { type: "string" }, po: { type: "object" } } } } }) },
+      },
+      "GET /api/v1/sctp/po/:id": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get purchase order details.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "PO-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { po: { id: "PO-A1B2", status: "open" } }, schema: { properties: { po: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/sctp/invoice": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Submit an invoice linked to a purchase order.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { poId: "PO-A1B2", supplierId: "SUP-A1B2", amount: "1000", currency: "USDC" }, inputSchema: { properties: { poId: { type: "string" }, supplierId: { type: "string" }, amount: { type: "string" }, currency: { type: "string" } }, required: ["poId", "supplierId", "amount"] }, bodyType: "json", output: { example: { status: "submitted", invoice: { id: "INV-A1B2" } }, schema: { properties: { status: { type: "string" }, invoice: { type: "object" } } } } }) },
+      },
+      "GET /api/v1/sctp/invoice/:id": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Get invoice details.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { id: "INV-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { invoice: { id: "INV-A1B2", status: "submitted" } }, schema: { properties: { invoice: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/sctp/invoice/verify": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "AI-verify an invoice against its purchase order. Returns match score and flags.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { invoiceId: "INV-A1B2" }, inputSchema: { properties: { invoiceId: { type: "string" } }, required: ["invoiceId"] }, bodyType: "json", output: { example: { verification: { matchScore: 0.98, flags: [], status: "verified" } }, schema: { properties: { verification: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/sctp/pay": {
+        accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Execute supplier payment for a verified invoice via batch settlement.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { invoiceId: "INV-A1B2", batch: false }, inputSchema: { properties: { invoiceId: { type: "string" }, batch: { type: "boolean" } }, required: ["invoiceId"] }, bodyType: "json", output: { example: { status: "paid", txHash: "0x...", amount: "1000" }, schema: { properties: { status: { type: "string" }, txHash: { type: "string" } } } } }) },
+      },
     },
     server
   )
