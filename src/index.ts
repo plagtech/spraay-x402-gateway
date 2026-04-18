@@ -651,11 +651,13 @@ app.get("/.well-known/x402.json", (_req, res) => {
     ],
     updatedAt: new Date().toISOString(),
   });
+});
+
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
     description: "Full-stack DeFi infrastructure for AI agents on Base. 76 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay USDC per request via x402.",
-    version: "3.6.0",
+    version: "3.7.0",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
     repository: "https://github.com/plagtech/spraay-x402-mcp",
@@ -759,11 +761,10 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
     ],
   });
 });
-});
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "3.6.0",
+    name: "Spraay x402 Gateway", version: "3.7.0",
     description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG, Agent Wallets & Supply Chain (SCTP). x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
@@ -902,6 +903,309 @@ app.get("/api/v1/tokens", (_req, res) => {
 app.get("/health", healthHandler);
 app.get("/stats", statsHandler);
 
+// ============================================
+// DISCOVERY ROUTES — kill the 404 bleed
+// ============================================
+// Path aliases for discovery endpoints agents probe but that would otherwise 404.
+// Redirect to the full .json versions above where possible; inline new formats.
+
+// x402 manifest — redirect bare paths to the existing .json version
+app.get("/.well-known/x402", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
+app.get("/.well-known/x402-resources", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
+app.get("/x402-resources", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
+
+// MCP discovery — redirect bare paths to the existing server-card.json
+app.get("/.well-known/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
+app.get("/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
+app.post("/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
+
+// A2A protocol agent card — new format, three path aliases
+const agentCardResponse = (_req: express.Request, res: express.Response) => {
+  res.json({
+    schemaVersion: "0.2.0",
+    name: "Spraay x402 Gateway",
+    description: "Multi-chain batch payment protocol + x402 gateway with 88+ paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
+    url: BASE_URL,
+    provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
+    version: "3.7.0",
+    documentationUrl: "https://docs.spraay.app",
+    capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
+    authentication: {
+      schemes: ["x402"],
+      credentials: { protocol: "x402", network: CAIP2_NETWORK, acceptedAssets: ["USDC"], payTo: PAY_TO },
+    },
+    defaultInputModes: ["application/json"],
+    defaultOutputModes: ["application/json"],
+    skills: [
+      { id: "chat_completions", name: "POST /api/v1/chat/completions", description: "OpenAI-compatible chat via 200+ models", tags: ["ai"], examples: [`POST ${BASE_URL}/api/v1/chat/completions`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "bittensor_chat", name: "POST /bittensor/v1/chat/completions", description: "Bittensor SN64 inference (Chutes AI)", tags: ["ai"], examples: [`POST ${BASE_URL}/bittensor/v1/chat/completions`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "batch_execute", name: "POST /api/v1/batch/execute", description: "Batch USDC payments via Spraay on Base", tags: ["payments"], examples: [`POST ${BASE_URL}/api/v1/batch/execute`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "oracle_prices", name: "GET /api/v1/oracle/prices", description: "Multi-source oracle price feed", tags: ["oracle"], examples: [`GET ${BASE_URL}/api/v1/oracle/prices`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "swap_quote", name: "GET /api/v1/swap/quote", description: "Uniswap V3 / Aerodrome swap quote", tags: ["defi"], examples: [`GET ${BASE_URL}/api/v1/swap/quote`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "escrow_create", name: "POST /api/v1/escrow/create", description: "Create on-chain escrow contract", tags: ["escrow"], examples: [`POST ${BASE_URL}/api/v1/escrow/create`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "payroll_execute", name: "POST /api/v1/payroll/execute", description: "Crypto payroll run via StablePay + Spraay", tags: ["payroll"], examples: [`POST ${BASE_URL}/api/v1/payroll/execute`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "gpu_run", name: "POST /api/v1/gpu/run", description: "GPU workload execution", tags: ["compute"], examples: [`POST ${BASE_URL}/api/v1/gpu/run`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "search_qna", name: "POST /api/v1/search/qna", description: "Structured Q&A search for agents", tags: ["search"], examples: [`POST ${BASE_URL}/api/v1/search/qna`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "robots_task", name: "POST /api/v1/robots/task", description: "Dispatch physical robot task via RTP", tags: ["rtp"], examples: [`POST ${BASE_URL}/api/v1/robots/task`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "agent_wallet_provision", name: "POST /api/v1/agent-wallet/provision", description: "Provision agent smart wallet on Base", tags: ["agent-wallet"], examples: [`POST ${BASE_URL}/api/v1/agent-wallet/provision`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "sctp_pay", name: "POST /api/v1/sctp/pay", description: "Execute supplier payment via SCTP", tags: ["supply-chain"], examples: [`POST ${BASE_URL}/api/v1/sctp/pay`], inputModes: ["application/json"], outputModes: ["application/json"] },
+    ],
+    links: {
+      fullManifest: `${BASE_URL}/.well-known/x402.json`,
+      openapi: `${BASE_URL}/openapi.json`,
+      mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
+    },
+    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+  });
+};
+app.get("/.well-known/agent.json", agentCardResponse);
+app.get("/.well-known/agent-card.json", agentCardResponse);
+app.get("/.well-known/spraay-agent-card.json", agentCardResponse);
+
+// Agent registration metadata
+app.get("/.well-known/agent-registration.json", (_req, res) => {
+  res.json({
+    schemaVersion: "1.0",
+    agentId: "spraay-x402-gateway",
+    displayName: "Spraay",
+    description: "x402 payment gateway for AI agents — pay-per-call access to 88+ endpoints across AI, DeFi, payments, compute, search, and robotics.",
+    endpoints: {
+      base: BASE_URL,
+      agentCard: `${BASE_URL}/.well-known/agent.json`,
+      x402Manifest: `${BASE_URL}/.well-known/x402.json`,
+      openapi: `${BASE_URL}/openapi.json`,
+      mcp: "https://smithery.ai/server/@plagtech/spraay-x402-mcp",
+      repository: "https://github.com/plagtech/spraay-x402-gateway",
+    },
+    categories: ["ai", "payments", "defi", "oracle", "bridge", "payroll", "invoicing", "escrow", "compute", "search", "rtp", "agent-wallet", "supply-chain", "bittensor"],
+    network: CAIP2_NETWORK,
+    paymentAddress: PAY_TO,
+    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+  });
+});
+
+// LLM crawler standard — plain text summary
+app.get("/llms.txt", (_req, res) => {
+  const body = `# Spraay x402 Gateway
+
+Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
+
+## What this is
+Spraay provides 88+ paid API endpoints that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+
+## Payment details
+- Protocol: x402 (https://x402.org)
+- Network: Base mainnet (EVM, chainId 8453)
+- Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
+- Pay to: ${PAY_TO}
+- Facilitator: Coinbase CDP
+
+## Categories
+ai, payments, defi, oracle, bridge, payroll, invoicing, escrow, compute, search, rtp, agent-wallet, supply-chain, bittensor
+
+## Getting started
+1. Fund an agent wallet with USDC on Base
+2. Send a request to any endpoint below
+3. Receive 402 Payment Required with x402 payment terms
+4. Retry with the x402 payment header
+5. Receive 200 with your data
+
+## Example endpoints
+POST ${BASE_URL}/api/v1/chat/completions — $0.04 — OpenAI-compatible chat via 200+ models
+POST ${BASE_URL}/bittensor/v1/chat/completions — $0.03 — Bittensor SN64 inference
+POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments on Base
+GET ${BASE_URL}/api/v1/oracle/prices — $0.008 — Multi-source price feed
+GET ${BASE_URL}/api/v1/swap/quote — $0.008 — Uniswap V3 / Aerodrome quote
+POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain escrow
+POST ${BASE_URL}/api/v1/payroll/execute — $0.10 — Crypto payroll run
+POST ${BASE_URL}/api/v1/gpu/run — $0.06 — GPU workload execution
+POST ${BASE_URL}/api/v1/search/qna — $0.03 — Structured Q&A search
+POST ${BASE_URL}/api/v1/robots/task — $0.05 — Dispatch robot task (RTP)
+
+## Resources
+- Full x402 manifest: ${BASE_URL}/.well-known/x402.json
+- Agent card (A2A): ${BASE_URL}/.well-known/agent.json
+- OpenAPI 3.1 spec: ${BASE_URL}/openapi.json
+- MCP server card: ${BASE_URL}/.well-known/mcp/server-card.json
+- Docs: https://docs.spraay.app
+- GitHub: https://github.com/plagtech/spraay-x402-gateway
+- MCP on Smithery: https://smithery.ai/server/@plagtech/spraay-x402-mcp
+
+## Contact
+Twitter: @Spraay_app
+Email: hello@spraay.app
+`;
+  res.type("text/plain; charset=utf-8").send(body);
+});
+
+// OpenAPI 3.1 spec
+app.get("/openapi.json", (_req, res) => {
+  const endpoints = [
+    { method: "post", path: "/api/v1/chat/completions", price: "$0.04", tag: "ai", desc: "OpenAI-compatible chat via 200+ models" },
+    { method: "post", path: "/bittensor/v1/chat/completions", price: "$0.03", tag: "ai", desc: "Bittensor SN64 inference" },
+    { method: "post", path: "/api/v1/batch/execute", price: "$0.02", tag: "payments", desc: "Batch USDC payments on Base" },
+    { method: "get", path: "/api/v1/oracle/prices", price: "$0.008", tag: "oracle", desc: "Multi-source price feed" },
+    { method: "get", path: "/api/v1/swap/quote", price: "$0.008", tag: "defi", desc: "Uniswap V3 / Aerodrome quote" },
+    { method: "post", path: "/api/v1/escrow/create", price: "$0.10", tag: "escrow", desc: "Create on-chain escrow" },
+    { method: "post", path: "/api/v1/invoice/create", price: "$0.05", tag: "invoicing", desc: "Generate x402 invoice" },
+    { method: "post", path: "/api/v1/payroll/execute", price: "$0.10", tag: "payroll", desc: "Crypto payroll run" },
+    { method: "post", path: "/api/v1/gpu/run", price: "$0.06", tag: "compute", desc: "GPU workload execution" },
+    { method: "post", path: "/api/v1/search/qna", price: "$0.03", tag: "search", desc: "Structured Q&A search" },
+    { method: "post", path: "/api/v1/robots/task", price: "$0.05", tag: "rtp", desc: "Dispatch robot task via RTP" },
+    { method: "post", path: "/api/v1/kyc/verify", price: "$0.08", tag: "identity", desc: "Lightweight KYC" },
+    { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", tag: "agent-wallet", desc: "Provision agent wallet" },
+    { method: "post", path: "/api/v1/sctp/pay", price: "$0.10", tag: "supply-chain", desc: "Execute supplier payment" },
+  ];
+  const paths: Record<string, any> = {};
+  for (const e of endpoints) {
+    if (!paths[e.path]) paths[e.path] = {};
+    const op: any = {
+      summary: e.desc,
+      tags: [e.tag],
+      description: `Paid endpoint — ${e.price} per call via x402. See ${BASE_URL}/.well-known/x402.json for full payment details.`,
+      responses: {
+        "200": { description: "Success", content: { "application/json": { schema: { type: "object" } } } },
+        "402": { description: "Payment Required — retry with x402 payment header", content: { "application/json": { schema: { type: "object", properties: { accepts: { type: "array" }, x402Version: { type: "number" } } } } } },
+      },
+    };
+    if (e.method === "post") {
+      op.requestBody = { required: true, content: { "application/json": { schema: { type: "object" } } } };
+    }
+    paths[e.path][e.method] = op;
+  }
+  res.json({
+    openapi: "3.1.0",
+    info: {
+      title: "Spraay x402 Gateway",
+      version: "3.7.0",
+      description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 on Base.",
+      contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
+      license: { name: "MIT" },
+    },
+    servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
+    paths,
+    components: {
+      securitySchemes: {
+        x402: { type: "http", scheme: "x402", description: `Pay per-call with USDC on Base to ${PAY_TO}` },
+      },
+    },
+    security: [{ x402: [] }],
+    externalDocs: { description: "Full docs", url: "https://docs.spraay.app" },
+  });
+});
+
+// robots.txt — explicit allow for AI crawlers
+app.get("/robots.txt", (_req, res) => {
+  const body = `# Spraay x402 Gateway — robots.txt
+# AI crawlers and agent frameworks explicitly welcome.
+
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+Sitemap: ${BASE_URL}/openapi.json
+`;
+  res.type("text/plain; charset=utf-8").send(body);
+});
+
+// ============================================
+// PHANTOM ENDPOINT FIXES
+// ============================================
+// Bare paths agents probe that map to real (or coming-soon) endpoints.
+
+// /api/v1/ai/chat → redirect to /api/v1/chat/completions
+app.post("/api/v1/ai/chat", (_req, res) => res.redirect(308, "/api/v1/chat/completions"));
+
+// /api/v1/analytics (bare) → public overview pointing to paid /wallet and /txhistory
+app.get("/api/v1/analytics", (_req, res) => {
+  res.json({
+    gateway: "spraay-x402",
+    version: "3.7.0",
+    network: CAIP2_NETWORK,
+    status: "operational",
+    paidEndpoints: {
+      "GET /api/v1/analytics/wallet": "$0.01 - Wallet profile and activity",
+      "GET /api/v1/analytics/txhistory": "$0.008 - Transaction history with classification",
+    },
+    links: {
+      fullManifest: `${BASE_URL}/.well-known/x402.json`,
+      openapi: `${BASE_URL}/openapi.json`,
+    },
+    note: "This is a public overview. For per-wallet analytics, use the paid endpoints above.",
+    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// /api/v1/notify/send → point agents at /notify/email (and /notify/sms)
+app.post("/api/v1/notify/send", (_req, res) => {
+  res.status(308)
+    .location("/api/v1/notify/email")
+    .json({
+      error: "endpoint_moved",
+      message: "Use /api/v1/notify/email for email or /api/v1/notify/sms for SMS.",
+      alternatives: [
+        { method: "POST", path: "/api/v1/notify/email", price: "$0.01", description: "Send transactional email" },
+        { method: "POST", path: "/api/v1/notify/sms", price: "$0.02", description: "Send SMS" },
+      ],
+      _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    });
+});
+
+// /api/v1/rpc (bare) → point agents at /rpc/call
+app.post("/api/v1/rpc", (_req, res) => {
+  res.status(308)
+    .location("/api/v1/rpc/call")
+    .json({
+      error: "endpoint_moved",
+      message: "Use /api/v1/rpc/call for JSON-RPC calls, or /api/v1/rpc/chains to list supported chains.",
+      alternatives: [
+        { method: "POST", path: "/api/v1/rpc/call", price: "$0.001", description: "JSON-RPC call to any supported chain" },
+        { method: "GET", path: "/api/v1/rpc/chains", price: "$0.001", description: "List supported RPC chains" },
+      ],
+      _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    });
+});
+
+// /api/v1/bridge/transfer → 503 coming-soon (execution not live, /bridge/quote is)
+app.post("/api/v1/bridge/transfer", (_req, res) => {
+  res.status(503).json({
+    error: "endpoint_coming_soon",
+    endpoint: "/api/v1/bridge/transfer",
+    message: "Bridge transfer execution coming soon. Use /api/v1/bridge/quote for quotes.",
+    alternatives: [
+      { method: "GET", path: "/api/v1/bridge/quote", price: "$0.05", description: "Get bridge quote across 10+ chains" },
+      { method: "GET", path: "/api/v1/bridge/chains", price: "$0.002", description: "List supported bridge chains" },
+    ],
+    manifest: `${BASE_URL}/.well-known/x402.json`,
+    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // PAID ROUTE HANDLERS
 // AI
 app.post("/api/v1/chat/completions", aiChatHandler);
@@ -1039,7 +1343,8 @@ app.listen(PORT, () => {
   console.log(`👛 Agent Wallet provisioning active (Category 17)`);
   console.log(`📦 SCTP Supply Chain endpoints active (Category 18)`);
   console.log(`τ  Bittensor Drop-in API active (Category 19) — SN64 Chutes AI`);
-  console.log(`\n🌐 88 paid + 12 free endpoints ready\n`);
+  console.log(`🔍 Discovery endpoints active — .well-known suite, OpenAPI, llms.txt, agent cards`);
+  console.log(`\n🌐 88 paid + 30+ free/discovery endpoints ready\n`);
 });
 
 export default app;
