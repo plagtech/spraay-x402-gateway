@@ -55,11 +55,13 @@ import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler,
 // NEW: Bittensor Drop-in API (Category 19)
 import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
+import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
 
 dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(gatewayEventsMiddleware);
 
 const PAY_TO = process.env.PAY_TO_ADDRESS!;
 const NETWORK = process.env.X402_NETWORK || "eip155:84532";

@@ -19,7 +19,7 @@ const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 // ============================================
 
 async function insert<T extends Record<string, any>>(table: string, row: T): Promise<T> {
-  const { data, error } = await supabase.from(table).insert(row).select().single();
+  const { data, error } = await (supabase.from(table) as any).insert(row).select().single();
   if (error) throw new Error(`DB insert ${table}: ${error.message}`);
   return data as T;
 }
@@ -32,7 +32,7 @@ async function getById<T>(table: string, id: string): Promise<T | null> {
 }
 
 async function update<T extends Record<string, any>>(table: string, id: string, updates: Partial<T>): Promise<T> {
-  const { data, error } = await supabase.from(table).update(updates).eq("id", id).select().single();
+  const { data, error } = await (supabase.from(table) as any).update(updates).eq("id", id).select().single();
   if (error) throw new Error(`DB update ${table}: ${error.message}`);
   return data as T;
 }
