@@ -71,7 +71,10 @@ function inferScanner(userAgent: string | undefined): string | null {
   const ua = userAgent.toLowerCase();
   if (ua.includes("bazaar")) return "bazaar";
   if (ua.includes("x402scan")) return "x402scan";
+  if (ua.includes("x402-healthbot")) return "decixa";
+  if (ua.includes("x402-network-mapper") || ua.includes("smartflowproai")) return "smartflowproai";
   if (ua.includes("coinbase")) return "coinbase";
+  if (ua === "node" || ua.startsWith("node/") || ua.startsWith("node ")) return "node_default";
   if (ua.includes("bot") || ua.includes("crawler") || ua.includes("spider")) return "generic_crawler";
   return null;
 }
@@ -118,6 +121,21 @@ function extractPayerAddress(req: Request): string | null {
   return null;
 }
 
+function extractSourceIp(req: Request): string | null {
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd.length > 0) {
+    return fwd.split(",")[0].trim();
+  }
+  if (Array.isArray(fwd) && fwd.length > 0) {
+    return fwd[0].split(",")[0].trim();
+  }
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.length > 0) {
+    return realIp;
+  }
+  return req.ip || null;
+}
+
 export function gatewayEventsMiddleware(req: Request, res: Response, next: NextFunction) {
   if (!supabase) {
     next();
@@ -126,6 +144,7 @@ export function gatewayEventsMiddleware(req: Request, res: Response, next: NextF
 
   const client = supabase;
   const startTime = Date.now();
+  const paymentAttempted = Boolean(req.headers["x-payment"]);
 
   res.on("finish", () => {
     try {
@@ -146,7 +165,9 @@ export function gatewayEventsMiddleware(req: Request, res: Response, next: NextF
         tx_hash: ((res.locals as Record<string, unknown>)?.txHash as string | null) ?? null,
         scanner_source: inferScanner(typeof userAgent === "string" ? userAgent : undefined),
         user_agent: typeof userAgent === "string" ? userAgent.slice(0, 200) : null,
-        duration_ms: Date.now() - startTime
+        duration_ms: Date.now() - startTime,
+        source_ip: extractSourceIp(req),
+        payment_attempted: paymentAttempted,
       };
 
       client
