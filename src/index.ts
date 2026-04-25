@@ -48,6 +48,12 @@ import { robotRegisterHandler, robotTaskHandler, robotCompleteHandler, robotList
 // Existing
 import { pricesHandler } from "./routes/prices.js";
 import { balancesHandler } from "./routes/balances.js";
+// NEW: Portfolio (Category 20)
+import { portfolioTokensHandler, portfolioNftsHandler } from "./routes/portfolio.js";
+// NEW: Contract (Category 21)
+import { contractReadHandler, contractWriteHandler } from "./routes/contract.js";
+// NEW: DeFi Positions (extends DeFi category)
+import { defiPositionsHandler } from "./routes/defi.js";
 import { resolveHandler } from "./routes/resolve.js";
 import { healthHandler, statsHandler } from "./routes/health.js";
 // NEW: Supply Chain Task Protocol (Category 18)
@@ -574,6 +580,31 @@ app.use(
         accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }],
         description: "Execute supplier payment for a verified invoice via batch settlement.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { invoiceId: "INV-A1B2", batch: false }, inputSchema: { properties: { invoiceId: { type: "string" }, batch: { type: "boolean" } }, required: ["invoiceId"] }, bodyType: "json", output: { example: { status: "paid", txHash: "0x...", amount: "1000" }, schema: { properties: { status: { type: "string" }, txHash: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/portfolio/tokens": {
+        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Multi-chain token portfolio (native + ERC-20) with USD values.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", networks: "base-mainnet,eth-mainnet" }, inputSchema: { properties: { address: { type: "string" }, networks: { type: "string" }, includeNative: { type: "boolean" }, includeErc20: { type: "boolean" }, includePrices: { type: "boolean" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", token_count: 42, total_usd_value: 12345.67, tokens: [] }, schema: { properties: { address: { type: "string" }, token_count: { type: "number" }, total_usd_value: { type: "number" }, tokens: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/portfolio/nfts": {
+        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Multi-chain NFT holdings with metadata.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", networks: "base-mainnet" }, inputSchema: { properties: { address: { type: "string" }, networks: { type: "string" }, withMetadata: { type: "boolean" }, pageSize: { type: "number" }, pageKey: { type: "string" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", total_count: 12, returned_count: 12, nfts: [] }, schema: { properties: { address: { type: "string" }, total_count: { type: "number" }, nfts: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/contract/read": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Call any view/pure function on any EVM contract.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", method: "balanceOf(address)", args: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"] }, inputSchema: { properties: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" }, abi: { type: "array" } }, required: ["address", "method"] }, bodyType: "json", output: { example: { chain: "base-mainnet", address: "0x833...", method: "balanceOf(address)", result: "1000000" }, schema: { properties: { chain: { type: "string" }, result: {} } } } }) },
+      },
+      "POST /api/v1/contract/write": {
+        accepts: [{ scheme: "exact", price: "$0.015", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "Encode and broadcast a transaction via an agent wallet.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", method: "transfer(address,uint256)", args: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "1000000"], walletId: "wallet_abc" }, inputSchema: { properties: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" }, abi: { type: "array" }, value: { type: "string" }, walletId: { type: "string" }, privateKey: { type: "string" } }, required: ["address", "method"] }, bodyType: "json", output: { example: { tx_hash: "0xabc...", from: "0x...", explorer: "https://basescan.org/tx/0xabc..." }, schema: { properties: { tx_hash: { type: "string" }, from: { type: "string" }, explorer: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/defi/positions": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "On-chain DeFi positions across Aave V3, Compound V3, Aerodrome on Base.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chain: "base-mainnet" }, inputSchema: { properties: { address: { type: "string" }, chain: { type: "string" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", chain: "base-mainnet", total_positions: 3, protocols_with_exposure: ["aave-v3", "aerodrome"], positions: [] }, schema: { properties: { address: { type: "string" }, total_positions: { type: "number" }, positions: { type: "array" } } } } }) },
       },
     },
     server
@@ -1372,6 +1403,14 @@ app.post("/api/v1/sctp/invoice", sctpInvoiceSubmitHandler);
 app.get("/api/v1/sctp/invoice/:id", sctpInvoiceGetHandler);
 app.post("/api/v1/sctp/invoice/verify", sctpInvoiceVerifyHandler);
 app.post("/api/v1/sctp/pay", sctpPayExecuteHandler);
+// Portfolio (Category 20)
+app.get("/api/v1/portfolio/tokens", portfolioTokensHandler);
+app.get("/api/v1/portfolio/nfts", portfolioNftsHandler);
+// Contract (Category 21)
+app.post("/api/v1/contract/read", contractReadHandler);
+app.post("/api/v1/contract/write", contractWriteHandler);
+// DeFi Positions (extends DeFi category)
+app.get("/api/v1/defi/positions", defiPositionsHandler);
 // Bittensor Drop-in API (Category 19) — OpenAI-compatible
 app.get("/bittensor/v1/models", dropinModelsHandler);
 app.post("/bittensor/v1/chat/completions", dropinChatHandler);
@@ -1388,7 +1427,8 @@ app.listen(PORT, () => {
   console.log(`📦 SCTP Supply Chain endpoints active (Category 18)`);
   console.log(`τ  Bittensor Drop-in API active (Category 19) — SN64 Chutes AI`);
   console.log(`🔍 Discovery endpoints active — .well-known suite, OpenAPI, llms.txt, agent cards`);
-  console.log(`\n🌐 88 paid + 30+ free/discovery endpoints ready\n`);
+  console.log(`💼 Portfolio + Contract + DeFi Positions endpoints active (Categories 20, 21)`);
+  console.log(`\n🌐 93 paid + 30+ free/discovery endpoints ready\n`);
 });
 
 export default app;
