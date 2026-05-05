@@ -62,6 +62,8 @@ import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler,
 import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
 import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
+import { protocolDetectorMiddleware } from "./middleware/protocolDetector.js";
+import { mppMiddleware, initMpp } from "./middleware/mppMiddleware.js";
 
 dotenv.config();
 const app = express();
@@ -84,6 +86,8 @@ const facilitatorClient = IS_MAINNET
 const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK, new ExactEvmScheme());
 server.registerExtension(bazaarResourceServerExtension);
 app.use(enrich402Middleware);
+app.use(protocolDetectorMiddleware);
+app.use(mppMiddleware);
 app.use(
   paymentMiddleware(
     {
@@ -1418,7 +1422,8 @@ app.post("/bittensor/v1/images/generations", dropinImageHandler);
 app.post("/bittensor/v1/embeddings", dropinEmbeddingsHandler);
 app.get("/bittensor/v1/health", dropinHealthHandler);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  await initMpp();
   console.log(`\n🥭 Spraay x402 Gateway v3.7.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
@@ -1428,6 +1433,7 @@ app.listen(PORT, () => {
   console.log(`τ  Bittensor Drop-in API active (Category 19) — SN64 Chutes AI`);
   console.log(`🔍 Discovery endpoints active — .well-known suite, OpenAPI, llms.txt, agent cards`);
   console.log(`💼 Portfolio + Contract + DeFi Positions endpoints active (Categories 20, 21)`);
+  console.log(`💳 MPP: ${process.env.MPP_ENABLED === "true" ? "ACTIVE" : "disabled"}`);
   console.log(`\n🌐 93 paid + 30+ free/discovery endpoints ready\n`);
 });
 
