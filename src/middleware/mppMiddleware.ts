@@ -47,29 +47,32 @@ async function getMppx() {
   try {
     // Dynamic import — won't crash the gateway if mppx isn't installed
     const { Mppx, tempo } = await import("mppx/server");
+    const { privateKeyToAccount } = await import("viem/accounts");
 
     const PATH_USD = "0x20c0000000000000000000000000000000000000";
     const recipient = (process.env.MPP_RECIPIENT || process.env.PAY_TO_ADDRESS) as `0x${string}`;
     const secretKey = process.env.MPP_SECRET_KEY;
+    const walletKey = process.env.MPP_WALLET_PRIVATE_KEY;
 
     if (!secretKey) {
       mppxInitError = "MPP_SECRET_KEY not set";
       console.warn("⚠️  MPP: MPP_SECRET_KEY not set — MPP payments disabled");
       return null;
     }
-    if (!recipient) {
-      mppxInitError = "MPP_RECIPIENT / PAY_TO_ADDRESS not set";
-      console.warn("⚠️  MPP: No recipient address — MPP payments disabled");
+    if (!walletKey) {
+      mppxInitError = "MPP_WALLET_PRIVATE_KEY not set";
+      console.warn("⚠️  MPP: MPP_WALLET_PRIVATE_KEY not set — MPP payments disabled");
       return null;
     }
+
+    const account = privateKeyToAccount(walletKey as `0x${string}`);
 
     mppxInstance = Mppx.create({
       secretKey,
       methods: [
         tempo({
           currency: PATH_USD,
-          recipient,
-          // Remove testnet: true for mainnet
+          account,
           ...(process.env.MPP_TESTNET === "true" ? { testnet: true } : {}),
         }),
       ],
