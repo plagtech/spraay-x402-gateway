@@ -735,7 +735,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 76 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay USDC per request via x402.",
+    description: "Full-stack DeFi infrastructure for AI agents on Base. 76 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).",
     version: "3.7.0",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
@@ -961,8 +961,23 @@ app.get("/", (_req, res) => {
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
-    network: CAIP2_NETWORK, payTo: PAY_TO, protocol: "x402", mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 88,
+    network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
+    totalEndpoints: 93,
+    protocols: {
+      x402: {
+        status: "active",
+        network: CAIP2_NETWORK,
+        facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
+        token: "USDC",
+      },
+      mpp: {
+        status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
+        methods: ["tempo", "stripe-spt"],
+        currency: "pathUSD",
+        network: "tempo",
+        spec: "https://mpp.dev",
+      },
+    },
   });
 });
 
@@ -993,6 +1008,36 @@ app.get("/.well-known/x402", (_req, res) => res.redirect(308, "/.well-known/x402
 app.get("/.well-known/x402-resources", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
 app.get("/x402-resources", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
 
+// MPP discovery
+app.get("/.well-known/mpp.json", (_req, res) => {
+  res.json({
+    mppVersion: "1.0",
+    name: "Spraay Gateway",
+    description: "Universal agent payment gateway — 93+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    homepage: BASE_URL,
+    status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
+    paymentMethods: {
+      tempo: {
+        currency: "0x20c0000000000000000000000000000000000000",
+        currencyName: "pathUSD",
+        recipient: PAY_TO,
+        network: "tempo",
+      },
+    },
+    endpoints: {
+      total: 93,
+      docs: `${BASE_URL}/.well-known/x402.json`,
+      openapi: `${BASE_URL}/openapi.json`,
+      mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
+    },
+    protocols: ["x402", "mpp"],
+    spec: "https://mpp.dev",
+    sdk: "npm install mppx",
+    example: `npx mppx ${BASE_URL}/api/v1/oracle/gas`,
+  });
+});
+app.get("/.well-known/mpp", (_req, res) => res.redirect(308, "/.well-known/mpp.json"));
+
 // MCP discovery — redirect bare paths to the existing server-card.json
 app.get("/.well-known/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
 app.get("/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
@@ -1002,16 +1047,19 @@ app.post("/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.
 const agentCardResponse = (_req: express.Request, res: express.Response) => {
   res.json({
     schemaVersion: "0.2.0",
-    name: "Spraay x402 Gateway",
-    description: "Multi-chain batch payment protocol + x402 gateway with 88+ paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
+    name: "Spraay Universal Agent Payment Gateway",
+    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 93+ paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
     version: "3.7.0",
     documentationUrl: "https://docs.spraay.app",
     capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
     authentication: {
-      schemes: ["x402"],
-      credentials: { protocol: "x402", network: CAIP2_NETWORK, acceptedAssets: ["USDC"], payTo: PAY_TO },
+      schemes: ["x402", "mpp"],
+      credentials: [
+        { protocol: "x402", network: CAIP2_NETWORK, acceptedAssets: ["USDC"], payTo: PAY_TO },
+        { protocol: "mpp", methods: ["tempo"], currency: "pathUSD", payTo: PAY_TO, spec: "https://mpp.dev" },
+      ],
     },
     defaultInputModes: ["application/json"],
     defaultOutputModes: ["application/json"],
@@ -1031,6 +1079,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
     ],
     links: {
       fullManifest: `${BASE_URL}/.well-known/x402.json`,
+      mppManifest: `${BASE_URL}/.well-known/mpp.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
     },
@@ -1047,11 +1096,12 @@ app.get("/.well-known/agent-registration.json", (_req, res) => {
     schemaVersion: "1.0",
     agentId: "spraay-x402-gateway",
     displayName: "Spraay",
-    description: "x402 payment gateway for AI agents — pay-per-call access to 88+ endpoints across AI, DeFi, payments, compute, search, and robotics.",
+    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 93+ endpoints across AI, DeFi, payments, compute, search, and robotics.",
     endpoints: {
       base: BASE_URL,
       agentCard: `${BASE_URL}/.well-known/agent.json`,
       x402Manifest: `${BASE_URL}/.well-known/x402.json`,
+mppManifest: `${BASE_URL}/.well-known/mpp.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: "https://smithery.ai/server/@plagtech/spraay-x402-mcp",
       repository: "https://github.com/plagtech/spraay-x402-gateway",
@@ -1059,7 +1109,7 @@ app.get("/.well-known/agent-registration.json", (_req, res) => {
     categories: ["ai", "payments", "defi", "oracle", "bridge", "payroll", "invoicing", "escrow", "compute", "search", "rtp", "agent-wallet", "supply-chain", "bittensor"],
     network: CAIP2_NETWORK,
     paymentAddress: PAY_TO,
-    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    _gateway: { provider: "spraay", version: "3.7.0", protocols: ["x402", "mpp"] },
   });
 });
 
