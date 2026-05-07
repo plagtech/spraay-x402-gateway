@@ -172,7 +172,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
   const sig = req.headers["stripe-signature"] as string;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-  let event: Stripe.Event;
+  let event: any;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err: any) {
@@ -184,7 +184,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 
   switch (event.type) {
     case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
+      const session = event.data.object as any;
       const plan = session.metadata?.plan || "starter";
       const email = session.customer_email || session.customer_details?.email || "";
       const customerId = session.customer as string;
@@ -219,7 +219,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
     }
 
     case "invoice.payment_failed": {
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = event.data.object as any;
       const subId = invoice.subscription as string;
       if (subId) {
         await supabase
@@ -232,7 +232,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
     }
 
     case "customer.subscription.deleted": {
-      const sub = event.data.object as Stripe.Subscription;
+      const sub = event.data.object as any;
       await supabase
         .from("api_keys")
         .update({ status: "cancelled" })
@@ -243,7 +243,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 
     case "invoice.payment_succeeded": {
       // Reactivate if previously past_due
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = event.data.object as any;
       const subId = invoice.subscription as string;
       if (subId) {
         await supabase
