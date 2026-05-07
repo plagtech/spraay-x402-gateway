@@ -60,6 +60,8 @@ import { healthHandler, statsHandler } from "./routes/health.js";
 import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
 // NEW: Bittensor Drop-in API (Category 19)
 import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
+import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
+import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
 import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
 import { protocolDetectorMiddleware } from "./middleware/protocolDetector.js";
@@ -68,6 +70,7 @@ import { mppMiddleware, initMpp } from "./middleware/mppMiddleware.js";
 dotenv.config();
 const app = express();
 app.use(cors());
+app.post("/v1/webhooks/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
 app.use(express.json());
 app.use(gatewayEventsMiddleware);
 
@@ -88,6 +91,7 @@ server.registerExtension(bazaarResourceServerExtension);
 app.use(enrich402Middleware);
 app.use(protocolDetectorMiddleware);
 app.use(mppMiddleware);
+app.use(apiKeyAuthMiddleware);
 app.use(
   paymentMiddleware(
     {
@@ -994,6 +998,13 @@ app.get("/api/v1/tokens", (_req, res) => {
   });
 });
 
+// Stripe subscription auth
+app.post("/v1/auth/register", registerHandler);
+app.get("/v1/auth/success", successHandler);
+app.get("/v1/auth/cancel", cancelHandler);
+app.get("/v1/auth/usage", usageHandler);
+app.post("/v1/auth/rotate", rotateHandler);
+app.post("/v1/auth/portal", portalHandler);
 app.get("/health", healthHandler);
 app.get("/stats", statsHandler);
 
