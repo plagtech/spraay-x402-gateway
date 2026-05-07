@@ -12,7 +12,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   throw new Error("SUPABASE_URL and SUPABASE_KEY (or SUPABASE_SERVICE_KEY) are required");
 }
 
-const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================
 // Generic helpers
