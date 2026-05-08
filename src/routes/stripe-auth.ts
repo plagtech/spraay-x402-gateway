@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Resend } from "resend";
-const resend = new Resend(process.env.re_83rj7mY8_mt6JsCvh6tGoiePDjY7ZSuAS);
+const resend = new Resend(process.env.RESEND_API_KEY);
 import Stripe from "stripe";
 import { supabase } from "../db.js";
 import { generateApiKey, hashApiKey } from "../middleware/apiKeyAuth.js";
