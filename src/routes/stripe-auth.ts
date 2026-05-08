@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import { Resend } from "resend";
+const resend = new Resend(process.env.re_83rj7mY8_mt6JsCvh6tGoiePDjY7ZSuAS);
 import Stripe from "stripe";
 import { supabase } from "../db.js";
 import { generateApiKey, hashApiKey } from "../middleware/apiKeyAuth.js";
@@ -127,7 +129,22 @@ export async function rotateHandler(req: Request, res: Response) {
     .update({ api_key_hash: newHash })
     .eq("id", row.id);
 
-  // TODO: Send new key via Resend email to row.email
+  // Email new key to customer
+  try {
+    await resend.emails.send({
+      from: "Spraay <hello@spraay.app>",
+      to: row.email,
+      subject: "Your Spraay API Key Has Been Rotated",
+      html: `
+        <h2>API Key Rotated</h2>
+        <p>Your old key has been revoked. Here's your new key:</p>
+        <pre style="background:#f4f4f4;padding:12px;border-radius:4px;font-size:16px;">${newKey}</pre>
+        <p><strong>Save this key — it won't be shown again.</strong></p>
+      `,
+    });
+  } catch (emailErr) {
+    console.error("Failed to email rotated key:", emailErr);
+  }
 
   return res.json({
     message: "API key rotated successfully. Your old key no longer works.",
@@ -211,9 +228,28 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         return res.status(500).json({ error: "db_error" });
       }
 
-      // TODO: Send API key via Resend to email
-      // For now, log it (remove in production)
-      console.log(`🔑 New ${plan} API key created for ${email}: ${newKey.slice(0, 12)}...`);
+      // Email API key to customer
+      try {
+        await resend.emails.send({
+          from: "Spraay <hello@spraay.app>",
+          to: email,
+          subject: "Your Spraay API Key",
+          html: `
+            <h2>Welcome to Spraay Gateway!</h2>
+            <p>Your <strong>${plan}</strong> plan is active. Here's your API key:</p>
+            <pre style="background:#f4f4f4;padding:12px;border-radius:4px;font-size:16px;">${newKey}</pre>
+            <p><strong>Save this key — it won't be shown again.</strong></p>
+            <p>Add it to your requests as: <code>X-API-Key: ${newKey}</code></p>
+            <p>Check your usage anytime: <code>GET https://gateway.spraay.app/v1/auth/usage</code></p>
+            <p>Manage your subscription: <code>POST https://gateway.spraay.app/v1/auth/portal</code></p>
+            <hr>
+            <p style="color:#888;">Spraay Protocol — <a href="https://spraay.app">spraay.app</a></p>
+          `,
+        });
+        console.log(`📧 API key emailed to ${email}`);
+      } catch (emailErr) {
+        console.error("Failed to email API key:", emailErr);
+      }
 
       break;
     }
