@@ -964,6 +964,23 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
       return originalJson(body);
     }
 
+    // ─── If body is missing x402 fields, recover from header ───
+    // @x402/express puts the challenge in the payment-required header
+    // as base64 but may send an empty body. pay.sh needs it in the body.
+    let mergedBody = body || {};
+    if (!mergedBody.x402Version) {
+      const headerVal = res.getHeader("payment-required");
+      if (headerVal && typeof headerVal === "string") {
+        try {
+          const decoded = JSON.parse(Buffer.from(headerVal, "base64").toString("utf-8"));
+          mergedBody = { ...decoded, ...mergedBody };
+        } catch {
+          // Header wasn't valid base64 JSON — continue with original body
+        }
+      }
+    }
+    // ─── END ───
+
     // Compute the route key as paymentMiddleware uses it
     // paymentMiddleware keys look like "POST /api/v1/chat/completions"
     const routeKey = `${req.method} ${req.baseUrl || ""}${req.path}`.replace(/\/+$/, "");
@@ -973,14 +990,14 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
     // (we never want to inject partial/wrong data)
     if (!enrichment) {
       res.set("x-spraay-meta", JSON.stringify(GATEWAY_META));
-      return originalJson(body);
+      return originalJson(mergedBody);
     }
 
     // Enrich the 402 body. Preserve all existing x402 fields (accepts, x402Version, etc).
     // Our additions live under a _spraay namespace PLUS top-level description for maximum
     // visibility (agent frameworks that only surface top-level string fields will see it).
     const enrichedBody = {
-      ...body,
+      ...mergedBody,
       description: enrichment.description,
       _spraay: {
         description: enrichment.description,
