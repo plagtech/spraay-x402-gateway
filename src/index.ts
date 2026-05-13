@@ -739,6 +739,16 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/bittensor/v1/images/generations`, method: "POST", price: "$0.05", category: "bittensor", bittensor: { openaiCompat: true, description: "Image generation via Bittensor SN19" } },
       { resource: `${BASE_URL}/bittensor/v1/embeddings`, method: "POST", price: "$0.005", category: "bittensor", bittensor: { openaiCompat: true, description: "Text embeddings via Bittensor" } },
     ],
+    solanaPayment: {
+      enabled: true,
+      chain: "solana",
+      cluster: "mainnet-beta",
+      receiveAddress: process.env.SOLANA_RECEIVE_ADDRESS || "",
+      usdcMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      txHeader: "X-Solana-Tx",
+      discovery: `${BASE_URL}/.well-known/solana.json`,
+    },
+    supportedChains: ["base", "solana"],
     updatedAt: new Date().toISOString(),
   });
 });
@@ -1129,7 +1139,15 @@ mppManifest: `${BASE_URL}/.well-known/mpp.json`,
     categories: ["ai", "payments", "defi", "oracle", "bridge", "payroll", "invoicing", "escrow", "compute", "search", "rtp", "agent-wallet", "supply-chain", "bittensor"],
     network: CAIP2_NETWORK,
     paymentAddress: PAY_TO,
-    _gateway: { provider: "spraay", version: "3.7.0", protocols: ["x402", "mpp"] },
+solanaPayment: {
+  chain: "solana",
+  cluster: "mainnet-beta",
+  receiveAddress: process.env.SOLANA_RECEIVE_ADDRESS || "",
+  usdcMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  txHeader: "X-Solana-Tx",
+  discovery: `${BASE_URL}/.well-known/solana.json`,
+},
+_gateway: { provider: "spraay", version: "3.7.0", protocols: ["x402", "mpp", "solana-usdc"] },
   });
 });
 
