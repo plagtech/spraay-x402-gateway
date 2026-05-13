@@ -1,35 +1,12 @@
 /**
  * 💧 Spraay x402 Gateway — Solana Payment Middleware
  * src/middleware/solanaPaymentMiddleware.ts
- *
- * Express middleware that handles Solana USDC payments as an
- * ALTERNATIVE rail alongside the existing EVM x402 flow.
- *
- * Detection logic:
- *   - If the request has `X-Solana-Tx` header → Solana verification path
- *   - Otherwise → falls through to @x402/express paymentMiddleware unchanged
- *
- * INTEGRATION:
- *   This middleware wraps the EXISTING paymentMiddleware from @x402/express.
- *   Since paymentMiddleware is a library function we can't patch internally,
- *   this middleware intercepts BEFORE it runs. When Solana payment is verified,
- *   we call the route handler directly (bypassing paymentMiddleware's 402 gate).
- *   When there's no Solana header, everything passes through to paymentMiddleware
- *   exactly as before.
- *
- * PLACEMENT in index.ts:
- *   app.use(enrich402Middleware);        // existing — wraps res.json
- *   app.use(protocolDetectorMiddleware); // existing — x402 vs MPP detection
- *   app.use(solanaPaymentMiddleware);    // ← NEW — before paymentMiddleware
- *   app.use(mppMiddleware);             // existing — MPP handling
- *   app.use(apiKeyAuthMiddleware);      // existing — API key bypass
- *   app.use(paymentMiddleware(...));     // existing — EVM x402 gate
  */
 
 import type { Request, Response, NextFunction } from "express";
 import { SolanaVerifier, SolanaPaymentConfig } from "../solana/solanaVerifier.js";
-import { getEndpointPrice } from "../pricing.js";
-import { supabase } from "../middleware/supabase.js";
+import { getEndpointPrice } from "../config/pricing.js";
+import { supabase } from "./supabase.js";
 
 // ----- config ------------------------------------------------------------ //
 
@@ -94,7 +71,6 @@ export function solanaPaymentMiddleware(
     .then((result) => {
       if (result.verified) {
         // ✅ Solana payment confirmed
-        // Mark the request so downstream middleware/handlers know
         (req as any).solanaPaid = true;
         (req as any).solanaTxSignature = txSignature;
         (req as any).solanaSender = result.sender;
@@ -122,20 +98,12 @@ export function solanaPaymentMiddleware(
               tx_hash: txSignature,
               source_ip: sourceIp,
               payment_attempted: true,
-              // Solana-specific fields (add columns if desired)
             })
             .then(({ error }) => {
               if (error) console.error("[solana-pay] Supabase log error:", error.message);
             });
         }
 
-        // Skip paymentMiddleware — the request will continue through
-        // mppMiddleware (no-op since X-Solana-Tx != MPP), apiKeyAuthMiddleware,
-        // then paymentMiddleware. We need paymentMiddleware to NOT block this.
-        //
-        // The trick: paymentMiddleware from @x402/express checks for x-payment
-        // header. We can't fake that. Instead, we set a flag and use a wrapper
-        // approach (see solanaBypassWrapper in index.ts integration).
         next();
       } else {
         // ❌ Verification failed — return 402 with Solana error detail
@@ -157,7 +125,7 @@ export function solanaPaymentMiddleware(
     });
 }
 
-// ----- helpers (mirrors gateway-events.ts patterns) ---------------------- //
+// ----- helpers ----------------------------------------------------------- //
 
 function extractSourceIp(req: Request): string | null {
   const fwd = req.headers["x-forwarded-for"];

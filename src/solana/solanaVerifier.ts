@@ -1,14 +1,6 @@
 /**
  * 💧 Spraay x402 Gateway — Solana SPL USDC Payment Verifier
  * src/solana/solanaVerifier.ts
- *
- * Verifies that an SPL USDC transfer actually landed on the Spraay
- * receive address before releasing the gated API response.
- *
- * Design principles:
- *   1. Zero impact on existing EVM / x402 / MPP flows
- *   2. Uses @solana/web3.js for on-chain tx verification
- *   3. Stateless — every verification is a fresh RPC lookup
  */
 
 import {
@@ -24,34 +16,21 @@ export const USDC_MINT = new PublicKey(
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 );
 
-/** SPL Token program ID */
-const TOKEN_PROGRAM_ID = new PublicKey(
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-);
-
 // ----- types ------------------------------------------------------------- //
 
 export interface SolanaVerifyResult {
   verified: boolean;
-  /** USDC amount transferred (human-readable, 6 decimals) */
   amount: number | null;
-  /** Sender wallet address */
   sender: string | null;
-  /** Slot the tx was confirmed in */
   slot: number | null;
-  /** Block time (unix) */
   blockTime: number | null;
   error?: string;
 }
 
 export interface SolanaPaymentConfig {
-  /** Spraay Solana USDC receive address */
   receiveAddress: string;
-  /** Solana RPC endpoint (default: mainnet public) */
   rpcUrl?: string;
-  /** Minimum confirmations required (default: 1 = "confirmed") */
   minConfirmations?: number;
-  /** Maximum age of tx in seconds to accept (default: 300 = 5 min) */
   maxTxAgeSeconds?: number;
 }
 
@@ -75,14 +54,6 @@ export class SolanaVerifier {
     this.maxTxAgeSeconds = config.maxTxAgeSeconds ?? 300;
   }
 
-  /**
-   * Verify that a Solana transaction:
-   *   1. Exists and is confirmed
-   *   2. Contains an SPL USDC transfer
-   *   3. Transfers to the Spraay receive address
-   *   4. Meets the minimum required amount
-   *   5. Is recent enough (within maxTxAgeSeconds)
-   */
   async verifyPayment(
     txSignature: string,
     requiredAmountUSDC: number
@@ -112,8 +83,8 @@ export class SolanaVerifier {
           verified: false,
           amount: null,
           sender: null,
-          slot: tx.slot,
-          blockTime: tx.blockTime,
+          slot: tx.slot ?? null,
+          blockTime: tx.blockTime ?? null,
           error: tx.meta?.err
             ? `Transaction failed: ${JSON.stringify(tx.meta.err)}`
             : "Transaction metadata unavailable",
@@ -128,8 +99,8 @@ export class SolanaVerifier {
             verified: false,
             amount: null,
             sender: null,
-            slot: tx.slot,
-            blockTime: tx.blockTime,
+            slot: tx.slot ?? null,
+            blockTime: tx.blockTime ?? null,
             error: `Transaction too old: ${ageSeconds}s (max ${this.maxTxAgeSeconds}s)`,
           };
         }
@@ -143,8 +114,8 @@ export class SolanaVerifier {
           verified: false,
           amount: null,
           sender: null,
-          slot: tx.slot,
-          blockTime: tx.blockTime,
+          slot: tx.slot ?? null,
+          blockTime: tx.blockTime ?? null,
           error:
             "No USDC transfer to Spraay receive address found in transaction",
         };
@@ -156,8 +127,8 @@ export class SolanaVerifier {
           verified: false,
           amount: transfer.amount,
           sender: transfer.sender,
-          slot: tx.slot,
-          blockTime: tx.blockTime,
+          slot: tx.slot ?? null,
+          blockTime: tx.blockTime ?? null,
           error: `Insufficient amount: ${transfer.amount} USDC (required: ${requiredAmountUSDC})`,
         };
       }
@@ -167,8 +138,8 @@ export class SolanaVerifier {
         verified: true,
         amount: transfer.amount,
         sender: transfer.sender,
-        slot: tx.slot,
-        blockTime: tx.blockTime,
+        slot: tx.slot ?? null,
+        blockTime: tx.blockTime ?? null,
       };
     } catch (err: any) {
       return {
@@ -182,10 +153,6 @@ export class SolanaVerifier {
     }
   }
 
-  /**
-   * Walk the parsed inner instructions looking for a USDC
-   * `transfer` or `transferChecked` that credits our address.
-   */
   private extractUSDCTransfer(
     tx: ParsedTransactionWithMeta
   ): { amount: number; sender: string } | null {
@@ -195,7 +162,6 @@ export class SolanaVerifier {
     ];
 
     for (const ix of allInstructions) {
-      // Only look at parsed SPL Token instructions
       if (!("parsed" in ix) || !("program" in ix)) continue;
       if ((ix as any).program !== "spl-token") continue;
 
@@ -204,20 +170,16 @@ export class SolanaVerifier {
       if (parsed.type === "transferChecked" || parsed.type === "transfer") {
         const info = parsed.info;
 
-        // For transferChecked, verify USDC mint
         if (parsed.type === "transferChecked") {
           if (info.mint !== USDC_MINT.toBase58()) continue;
         }
 
-        // Check destination is our receive address (token account owner)
-        // SPL transfers go to token accounts, not wallet addresses directly.
-        // We cross-reference postTokenBalances to confirm the owner matches.
         const destTokenAccount: string = info.destination;
         if (this.isOurTokenAccount(tx, destTokenAccount)) {
           const amount =
             parsed.type === "transferChecked"
               ? parseFloat(info.tokenAmount.uiAmountString)
-              : info.amount / 1e6; // USDC has 6 decimals
+              : info.amount / 1e6;
 
           return {
             amount,
@@ -230,10 +192,6 @@ export class SolanaVerifier {
     return null;
   }
 
-  /**
-   * Check if a token account belongs to our receive address
-   * by inspecting postTokenBalances.
-   */
   private isOurTokenAccount(
     tx: ParsedTransactionWithMeta,
     tokenAccountAddress: string
@@ -245,7 +203,6 @@ export class SolanaVerifier {
 
     if (tokenAccountIndex === -1) return false;
 
-    // Check postTokenBalances for this index
     const postBalance = tx.meta?.postTokenBalances?.find(
       (b) =>
         b.accountIndex === tokenAccountIndex &&
@@ -256,7 +213,6 @@ export class SolanaVerifier {
     return !!postBalance;
   }
 
-  /** Health check — can we reach the RPC? */
   async healthCheck(): Promise<boolean> {
     try {
       const slot = await this.connection.getSlot();
