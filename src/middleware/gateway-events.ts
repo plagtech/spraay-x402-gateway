@@ -8,6 +8,7 @@ function classifyEvent(req: Request, res: Response): EventType | null {
 
   if (
     path.startsWith("/.well-known/x402") ||
+    path.startsWith("/.well-known/solana") ||
     path.startsWith("/x402-resources") ||
     path.startsWith("/.well-known/x402-resources")
   ) {
@@ -19,7 +20,8 @@ function classifyEvent(req: Request, res: Response): EventType | null {
   }
 
   const hasPaymentHeader = Boolean(req.headers["x-payment"]);
-  if (hasPaymentHeader && res.statusCode >= 200 && res.statusCode < 300) {
+  const hasSolanaPayment = Boolean(req.headers["x-solana-tx"]);
+  if ((hasPaymentHeader || hasSolanaPayment) && res.statusCode >= 200 && res.statusCode < 300) {
     return "payment";
   }
 
@@ -76,10 +78,12 @@ function inferScanner(userAgent: string | undefined): string | null {
   if (ua.includes("coinbase")) return "coinbase";
   if (ua === "node" || ua.startsWith("node/") || ua.startsWith("node ")) return "node_default";
   if (ua.includes("bot") || ua.includes("crawler") || ua.includes("spider")) return "generic_crawler";
+  if (ua.includes("solana") || ua.includes("phantom") || ua.includes("jupiter")) return "solana_agent";
   return null;
 }
 
 function extractChain(req: Request): string | null {
+  if (req.headers["x-solana-tx"]) return "solana";
   const body = req.body as Record<string, unknown> | undefined;
   const query = req.query as Record<string, unknown>;
   const chain = (body?.chain || body?.network || query?.chain || query?.network) as string | undefined;
@@ -144,7 +148,7 @@ export function gatewayEventsMiddleware(req: Request, res: Response, next: NextF
 
   const client = supabase;
   const startTime = Date.now();
-  const paymentAttempted = Boolean(req.headers["x-payment"]);
+  const paymentAttempted = Boolean(req.headers["x-payment"]) || Boolean(req.headers["x-solana-tx"]);
 
   res.on("finish", () => {
     try {

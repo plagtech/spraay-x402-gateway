@@ -66,6 +66,11 @@ import { enrich402Middleware } from "./middleware/enrich402.js";
 import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
 import { protocolDetectorMiddleware } from "./middleware/protocolDetector.js";
 import { mppMiddleware, initMpp } from "./middleware/mppMiddleware.js";
+// Solana payment rail
+import { solanaPaymentMiddleware } from "./middleware/solanaPaymentMiddleware.js";
+import { solanaEnrich402Middleware } from "./middleware/solanaEnrich402.js";
+import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
+import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
 
 dotenv.config();
 const app = express();
@@ -89,11 +94,13 @@ const facilitatorClient = IS_MAINNET
 const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK, new ExactEvmScheme());
 server.registerExtension(bazaarResourceServerExtension);
 app.use(enrich402Middleware);
+app.use(solanaEnrich402Middleware);    
 app.use(protocolDetectorMiddleware);
+app.use(solanaPaymentMiddleware);     
 app.use(mppMiddleware);
 app.use(apiKeyAuthMiddleware);
 app.use(
-  paymentMiddleware(
+  wrapWithSolanaBypass(paymentMiddleware(
     {
       "POST /api/v1/chat/completions": {
         accepts: [{ scheme: "exact", price: "$0.04", network: CAIP2_NETWORK, payTo: PAY_TO }],
@@ -616,7 +623,7 @@ app.use(
       },
     },
     server
-  )
+  ))
 );
 
 // FREE ROUTES
@@ -735,6 +742,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
     updatedAt: new Date().toISOString(),
   });
 });
+
+app.get("/.well-known/solana.json", solanaDiscoveryHandler);
 
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
