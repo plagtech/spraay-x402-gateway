@@ -378,9 +378,9 @@ app.use(
 
       // ---- IDENTITY & ACCESS ----
       "POST /api/v1/kyc/verify": {
-        accepts: [{ scheme: "exact", price: "$0.08", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.08", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Initiate KYC/KYB verification for compliance-gated payments.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", type: "individual", level: "basic" }, inputSchema: { properties: { address: { type: "string" }, type: { type: "string" }, level: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { id: "kyc_123", status: "pending" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "OFAC SDN sanctions screening via on-chain Chainalysis oracle.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", type: "individual", chain: "base" }, inputSchema: { properties: { address: { type: "string" }, type: { type: "string" }, chain: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { id: "kyc_123", status: "approved", result: { isSanctioned: false, listSource: "OFAC SDN (US Treasury)" } }, schema: { properties: { id: { type: "string" }, status: { type: "string" }, result: { type: "object" } } } } }) },
       },
       "GET /api/v1/kyc/status": {
         accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -691,7 +691,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/logs/ingest`, method: "POST", price: "$0.002", category: "infrastructure" },
       { resource: `${BASE_URL}/api/v1/logs/query`, method: "GET", price: "$0.005", category: "infrastructure" },
       // Identity & Access
-      { resource: `${BASE_URL}/api/v1/kyc/verify`, method: "POST", price: "$0.08", category: "identity" },
+      { resource: `${BASE_URL}/api/v1/kyc/verify`, method: "POST", price: "$0.02", category: "identity" },
       { resource: `${BASE_URL}/api/v1/kyc/status`, method: "GET", price: "$0.01", category: "identity" },
       { resource: `${BASE_URL}/api/v1/auth/session`, method: "POST", price: "$0.01", category: "identity" },
       { resource: `${BASE_URL}/api/v1/auth/verify`, method: "GET", price: "$0.005", category: "identity" },
@@ -825,7 +825,7 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_cron_cancel", description: "Cancel job", price: "$0.002" },
       { name: "spraay_logs_ingest", description: "Ingest logs", price: "$0.002" },
       { name: "spraay_logs_query", description: "Query logs", price: "$0.005" },
-      { name: "spraay_kyc_verify", description: "KYC verification", price: "$0.08" },
+      { name: "spraay_kyc_verify", description: "KYC verification", price: "$0.02" },
       { name: "spraay_kyc_status", description: "KYC status", price: "$0.01" },
       { name: "spraay_auth_session", description: "Create auth session", price: "$0.01" },
       { name: "spraay_auth_verify", description: "Verify token", price: "$0.005" },
@@ -939,7 +939,7 @@ app.get("/", (_req, res) => {
         "POST /api/v1/logs/ingest": "$0.002 - Ingest logs",
         "GET /api/v1/logs/query": "$0.005 - Query logs",
         // Identity & Access
-        "POST /api/v1/kyc/verify": "$0.08 - KYC verification",
+        "POST /api/v1/kyc/verify": "$0.02 - KYC verification",
         "GET /api/v1/kyc/status": "$0.01 - KYC status",
         "POST /api/v1/auth/session": "$0.01 - Create session",
         "GET /api/v1/auth/verify": "$0.005 - Verify token",
@@ -1223,7 +1223,7 @@ app.get("/openapi.json", (_req, res) => {
     { method: "post", path: "/api/v1/gpu/run", price: "$0.06", tag: "compute", desc: "GPU workload execution" },
     { method: "post", path: "/api/v1/search/qna", price: "$0.03", tag: "search", desc: "Structured Q&A search" },
     { method: "post", path: "/api/v1/robots/task", price: "$0.05", tag: "rtp", desc: "Dispatch robot task via RTP" },
-    { method: "post", path: "/api/v1/kyc/verify", price: "$0.08", tag: "identity", desc: "Lightweight KYC" },
+    { method: "post", path: "/api/v1/kyc/verify", price: "$0.02", tag: "identity", desc: "OFAC sanctions screening" },
     { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", tag: "agent-wallet", desc: "Provision agent wallet" },
     { method: "post", path: "/api/v1/sctp/pay", price: "$0.10", tag: "supply-chain", desc: "Execute supplier payment" },
   ];

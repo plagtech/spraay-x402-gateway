@@ -102,7 +102,7 @@ export const ENDPOINT_PRICES: Record<string, EndpointPrice> = {
   "GET /api/v1/logs/query":                { price: "0.005", category: "infrastructure" },
 
   // ---- Identity & Access ----
-  "POST /api/v1/kyc/verify":               { price: "0.08",  category: "identity" },
+  "POST /api/v1/kyc/verify":               { price: "0.02",  category: "identity" },
   "GET /api/v1/kyc/status":                { price: "0.01",  category: "identity" },
   "POST /api/v1/auth/session":             { price: "0.01",  category: "identity" },
   "GET /api/v1/auth/verify":               { price: "0.005", category: "identity" },

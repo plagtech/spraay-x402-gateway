@@ -637,7 +637,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
   // IDENTITY / AUTH / KYC
   // ============================================
   "POST /api/v1/kyc/verify": {
-    description: "Lightweight KYC verification via Spraay compliance layer. ID document + liveness check. Returns a verification session URL.",
+    description: "OFAC SDN sanctions screening via Chainalysis on-chain oracle. Returns isSanctioned boolean for the given wallet address.",
     example_request: { walletAddress: "0x...", level: "basic" },
     example_response: { sessionId: "kyc_abc", verifyUrl: "https://..." },
     related_endpoints: [
