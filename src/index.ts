@@ -75,6 +75,7 @@ import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
 
 dotenv.config();
 const app = express();
+app.set('trust proxy', true);
 app.use(cors());
 app.post("/v1/webhooks/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
 app.use(express.json());
