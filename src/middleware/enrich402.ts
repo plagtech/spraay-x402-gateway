@@ -981,6 +981,16 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
     }
     // ─── END ───
 
+    // ─── Inject resource URL into each accepts entry ───
+    const resourceUrl = mergedBody.resource?.url;
+    if (resourceUrl && Array.isArray(mergedBody.accepts)) {
+      mergedBody.accepts = mergedBody.accepts.map((a: any) => ({
+        ...a,
+        resource: a.resource || resourceUrl,
+      }));
+    }
+    // ─── END ───
+
     // Compute the route key as paymentMiddleware uses it
     // paymentMiddleware keys look like "POST /api/v1/chat/completions"
     const routeKey = `${req.method} ${req.baseUrl || ""}${req.path}`.replace(/\/+$/, "");
