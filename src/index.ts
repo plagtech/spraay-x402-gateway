@@ -748,6 +748,13 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/bittensor/v1/chat/completions`, method: "POST", price: "$0.03", category: "bittensor", bittensor: { openaiCompat: true, description: "Chat completions via Bittensor SN64" } },
       { resource: `${BASE_URL}/bittensor/v1/images/generations`, method: "POST", price: "$0.05", category: "bittensor", bittensor: { openaiCompat: true, description: "Image generation via Bittensor SN19" } },
       { resource: `${BASE_URL}/bittensor/v1/embeddings`, method: "POST", price: "$0.005", category: "bittensor", bittensor: { openaiCompat: true, description: "Text embeddings via Bittensor" } },
+      // XRP Ledger (Chain #15)
+      { resource: `${BASE_URL}/api/v1/xrp/batch`, method: "POST", price: "$0.02", category: "payments", chain: "xrp-ledger" },
+      { resource: `${BASE_URL}/api/v1/xrp/estimate`, method: "POST", price: "$0.001", category: "payments", chain: "xrp-ledger" },
+      { resource: `${BASE_URL}/api/v1/xrp/info`, method: "GET", price: "$0.001", category: "payments", chain: "xrp-ledger" },
+      // Stellar (Chain #14)
+      { resource: `${BASE_URL}/api/v1/stellar/batch`, method: "POST", price: "$0.02", category: "payments", chain: "stellar" },
+      { resource: `${BASE_URL}/api/v1/stellar/estimate`, method: "POST", price: "$0.001", category: "payments", chain: "stellar" },
     ],
     solanaPayment: {
       enabled: true,
