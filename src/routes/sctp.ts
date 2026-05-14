@@ -15,6 +15,14 @@
 
 import { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
+import {
+  JsonRpcProvider,
+  Contract,
+  Interface,
+  isAddress,
+  parseUnits,
+  formatUnits,
+} from "ethers";
 
 // ─── Config ──────────────────────────────────────────
 
@@ -41,6 +49,54 @@ const USDC_ADDRESSES: Record<string, string> = {
   bnb: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
   avalanche: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
 };
+
+// Numeric chain IDs (EIP-155) for the transaction payloads
+const CHAIN_IDS: Record<string, number> = {
+  base: 8453,
+  ethereum: 1,
+  arbitrum: 42161,
+  polygon: 137,
+  bnb: 56,
+  avalanche: 43114,
+};
+
+// Public RPC fallbacks; Alchemy used when key is present
+const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY || "";
+const RPC_URLS: Record<string, string> = ALCHEMY_KEY
+  ? {
+      base: `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+      ethereum: `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+      arbitrum: `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+      polygon: `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+      bnb: `https://bnb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+      avalanche: `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+    }
+  : {
+      base: "https://mainnet.base.org",
+      ethereum: "https://eth.llamarpc.com",
+      arbitrum: "https://arb1.arbitrum.io/rpc",
+      polygon: "https://polygon-rpc.com",
+      bnb: "https://bsc-dataseed.binance.org",
+      avalanche: "https://api.avax.network/ext/bc/C/rpc",
+    };
+
+// USDC is 6 decimals on every supported chain (verified against contracts).
+// Different tokens would need their own decimals — but SCTP only pays USDC for now.
+const USDC_DECIMALS = 6;
+
+// Spraay V2 batch contract ABI (matches payroll.ts) + ERC-20 minimum
+const SPRAAY_V2_ABI = [
+  "function batchTransfer(address token, address[] calldata recipients, uint256[] calldata amounts) external",
+];
+
+const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+];
+
+// Protocol fee: 0.3% (matches payroll.ts)
+const PROTOCOL_FEE_BPS = 30;
 
 // ─── Lazy Supabase init ──────────────────────────────
 
@@ -526,126 +582,262 @@ Respond ONLY with JSON:
 
 export async function sctpPayExecuteHandler(req: Request, res: Response) {
   try {
-    const { invoiceId, supplierId, amount, token, chain, payments } = req.body;
+    const { invoiceId, supplierId, amount, token, chain, payments, sender } = req.body || {};
 
-    // Batch mode
-    if (payments && Array.isArray(payments)) {
-      const results = [];
-      for (const p of payments) {
-        const result = await executeSinglePayment(p);
-        results.push(result);
-      }
-      return res.json({
-        batch: true,
-        count: results.length,
-        payments: results,
-      });
-    }
-
-    // Single mode
-    if (!supplierId || !amount) {
+    // ── Resolve which chain we're on and validate it ──
+    const chainKey = (chain || (payments?.[0]?.chain) || "base").toLowerCase();
+    if (!SPRAAY_CONTRACTS[chainKey]) {
       return res.status(400).json({
-        error: "supplierId and amount are required (or provide payments[] for batch)",
+        error: `Chain "${chainKey}" not supported`,
+        supportedChains: Object.keys(SPRAAY_CONTRACTS),
+      });
+    }
+    // Only USDC is supported for SCTP payments today.
+    const tokenSymbol = (token || payments?.[0]?.token || "USDC").toUpperCase();
+    if (tokenSymbol !== "USDC") {
+      return res.status(400).json({
+        error: `Token "${tokenSymbol}" not supported for SCTP payments`,
+        supportedTokens: ["USDC"],
+        note: "USDC is currently the only supported settlement token. More tokens coming soon.",
+      });
+    }
+    if (sender && !isAddress(sender)) {
+      return res.status(400).json({ error: "Invalid sender address" });
+    }
+
+    // ── Normalize to a list of payment line items ──
+    let items: Array<{ invoiceId?: string; supplierId: string; amount: number }>;
+    let isBatch = false;
+    if (Array.isArray(payments) && payments.length > 0) {
+      isBatch = true;
+      items = payments.map((p: any) => ({
+        invoiceId: p.invoiceId,
+        supplierId: p.supplierId,
+        amount: Number(p.amount),
+      }));
+    } else {
+      if (!supplierId || amount === undefined || amount === null) {
+        return res.status(400).json({
+          error: "supplierId and amount are required (or provide payments[] for batch)",
+        });
+      }
+      items = [{ invoiceId, supplierId, amount: Number(amount) }];
+    }
+
+    // Validate each item up front before we touch the DB or chain.
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!it.supplierId || typeof it.supplierId !== "string") {
+        return res.status(400).json({ error: `payments[${i}]: missing supplierId` });
+      }
+      if (!isFinite(it.amount) || it.amount <= 0) {
+        return res.status(400).json({ error: `payments[${i}]: amount must be a positive number` });
+      }
+    }
+    if (items.length > 200) {
+      return res.status(400).json({ error: "Max 200 payments per batch" });
+    }
+
+    // ── Look up every supplier wallet in one query ──
+    const supplierIds = items.map((it) => it.supplierId);
+    const { data: suppliers, error: supErr } = await db()
+      .from("sctp_suppliers")
+      .select("id, name, wallet")
+      .in("id", supplierIds);
+    if (supErr) {
+      return res.status(500).json({ error: `Supplier lookup failed: ${supErr.message}` });
+    }
+    const supplierMap = new Map<string, { id: string; name: string; wallet: string }>();
+    for (const s of suppliers || []) supplierMap.set(s.id, s);
+
+    // Reject if any supplier is missing or has no/invalid wallet.
+    const recipients: string[] = [];
+    const amounts: bigint[] = [];
+    const breakdown: any[] = [];
+    let totalRaw = 0n;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const sup = supplierMap.get(it.supplierId);
+      if (!sup) {
+        return res.status(404).json({ error: `Supplier not found: ${it.supplierId}`, index: i });
+      }
+      if (!sup.wallet || !isAddress(sup.wallet)) {
+        return res.status(422).json({
+          error: `Supplier ${it.supplierId} has no valid wallet address on file`,
+          index: i,
+        });
+      }
+      const amountRaw = parseUnits(it.amount.toString(), USDC_DECIMALS);
+      recipients.push(sup.wallet);
+      amounts.push(amountRaw);
+      totalRaw += amountRaw;
+      breakdown.push({
+        index: i,
+        invoiceId: it.invoiceId || null,
+        supplierId: sup.id,
+        supplierName: sup.name,
+        supplierWallet: sup.wallet,
+        amount: it.amount,
+        amountRaw: amountRaw.toString(),
       });
     }
 
-    const result = await executeSinglePayment({
-      invoiceId,
-      supplierId,
-      amount,
-      token: token || "USDC",
-      chain: chain || "base",
+    // ── Record payment intents in Supabase ──
+    const intentRows = items.map((it, i) => ({
+      invoice_id: it.invoiceId || null,
+      supplier_id: it.supplierId,
+      amount: it.amount,
+      token: tokenSymbol,
+      chain: chainKey,
+      status: "intent_recorded",
+      recipient_wallet: recipients[i],
+    }));
+    const { data: insertedIntents, error: insErr } = await db()
+      .from("sctp_payments")
+      .insert(intentRows)
+      .select();
+    if (insErr) {
+      return res.status(500).json({ error: `Payment intent insert failed: ${insErr.message}` });
+    }
+
+    // ── Calculate protocol fee and build calldata ──
+    const protocolFee = (totalRaw * BigInt(PROTOCOL_FEE_BPS)) / 10000n;
+    const totalWithFee = totalRaw + protocolFee;
+
+    const usdcAddress = USDC_ADDRESSES[chainKey];
+    const spraayContract = SPRAAY_CONTRACTS[chainKey];
+    const chainId = CHAIN_IDS[chainKey];
+
+    const spraayIface = new Interface(SPRAAY_V2_ABI);
+    const erc20Iface = new Interface(ERC20_ABI);
+
+    const approveCalldata = erc20Iface.encodeFunctionData("approve", [
+      spraayContract,
+      totalWithFee,
+    ]);
+    const batchCalldata = spraayIface.encodeFunctionData("batchTransfer", [
+      usdcAddress,
+      recipients,
+      amounts,
+    ]);
+
+    // Rough gas estimate: 50k base + 30k per recipient
+    const estimatedGas = 50000 + recipients.length * 30000;
+
+    // ── Best-effort balance + allowance check ──
+    let balanceCheck: any = null;
+    if (sender) {
+      try {
+        const provider = new JsonRpcProvider(RPC_URLS[chainKey]);
+        const usdc = new Contract(usdcAddress, ERC20_ABI, provider);
+        const [balance, allowance] = await Promise.all([
+          usdc.balanceOf(sender) as Promise<bigint>,
+          usdc.allowance(sender, spraayContract) as Promise<bigint>,
+        ]);
+        const sufficient = balance >= totalWithFee;
+        const approvalNeeded = allowance < totalWithFee;
+        balanceCheck = {
+          balance: formatUnits(balance, USDC_DECIMALS),
+          required: formatUnits(totalWithFee, USDC_DECIMALS),
+          sufficient,
+          shortfall: sufficient ? null : formatUnits(totalWithFee - balance, USDC_DECIMALS),
+          allowance: formatUnits(allowance, USDC_DECIMALS),
+          approvalNeeded,
+        };
+      } catch (e: any) {
+        // Don't fail the request just because the balance check hiccupped.
+        balanceCheck = { error: e?.message || "balance check failed" };
+      }
+    }
+
+    // ── Update invoice statuses where linked ──
+    const linkedInvoiceIds = items.map((it) => it.invoiceId).filter((id): id is string => !!id);
+    if (linkedInvoiceIds.length > 0) {
+      try {
+        await db()
+          .from("sctp_invoices")
+          .update({ status: "payment_initiated" })
+          .in("id", linkedInvoiceIds);
+      } catch (e: any) {
+        // Non-fatal — log and continue.
+        console.warn(`[sctp/pay] invoice status update failed: ${e?.message || e}`);
+      }
+    }
+
+    // ── Build the per-payment summary for the response ──
+    const paymentsOut = breakdown.map((b, i) => ({
+      paymentId: insertedIntents?.[i]?.id || null,
+      invoiceId: b.invoiceId,
+      supplierId: b.supplierId,
+      supplierName: b.supplierName,
+      supplierWallet: b.supplierWallet,
+      amount: b.amount,
+      token: tokenSymbol,
+      chain: chainKey,
+    }));
+
+    const settlement =
+      chainKey === "base" || chainKey === "arbitrum" || chainKey === "polygon" || chainKey === "avalanche"
+        ? "~2s after submission"
+        : "~15s after submission";
+
+    return res.json({
+      status: "ready",
+      batch: isBatch,
+      count: items.length,
+      payments: paymentsOut,
+      summary: {
+        token: tokenSymbol,
+        chain: chainKey,
+        chainId,
+        totalAmount: formatUnits(totalRaw, USDC_DECIMALS),
+        totalAmountRaw: totalRaw.toString(),
+        protocolFee: formatUnits(protocolFee, USDC_DECIMALS),
+        protocolFeeBps: PROTOCOL_FEE_BPS,
+        totalWithFee: formatUnits(totalWithFee, USDC_DECIMALS),
+        totalWithFeeRaw: totalWithFee.toString(),
+        recipientCount: recipients.length,
+      },
+      transactions: {
+        approval: {
+          to: usdcAddress,
+          data: approveCalldata,
+          value: "0x0",
+          chainId,
+          note: `Approve Spraay batch contract to spend ${formatUnits(totalWithFee, USDC_DECIMALS)} ${tokenSymbol}`,
+        },
+        batchPayment: {
+          to: spraayContract,
+          data: batchCalldata,
+          value: "0x0",
+          chainId,
+          gasLimit: "0x" + estimatedGas.toString(16),
+          note: `Batch payment to ${recipients.length} supplier${recipients.length === 1 ? "" : "s"} via Spraay batchTransfer`,
+        },
+      },
+      balanceCheck,
+      instructions: [
+        sender
+          ? `1. Ensure ${sender} holds ${formatUnits(totalWithFee, USDC_DECIMALS)} ${tokenSymbol} on ${chainKey}`
+          : `1. Ensure the sender wallet holds ${formatUnits(totalWithFee, USDC_DECIMALS)} ${tokenSymbol} on ${chainKey}`,
+        "2. Sign and submit the approval transaction (skip if allowance is already sufficient)",
+        "3. Sign and submit the batchPayment transaction",
+        `4. All ${recipients.length} supplier${recipients.length === 1 ? "" : "s"} will be paid in a single on-chain transaction`,
+      ],
+      estimatedSettlement: settlement,
+      spraay: {
+        contract: spraayContract,
+        chain: chainKey,
+        chainId,
+        protocolFee: "0.3%",
+        maxRecipients: 200,
+      },
+      note: "Endpoint returns signed-ready calldata. The caller's wallet must broadcast both transactions. Payment intents are recorded with status 'intent_recorded'; transition to 'submitted'/'confirmed' is the caller's responsibility (use POST /api/v1/sctp/pay/confirm if available).",
+      _gateway: { provider: "spraay-x402", version: "2.10.0", endpoint: "POST /api/v1/sctp/pay" },
+      timestamp: new Date().toISOString(),
     });
-
-    return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    console.error("[sctp/pay] unexpected error:", err?.message || err);
+    return res.status(500).json({ error: err?.message || "Unknown error" });
   }
-}
-
-async function executeSinglePayment(params: {
-  invoiceId?: string;
-  supplierId: string;
-  amount: number;
-  token?: string;
-  chain?: string;
-}) {
-  const { invoiceId, supplierId, amount, token = "USDC", chain = "base" } = params;
-
-  // Fetch supplier wallet
-  const { data: supplier, error: supErr } = await db()
-    .from("sctp_suppliers")
-    .select("wallet, name")
-    .eq("id", supplierId)
-    .single();
-
-  if (supErr || !supplier) {
-    return { error: "Supplier not found", supplierId };
-  }
-
-  const contractAddress = SPRAAY_CONTRACTS[chain];
-  const usdcAddress = USDC_ADDRESSES[chain];
-
-  if (!contractAddress) {
-    return { error: `Chain ${chain} not supported`, supplierId };
-  }
-
-  // Record payment intent
-  const { data: payment, error: payErr } = await db()
-    .from("sctp_payments")
-    .insert({
-      invoice_id: invoiceId || null,
-      supplier_id: supplierId,
-      amount,
-      token,
-      chain,
-      status: "pending",
-    })
-    .select()
-    .single();
-
-  if (payErr) {
-    return { error: payErr.message, supplierId };
-  }
-
-  // NOTE: Actual on-chain execution would go here.
-  // For v0.1, we record the payment intent and return the tx params
-  // that the calling agent can execute with their own signer.
-  //
-  // In production, this integrates with the Agent Wallet for
-  // autonomous execution, or returns unsigned tx data.
-
-  const txParams = {
-    to: contractAddress,
-    chain,
-    method: "batchSendToken",
-    args: {
-      token: usdcAddress,
-      recipients: [supplier.wallet],
-      amounts: [String(Math.floor(amount * 1e6))], // USDC has 6 decimals
-    },
-  };
-
-  // Update invoice status if linked
-  if (invoiceId) {
-    await db()
-      .from("sctp_invoices")
-      .update({ status: "payment_initiated" })
-      .eq("id", invoiceId);
-  }
-
-  return {
-    paymentId: payment.id,
-    status: "processing",
-    invoiceId: invoiceId || null,
-    supplierId,
-    supplierName: supplier.name,
-    supplierWallet: supplier.wallet,
-    amount,
-    token,
-    chain,
-    estimatedSettlement: chain === "base" ? "~2s" : chain === "arbitrum" ? "~2s" : "~15s",
-    txParams,
-    spraayContract: contractAddress,
-  };
 }
