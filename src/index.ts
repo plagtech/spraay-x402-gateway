@@ -148,6 +148,10 @@ app.use(
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Estimate XRP batch cost.", mimeType: "application/json",
       },
+      "GET /api/v1/xrp/info": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "XRP Ledger fee and reserve info.", mimeType: "application/json",
+      },
       "GET /api/v1/swap/quote": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Swap quotes via Uniswap V3.", mimeType: "application/json",
