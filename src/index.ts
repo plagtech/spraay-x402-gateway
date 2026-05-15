@@ -57,6 +57,10 @@ import { contractReadHandler, contractWriteHandler } from "./routes/contract.js"
 import { defiPositionsHandler } from "./routes/defi.js";
 // NEW: Solana Jupiter (Category 22)
 import { jupiterQuoteHandler, jupiterSwapTxHandler } from "./routes/jupiter.js";
+// NEW: Solana Helius DAS
+import { heliusAssetsByOwnerHandler, heliusAssetHandler } from "./routes/helius.js";
+// NEW: Solana Pyth price feeds
+import { pythPriceHandler, pythPricesHandler } from "./routes/pyth.js";
 import { resolveHandler } from "./routes/resolve.js";
 import { healthHandler, statsHandler } from "./routes/health.js";
 // NEW: Supply Chain Task Protocol (Category 18)
@@ -235,6 +239,116 @@ app.use(
           }),
         },
       },
+      "GET /api/v1/solana/helius/assets-by-owner": {
+  accepts: [
+    { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+    { scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO },
+  ],
+  description: "Helius DAS: list all assets (SPL tokens + NFTs) owned by a Solana wallet.",
+  mimeType: "application/json",
+  extensions: {
+    ...declareDiscoveryExtension({
+      input: { owner: "DemoWalletAddressHere11111111111111111111111", page: 1, limit: 100 },
+      inputSchema: {
+        properties: {
+          owner: { type: "string" },
+          page: { type: "number" },
+          limit: { type: "number" },
+          showFungible: { type: "boolean" },
+        },
+        required: ["owner"],
+      },
+      output: {
+        schema: {
+          properties: {
+            owner: { type: "string" },
+            total: { type: "number" },
+            page: { type: "number" },
+            items: { type: "array" },
+            nativeBalance: { type: "object" },
+          },
+        },
+      },
+    }),
+  },
+},
+"GET /api/v1/solana/helius/asset": {
+  accepts: [
+    { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+    { scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO },
+  ],
+  description: "Helius DAS: full metadata for a single Solana asset (SPL token or compressed NFT).",
+  mimeType: "application/json",
+  extensions: {
+    ...declareDiscoveryExtension({
+      inputSchema: {
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+      output: {
+        schema: {
+          properties: {
+            id: { type: "string" },
+            asset: { type: "object" },
+          },
+        },
+      },
+    }),
+  },
+},
+"GET /api/v1/solana/pyth/price": {
+  accepts: [
+    { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+    { scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO },
+  ],
+  description: "Pyth latest price for one feed (symbol alias or 64-char hex feed ID).",
+  mimeType: "application/json",
+  extensions: {
+    ...declareDiscoveryExtension({
+      input: { feedId: "SOL" },
+      inputSchema: {
+        properties: { feedId: { type: "string" } },
+        required: ["feedId"],
+      },
+      output: {
+        schema: {
+          properties: {
+            symbol: { type: "string" },
+            price: { type: "number" },
+            confidence: { type: "number" },
+            publishTime: { type: "number" },
+            emaPrice: { type: "number" },
+          },
+        },
+      },
+    }),
+  },
+},
+"GET /api/v1/solana/pyth/prices": {
+  accepts: [
+    { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+    { scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO },
+  ],
+  description: "Pyth batch latest prices (up to 50 feeds, comma-separated symbols or hex IDs).",
+  mimeType: "application/json",
+  extensions: {
+    ...declareDiscoveryExtension({
+      input: { feedIds: "SOL,BTC,ETH,USDC" },
+      inputSchema: {
+        properties: { feedIds: { type: "string" } },
+        required: ["feedIds"],
+      },
+      output: {
+        schema: {
+          properties: {
+            count: { type: "number" },
+            prices: { type: "object" },
+          },
+        },
+      },
+    }),
+  },
+},
       "GET /api/v1/oracle/prices": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Multi-token price feed.", mimeType: "application/json",
@@ -1595,6 +1709,12 @@ app.get("/api/v1/defi/positions", defiPositionsHandler);
 // Solana Jupiter (Category 22)
 app.get("/api/v1/solana/jupiter/quote", jupiterQuoteHandler);
 app.post("/api/v1/solana/jupiter/swap-tx", jupiterSwapTxHandler);
+// Solana Helius DAS
+app.get("/api/v1/solana/helius/assets-by-owner", heliusAssetsByOwnerHandler);
+app.get("/api/v1/solana/helius/asset", heliusAssetHandler);
+// Solana Pyth price feeds
+app.get("/api/v1/solana/pyth/price", pythPriceHandler);
+app.get("/api/v1/solana/pyth/prices", pythPricesHandler);
 // Bittensor Drop-in API (Category 19) — OpenAI-compatible
 app.get("/bittensor/v1/models", dropinModelsHandler);
 app.post("/bittensor/v1/chat/completions", dropinChatHandler);
@@ -1615,8 +1735,10 @@ app.listen(PORT, async () => {
   console.log(`💼 Portfolio + Contract + DeFi Positions endpoints active (Categories 20, 21)`);
   console.log(`💳 MPP: ${process.env.MPP_ENABLED === "true" ? "ACTIVE" : "disabled"}`);
   console.log(`☀️  Solana SVM: ${SOLANA_PAY_TO ? "ACTIVE (x402 + custom)" : "disabled"}`);
-  console.log(`☀️  Solana Jupiter endpoints active (Category 22) — quote + swap-tx${process.env.JUPITER_API_KEY ? " (paid tier)" : " (public tier)"}`);
-  console.log(`\n🌐 95 paid + 30+ free/discovery endpoints ready\n`);
+  console.log(`☀️  Solana Jupiter endpoints active — quote + swap-tx${process.env.JUPITER_API_KEY ? " (paid tier)" : " (public tier)"}`);
+  console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
+  console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
+  console.log(`\n🌐 99 paid endpoints live across 31 categories\n`);
 });
 
 export default app;
