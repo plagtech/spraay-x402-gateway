@@ -55,6 +55,8 @@ import { portfolioTokensHandler, portfolioNftsHandler } from "./routes/portfolio
 import { contractReadHandler, contractWriteHandler } from "./routes/contract.js";
 // NEW: DeFi Positions (extends DeFi category)
 import { defiPositionsHandler } from "./routes/defi.js";
+// NEW: Solana Jupiter (Category 22)
+import { jupiterQuoteHandler, jupiterSwapTxHandler } from "./routes/jupiter.js";
 import { resolveHandler } from "./routes/resolve.js";
 import { healthHandler, statsHandler } from "./routes/health.js";
 // NEW: Supply Chain Task Protocol (Category 18)
@@ -166,6 +168,72 @@ app.use(
         accepts: [{ scheme: "exact", price: "$0.015", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.015", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Execute swap via Uniswap V3.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { tokenIn: "USDC", tokenOut: "WETH", amountIn: "100", recipient: "0x..." }, inputSchema: { properties: { tokenIn: { type: "string" }, tokenOut: { type: "string" }, amountIn: { type: "string" }, recipient: { type: "string" } }, required: ["tokenIn", "tokenOut", "amountIn", "recipient"] }, bodyType: "json", output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/solana/jupiter/quote": {
+        accepts: [
+          { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+          { scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO },
+        ],
+        description: "Jupiter v6 swap quote on Solana — price, route, slippage. Solana-native.",
+        mimeType: "application/json",
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { inputMint: "USDC", outputMint: "SOL", amount: "1000000", slippageBps: 50 },
+            inputSchema: {
+              properties: {
+                inputMint: { type: "string" },
+                outputMint: { type: "string" },
+                amount: { type: "string" },
+                slippageBps: { type: "number" },
+              },
+              required: ["inputMint", "outputMint", "amount"],
+            },
+            output: {
+              schema: {
+                properties: {
+                  inputMint: { type: "string" },
+                  outputMint: { type: "string" },
+                  inAmount: { type: "string" },
+                  outAmount: { type: "string" },
+                  priceImpactPct: { type: "string" },
+                  slippageBps: { type: "number" },
+                  routeHops: { type: "number" },
+                },
+              },
+            },
+          }),
+        },
+      },
+      "POST /api/v1/solana/jupiter/swap-tx": {
+        accepts: [
+          { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+          { scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO },
+        ],
+        description: "Build unsigned Jupiter swap transaction on Solana. Client signs and submits.",
+        mimeType: "application/json",
+        extensions: {
+          ...declareDiscoveryExtension({
+            inputSchema: {
+              properties: {
+                quoteResponse: { type: "object" },
+                userPublicKey: { type: "string" },
+                wrapAndUnwrapSol: { type: "boolean" },
+                prioritizationFeeLamports: {},
+              },
+              required: ["quoteResponse", "userPublicKey"],
+            },
+            bodyType: "json",
+            output: {
+              schema: {
+                properties: {
+                  swapTransaction: { type: "string" },
+                  lastValidBlockHeight: { type: "number" },
+                  prioritizationFeeLamports: { type: "number" },
+                },
+              },
+            },
+          }),
+        },
       },
       "GET /api/v1/oracle/prices": {
         accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -1524,6 +1592,9 @@ app.post("/api/v1/contract/read", contractReadHandler);
 app.post("/api/v1/contract/write", contractWriteHandler);
 // DeFi Positions (extends DeFi category)
 app.get("/api/v1/defi/positions", defiPositionsHandler);
+// Solana Jupiter (Category 22)
+app.get("/api/v1/solana/jupiter/quote", jupiterQuoteHandler);
+app.post("/api/v1/solana/jupiter/swap-tx", jupiterSwapTxHandler);
 // Bittensor Drop-in API (Category 19) — OpenAI-compatible
 app.get("/bittensor/v1/models", dropinModelsHandler);
 app.post("/bittensor/v1/chat/completions", dropinChatHandler);
@@ -1533,7 +1604,7 @@ app.get("/bittensor/v1/health", dropinHealthHandler);
 
 app.listen(PORT, async () => {
   await initMpp();
-  console.log(`\n🥭 Spraay x402 Gateway v3.7.0 running on port ${PORT}`);
+  console.log(`\n💧 Spraay x402 Gateway v3.7.0 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🤖 RTP Robot Task Protocol endpoints active`);
@@ -1544,7 +1615,8 @@ app.listen(PORT, async () => {
   console.log(`💼 Portfolio + Contract + DeFi Positions endpoints active (Categories 20, 21)`);
   console.log(`💳 MPP: ${process.env.MPP_ENABLED === "true" ? "ACTIVE" : "disabled"}`);
   console.log(`☀️  Solana SVM: ${SOLANA_PAY_TO ? "ACTIVE (x402 + custom)" : "disabled"}`);
-  console.log(`\n🌐 93 paid + 30+ free/discovery endpoints ready\n`);
+  console.log(`☀️  Solana Jupiter endpoints active (Category 22) — quote + swap-tx${process.env.JUPITER_API_KEY ? " (paid tier)" : " (public tier)"}`);
+  console.log(`\n🌐 95 paid + 30+ free/discovery endpoints ready\n`);
 });
 
 export default app;
