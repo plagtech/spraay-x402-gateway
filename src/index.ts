@@ -1407,35 +1407,40 @@ Email: hello@spraay.app
 `;
   res.type("text/plain; charset=utf-8").send(body);
 });
-
-// OpenAPI 3.1 spec
+ 
+// OpenAPI 3.1 spec — x402 + MPP discovery compatible
 app.get("/openapi.json", (_req, res) => {
   const endpoints = [
-    { method: "post", path: "/api/v1/chat/completions", price: "$0.04", tag: "ai", desc: "OpenAI-compatible chat via 200+ models" },
-    { method: "post", path: "/bittensor/v1/chat/completions", price: "$0.03", tag: "ai", desc: "Bittensor SN64 inference" },
-    { method: "post", path: "/api/v1/batch/execute", price: "$0.02", tag: "payments", desc: "Batch USDC payments on Base" },
-    { method: "get", path: "/api/v1/oracle/prices", price: "$0.008", tag: "oracle", desc: "Multi-source price feed" },
-    { method: "get", path: "/api/v1/swap/quote", price: "$0.008", tag: "defi", desc: "Uniswap V3 / Aerodrome quote" },
-    { method: "post", path: "/api/v1/escrow/create", price: "$0.10", tag: "escrow", desc: "Create on-chain escrow" },
-    { method: "post", path: "/api/v1/invoice/create", price: "$0.05", tag: "invoicing", desc: "Generate x402 invoice" },
-    { method: "post", path: "/api/v1/payroll/execute", price: "$0.10", tag: "payroll", desc: "Crypto payroll run" },
-    { method: "post", path: "/api/v1/gpu/run", price: "$0.06", tag: "compute", desc: "GPU workload execution" },
-    { method: "post", path: "/api/v1/search/qna", price: "$0.03", tag: "search", desc: "Structured Q&A search" },
-    { method: "post", path: "/api/v1/robots/task", price: "$0.05", tag: "rtp", desc: "Dispatch robot task via RTP" },
-    { method: "post", path: "/api/v1/kyc/verify", price: "$0.02", tag: "identity", desc: "OFAC sanctions screening" },
-    { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", tag: "agent-wallet", desc: "Provision agent wallet" },
-    { method: "post", path: "/api/v1/sctp/pay", price: "$0.10", tag: "supply-chain", desc: "Execute supplier payment" },
+    { method: "post", path: "/api/v1/chat/completions", price: "$0.04", priceNum: "0.040000", tag: "ai", desc: "OpenAI-compatible chat via 200+ models" },
+    { method: "post", path: "/bittensor/v1/chat/completions", price: "$0.03", priceNum: "0.030000", tag: "ai", desc: "Bittensor SN64 inference" },
+    { method: "post", path: "/api/v1/batch/execute", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch USDC payments on Base" },
+    { method: "get", path: "/api/v1/oracle/prices", price: "$0.008", priceNum: "0.008000", tag: "oracle", desc: "Multi-source price feed" },
+    { method: "get", path: "/api/v1/swap/quote", price: "$0.008", priceNum: "0.008000", tag: "defi", desc: "Uniswap V3 / Aerodrome quote" },
+    { method: "post", path: "/api/v1/escrow/create", price: "$0.10", priceNum: "0.100000", tag: "escrow", desc: "Create on-chain escrow" },
+    { method: "post", path: "/api/v1/invoice/create", price: "$0.05", priceNum: "0.050000", tag: "invoicing", desc: "Generate x402 invoice" },
+    { method: "post", path: "/api/v1/payroll/execute", price: "$0.10", priceNum: "0.100000", tag: "payroll", desc: "Crypto payroll run" },
+    { method: "post", path: "/api/v1/gpu/run", price: "$0.06", priceNum: "0.060000", tag: "compute", desc: "GPU workload execution" },
+    { method: "post", path: "/api/v1/search/qna", price: "$0.03", priceNum: "0.030000", tag: "search", desc: "Structured Q&A search" },
+    { method: "post", path: "/api/v1/robots/task", price: "$0.05", priceNum: "0.050000", tag: "rtp", desc: "Dispatch robot task via RTP" },
+    { method: "post", path: "/api/v1/kyc/verify", price: "$0.02", priceNum: "0.020000", tag: "identity", desc: "OFAC sanctions screening" },
+    { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", priceNum: "0.050000", tag: "agent-wallet", desc: "Provision agent wallet" },
+    { method: "post", path: "/api/v1/sctp/pay", price: "$0.10", priceNum: "0.100000", tag: "supply-chain", desc: "Execute supplier payment" },
   ];
   const paths: Record<string, any> = {};
   for (const e of endpoints) {
     if (!paths[e.path]) paths[e.path] = {};
     const op: any = {
-      summary: e.desc,
+      operationId: e.path.replace(/^\/api\/v1\//, "").replace(/\//g, "-"),
+      summary: `${e.desc} — ${e.price}`,
       tags: [e.tag],
-      description: `Paid endpoint — ${e.price} per call via x402. See ${BASE_URL}/.well-known/x402.json for full payment details.`,
+      description: `Paid endpoint — ${e.price} per call via x402/MPP. See ${BASE_URL}/.well-known/x402.json for full payment details.`,
+      "x-payment-info": {
+        price: { mode: "fixed" as const, amount: e.priceNum, currency: "USD" },
+        protocols: [{ mpp: {} }, { x402: {} }],
+      },
       responses: {
         "200": { description: "Success", content: { "application/json": { schema: { type: "object" } } } },
-        "402": { description: "Payment Required — retry with x402 payment header", content: { "application/json": { schema: { type: "object", properties: { accepts: { type: "array" }, x402Version: { type: "number" } } } } } },
+        "402": { description: "Payment Required" },
       },
     };
     if (e.method === "post") {
@@ -1448,11 +1453,15 @@ app.get("/openapi.json", (_req, res) => {
     info: {
       title: "Spraay x402 Gateway",
       version: "3.7.0",
-      description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 on Base.",
+      description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
+      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
     },
     servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
+    "x-discovery": {
+      ownershipProofs: [],
+    },
     paths,
     components: {
       securitySchemes: {
@@ -1463,15 +1472,15 @@ app.get("/openapi.json", (_req, res) => {
     externalDocs: { description: "Full docs", url: "https://docs.spraay.app" },
   });
 });
-
+ 
 // robots.txt — explicit allow for AI crawlers
 app.get("/robots.txt", (_req, res) => {
   const body = `# Spraay x402 Gateway — robots.txt
 # AI crawlers and agent frameworks explicitly welcome.
-
+ 
 User-agent: *
 Allow: /
-
+ 
 User-agent: GPTBot
 Allow: /
 
