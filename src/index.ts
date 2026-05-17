@@ -107,14 +107,16 @@ const facilitatorClient = IS_MAINNET
   : new HTTPFacilitatorClient({ url: (FACILITATOR_URL || "https://x402.org/facilitator") as `${string}://${string}` });
 // DEBUG: Wrap facilitator to log CDP responses
 const origVerify = facilitatorClient.verify.bind(facilitatorClient);
-(facilitatorClient as any).verify = async function() {
-  const result = await origVerify.apply(this, arguments);
+// @ts-ignore
+facilitatorClient.verify = async (a: any, b: any) => {
+  const result = await origVerify(a, b);
   console.log("[BAZAAR DEBUG] verify result:", JSON.stringify(result).slice(0, 500));
   return result;
 };
 const origSettle = facilitatorClient.settle.bind(facilitatorClient);
-(facilitatorClient as any).settle = async function() {
-  const result = await origSettle.apply(this, arguments);
+// @ts-ignore
+facilitatorClient.settle = async (a: any, b: any) => {
+  const result = await origSettle(a, b);
   console.log("[BAZAAR DEBUG] settle result:", JSON.stringify(result).slice(0, 500));
   return result;
 };
