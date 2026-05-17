@@ -1411,26 +1411,146 @@ Email: hello@spraay.app
 // OpenAPI 3.1 spec — x402 + MPP discovery compatible
 app.get("/openapi.json", (_req, res) => {
   const endpoints = [
+    // ---- AI ----
     { method: "post", path: "/api/v1/chat/completions", price: "$0.04", priceNum: "0.040000", tag: "ai", desc: "OpenAI-compatible chat via 200+ models" },
-    { method: "post", path: "/bittensor/v1/chat/completions", price: "$0.03", priceNum: "0.030000", tag: "ai", desc: "Bittensor SN64 inference" },
+    { method: "get", path: "/api/v1/models", price: "$0.001", priceNum: "0.001000", tag: "ai", desc: "List AI models" },
+    // ---- PAYMENTS ----
     { method: "post", path: "/api/v1/batch/execute", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch USDC payments on Base" },
-    { method: "get", path: "/api/v1/oracle/prices", price: "$0.008", priceNum: "0.008000", tag: "oracle", desc: "Multi-source price feed" },
+    { method: "post", path: "/api/v1/batch/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate batch gas" },
+    { method: "post", path: "/api/v1/stellar/batch", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch XLM payments on Stellar" },
+    { method: "post", path: "/api/v1/stellar/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate Stellar batch cost" },
+    { method: "post", path: "/api/v1/xrp/batch", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch XRP payments on XRP Ledger" },
+    { method: "post", path: "/api/v1/xrp/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate XRP batch cost" },
+    { method: "get", path: "/api/v1/xrp/info", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "XRP Ledger fee and reserve info" },
+    // ---- DEFI / SWAP ----
     { method: "get", path: "/api/v1/swap/quote", price: "$0.008", priceNum: "0.008000", tag: "defi", desc: "Uniswap V3 / Aerodrome quote" },
-    { method: "post", path: "/api/v1/escrow/create", price: "$0.10", priceNum: "0.100000", tag: "escrow", desc: "Create on-chain escrow" },
-    { method: "post", path: "/api/v1/invoice/create", price: "$0.05", priceNum: "0.050000", tag: "invoicing", desc: "Generate x402 invoice" },
+    { method: "get", path: "/api/v1/swap/tokens", price: "$0.001", priceNum: "0.001000", tag: "defi", desc: "Supported swap tokens" },
+    { method: "post", path: "/api/v1/swap/execute", price: "$0.015", priceNum: "0.015000", tag: "defi", desc: "Execute swap via Uniswap V3" },
+    { method: "get", path: "/api/v1/defi/positions", price: "$0.02", priceNum: "0.020000", tag: "defi", desc: "DeFi positions across Aave V3, Compound V3, Aerodrome" },
+    // ---- SOLANA JUPITER ----
+    { method: "get", path: "/api/v1/solana/jupiter/quote", price: "$0.005", priceNum: "0.005000", tag: "solana", desc: "Jupiter v6 swap quote on Solana" },
+    { method: "post", path: "/api/v1/solana/jupiter/swap-tx", price: "$0.01", priceNum: "0.010000", tag: "solana", desc: "Build unsigned Jupiter swap transaction" },
+    // ---- SOLANA HELIUS DAS ----
+    { method: "get", path: "/api/v1/solana/helius/assets-by-owner", price: "$0.003", priceNum: "0.003000", tag: "solana", desc: "Helius DAS: list assets by Solana wallet" },
+    { method: "get", path: "/api/v1/solana/helius/asset", price: "$0.002", priceNum: "0.002000", tag: "solana", desc: "Helius DAS: full metadata for a Solana asset" },
+    // ---- SOLANA PYTH ----
+    { method: "get", path: "/api/v1/solana/pyth/price", price: "$0.005", priceNum: "0.005000", tag: "solana", desc: "Pyth latest price for one feed" },
+    { method: "get", path: "/api/v1/solana/pyth/prices", price: "$0.008", priceNum: "0.008000", tag: "solana", desc: "Pyth batch prices (up to 50 feeds)" },
+    // ---- ORACLE ----
+    { method: "get", path: "/api/v1/oracle/prices", price: "$0.008", priceNum: "0.008000", tag: "oracle", desc: "Multi-token price feed" },
+    { method: "get", path: "/api/v1/oracle/gas", price: "$0.005", priceNum: "0.005000", tag: "oracle", desc: "Gas prices on Base" },
+    { method: "get", path: "/api/v1/oracle/fx", price: "$0.008", priceNum: "0.008000", tag: "oracle", desc: "Stablecoin FX rates" },
+    // ---- BRIDGE ----
+    { method: "get", path: "/api/v1/bridge/quote", price: "$0.05", priceNum: "0.050000", tag: "bridge", desc: "Cross-chain bridge quote" },
+    { method: "get", path: "/api/v1/bridge/chains", price: "$0.002", priceNum: "0.002000", tag: "bridge", desc: "Supported bridge chains" },
+    // ---- PAYROLL ----
     { method: "post", path: "/api/v1/payroll/execute", price: "$0.10", priceNum: "0.100000", tag: "payroll", desc: "Crypto payroll run" },
-    { method: "post", path: "/api/v1/gpu/run", price: "$0.06", priceNum: "0.060000", tag: "compute", desc: "GPU workload execution" },
-    { method: "post", path: "/api/v1/search/qna", price: "$0.03", priceNum: "0.030000", tag: "search", desc: "Structured Q&A search" },
-    { method: "post", path: "/api/v1/robots/task", price: "$0.05", priceNum: "0.050000", tag: "rtp", desc: "Dispatch robot task via RTP" },
+    { method: "post", path: "/api/v1/payroll/estimate", price: "$0.003", priceNum: "0.003000", tag: "payroll", desc: "Estimate payroll costs" },
+    { method: "get", path: "/api/v1/payroll/tokens", price: "$0.002", priceNum: "0.002000", tag: "payroll", desc: "Payroll stablecoins" },
+    // ---- INVOICING ----
+    { method: "post", path: "/api/v1/invoice/create", price: "$0.05", priceNum: "0.050000", tag: "invoicing", desc: "Create invoice with payment tx" },
+    { method: "get", path: "/api/v1/invoice/list", price: "$0.01", priceNum: "0.010000", tag: "invoicing", desc: "List invoices by address" },
+    { method: "get", path: "/api/v1/invoice/:id", price: "$0.01", priceNum: "0.010000", tag: "invoicing", desc: "Invoice lookup" },
+    // ---- ANALYTICS ----
+    { method: "get", path: "/api/v1/analytics/wallet", price: "$0.01", priceNum: "0.010000", tag: "analytics", desc: "Wallet profile" },
+    { method: "get", path: "/api/v1/analytics/txhistory", price: "$0.008", priceNum: "0.008000", tag: "analytics", desc: "Transaction history" },
+    // ---- ESCROW ----
+    { method: "post", path: "/api/v1/escrow/create", price: "$0.10", priceNum: "0.100000", tag: "escrow", desc: "Create conditional escrow" },
+    { method: "get", path: "/api/v1/escrow/list", price: "$0.02", priceNum: "0.020000", tag: "escrow", desc: "List escrows by address" },
+    { method: "get", path: "/api/v1/escrow/:id", price: "$0.005", priceNum: "0.005000", tag: "escrow", desc: "Escrow status" },
+    { method: "post", path: "/api/v1/escrow/fund", price: "$0.02", priceNum: "0.020000", tag: "escrow", desc: "Mark escrow as funded" },
+    { method: "post", path: "/api/v1/escrow/release", price: "$0.08", priceNum: "0.080000", tag: "escrow", desc: "Release escrow funds" },
+    { method: "post", path: "/api/v1/escrow/cancel", price: "$0.02", priceNum: "0.020000", tag: "escrow", desc: "Cancel escrow" },
+    // ---- INFERENCE ----
+    { method: "post", path: "/api/v1/inference/classify-address", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI wallet classification with risk scoring" },
+    { method: "post", path: "/api/v1/inference/classify-tx", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI transaction classification" },
+    { method: "post", path: "/api/v1/inference/explain-contract", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI smart contract analysis" },
+    { method: "post", path: "/api/v1/inference/summarize", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI intelligence briefing for address or tx" },
+    // ---- COMMUNICATION ----
+    { method: "post", path: "/api/v1/notify/email", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Send email notification" },
+    { method: "post", path: "/api/v1/notify/sms", price: "$0.02", priceNum: "0.020000", tag: "communication", desc: "Send SMS notification" },
+    { method: "get", path: "/api/v1/notify/status", price: "$0.002", priceNum: "0.002000", tag: "communication", desc: "Check notification delivery status" },
+    { method: "post", path: "/api/v1/webhook/register", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Register webhook for events" },
+    { method: "post", path: "/api/v1/webhook/test", price: "$0.005", priceNum: "0.005000", tag: "communication", desc: "Send test event to webhook" },
+    { method: "get", path: "/api/v1/webhook/list", price: "$0.002", priceNum: "0.002000", tag: "communication", desc: "List registered webhooks" },
+    { method: "post", path: "/api/v1/webhook/delete", price: "$0.002", priceNum: "0.002000", tag: "communication", desc: "Delete a webhook" },
+    { method: "post", path: "/api/v1/xmtp/send", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Send encrypted XMTP message" },
+    { method: "get", path: "/api/v1/xmtp/inbox", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Read XMTP inbox" },
+    // ---- INFRASTRUCTURE ----
+    { method: "post", path: "/api/v1/rpc/call", price: "$0.001", priceNum: "0.001000", tag: "infrastructure", desc: "Premium multi-chain RPC call" },
+    { method: "get", path: "/api/v1/rpc/chains", price: "$0.001", priceNum: "0.001000", tag: "infrastructure", desc: "List supported RPC chains" },
+    { method: "post", path: "/api/v1/storage/pin", price: "$0.01", priceNum: "0.010000", tag: "infrastructure", desc: "Pin content to IPFS or Arweave" },
+    { method: "get", path: "/api/v1/storage/get", price: "$0.005", priceNum: "0.005000", tag: "infrastructure", desc: "Retrieve pinned content by CID" },
+    { method: "get", path: "/api/v1/storage/status", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Check pin status" },
+    { method: "post", path: "/api/v1/cron/create", price: "$0.01", priceNum: "0.010000", tag: "infrastructure", desc: "Create scheduled job" },
+    { method: "get", path: "/api/v1/cron/list", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "List scheduled jobs" },
+    { method: "post", path: "/api/v1/cron/cancel", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Cancel a scheduled job" },
+    { method: "post", path: "/api/v1/logs/ingest", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Ingest structured logs" },
+    { method: "get", path: "/api/v1/logs/query", price: "$0.005", priceNum: "0.005000", tag: "infrastructure", desc: "Query structured logs" },
+    // ---- IDENTITY & ACCESS ----
     { method: "post", path: "/api/v1/kyc/verify", price: "$0.02", priceNum: "0.020000", tag: "identity", desc: "OFAC sanctions screening" },
-    { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", priceNum: "0.050000", tag: "agent-wallet", desc: "Provision agent wallet" },
+    { method: "get", path: "/api/v1/kyc/status", price: "$0.01", priceNum: "0.010000", tag: "identity", desc: "Check KYC verification status" },
+    { method: "post", path: "/api/v1/auth/session", price: "$0.01", priceNum: "0.010000", tag: "identity", desc: "Create authenticated session" },
+    { method: "get", path: "/api/v1/auth/verify", price: "$0.005", priceNum: "0.005000", tag: "identity", desc: "Verify session token" },
+    // ---- COMPLIANCE ----
+    { method: "post", path: "/api/v1/audit/log", price: "$0.005", priceNum: "0.005000", tag: "compliance", desc: "Record audit trail entry" },
+    { method: "get", path: "/api/v1/audit/query", price: "$0.03", priceNum: "0.030000", tag: "compliance", desc: "Query audit trail" },
+    { method: "post", path: "/api/v1/tax/calculate", price: "$0.08", priceNum: "0.080000", tag: "compliance", desc: "Calculate crypto tax gain/loss (FIFO)" },
+    { method: "get", path: "/api/v1/tax/report", price: "$0.05", priceNum: "0.050000", tag: "compliance", desc: "Tax report with IRS 8949-compatible data" },
+    // ---- GPU / COMPUTE ----
+    { method: "post", path: "/api/v1/gpu/run", price: "$0.06", priceNum: "0.060000", tag: "compute", desc: "GPU workload execution via Replicate" },
+    { method: "get", path: "/api/v1/gpu/status/:id", price: "$0.005", priceNum: "0.005000", tag: "compute", desc: "Check GPU prediction status" },
+    // ---- SEARCH / RAG ----
+    { method: "post", path: "/api/v1/search/web", price: "$0.02", priceNum: "0.020000", tag: "search", desc: "Web search with LLM-ready results" },
+    { method: "post", path: "/api/v1/search/extract", price: "$0.02", priceNum: "0.020000", tag: "search", desc: "Extract clean content from URLs for RAG" },
+    { method: "post", path: "/api/v1/search/qna", price: "$0.03", priceNum: "0.030000", tag: "search", desc: "Direct Q&A with web sources" },
+    // ---- DATA ----
+    { method: "get", path: "/api/v1/prices", price: "$0.005", priceNum: "0.005000", tag: "data", desc: "Live token prices" },
+    { method: "get", path: "/api/v1/balances", price: "$0.005", priceNum: "0.005000", tag: "data", desc: "Token balances" },
+    { method: "get", path: "/api/v1/resolve", price: "$0.002", priceNum: "0.002000", tag: "data", desc: "ENS/Basename resolution" },
+    // ---- WALLET PROVISIONING ----
+    { method: "get", path: "/api/v1/wallet/list", price: "$0.002", priceNum: "0.002000", tag: "wallet", desc: "List agent wallets" },
+    { method: "get", path: "/api/v1/wallet/:walletId", price: "$0.001", priceNum: "0.001000", tag: "wallet", desc: "Get agent wallet details" },
+    { method: "get", path: "/api/v1/wallet/:walletId/addresses", price: "$0.001", priceNum: "0.001000", tag: "wallet", desc: "Get chain-specific addresses" },
+    { method: "post", path: "/api/v1/wallet/sign-message", price: "$0.005", priceNum: "0.005000", tag: "wallet", desc: "Sign message with agent wallet" },
+    { method: "post", path: "/api/v1/wallet/send-transaction", price: "$0.02", priceNum: "0.020000", tag: "wallet", desc: "Sign and broadcast transaction" },
+    // ---- ROBOTICS / RTP ----
+    { method: "post", path: "/api/v1/robots/task", price: "$0.05", priceNum: "0.050000", tag: "rtp", desc: "Dispatch robot task via RTP" },
+    { method: "get", path: "/api/v1/robots/list", price: "$0.005", priceNum: "0.005000", tag: "rtp", desc: "Discover RTP robots" },
+    { method: "get", path: "/api/v1/robots/status", price: "$0.002", priceNum: "0.002000", tag: "rtp", desc: "Poll RTP task status" },
+    { method: "get", path: "/api/v1/robots/profile", price: "$0.002", priceNum: "0.002000", tag: "rtp", desc: "Full RTP robot profile" },
+    // ---- AGENT WALLET ----
+    { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", priceNum: "0.050000", tag: "agent-wallet", desc: "Provision agent wallet on Base" },
+    { method: "post", path: "/api/v1/agent-wallet/session-key", price: "$0.02", priceNum: "0.020000", tag: "agent-wallet", desc: "Add session key with spending limits" },
+    { method: "get", path: "/api/v1/agent-wallet/info", price: "$0.005", priceNum: "0.005000", tag: "agent-wallet", desc: "Get agent wallet info" },
+    { method: "post", path: "/api/v1/agent-wallet/revoke-key", price: "$0.02", priceNum: "0.020000", tag: "agent-wallet", desc: "Revoke a session key" },
+    { method: "get", path: "/api/v1/agent-wallet/predict", price: "$0.001", priceNum: "0.001000", tag: "agent-wallet", desc: "Predict agent wallet address" },
+    // ---- BITTENSOR DROP-IN (Category 19) ----
+    { method: "get", path: "/bittensor/v1/models", price: "$0.001", priceNum: "0.001000", tag: "bittensor", desc: "List Bittensor AI models" },
+    { method: "post", path: "/bittensor/v1/chat/completions", price: "$0.03", priceNum: "0.030000", tag: "bittensor", desc: "Bittensor decentralized AI chat" },
+    { method: "post", path: "/bittensor/v1/images/generations", price: "$0.05", priceNum: "0.050000", tag: "bittensor", desc: "Bittensor image generation" },
+    { method: "post", path: "/bittensor/v1/embeddings", price: "$0.005", priceNum: "0.005000", tag: "bittensor", desc: "Bittensor text embeddings" },
+    // ---- SCTP / SUPPLY CHAIN (Category 18) ----
+    { method: "post", path: "/api/v1/sctp/supplier", price: "$0.02", priceNum: "0.020000", tag: "supply-chain", desc: "Register supplier in SCTP" },
+    { method: "get", path: "/api/v1/sctp/supplier/:id", price: "$0.005", priceNum: "0.005000", tag: "supply-chain", desc: "Get supplier details" },
+    { method: "post", path: "/api/v1/sctp/po", price: "$0.02", priceNum: "0.020000", tag: "supply-chain", desc: "Create purchase order" },
+    { method: "get", path: "/api/v1/sctp/po/:id", price: "$0.005", priceNum: "0.005000", tag: "supply-chain", desc: "Get purchase order details" },
+    { method: "post", path: "/api/v1/sctp/invoice", price: "$0.02", priceNum: "0.020000", tag: "supply-chain", desc: "Submit invoice for purchase order" },
+    { method: "get", path: "/api/v1/sctp/invoice/:id", price: "$0.005", priceNum: "0.005000", tag: "supply-chain", desc: "Get invoice details" },
+    { method: "post", path: "/api/v1/sctp/invoice/verify", price: "$0.03", priceNum: "0.030000", tag: "supply-chain", desc: "AI-verify invoice against purchase order" },
     { method: "post", path: "/api/v1/sctp/pay", price: "$0.10", priceNum: "0.100000", tag: "supply-chain", desc: "Execute supplier payment" },
+    // ---- PORTFOLIO (Category 20) ----
+    { method: "get", path: "/api/v1/portfolio/tokens", price: "$0.008", priceNum: "0.008000", tag: "portfolio", desc: "Multi-chain token portfolio with USD values" },
+    { method: "get", path: "/api/v1/portfolio/nfts", price: "$0.01", priceNum: "0.010000", tag: "portfolio", desc: "Multi-chain NFT holdings with metadata" },
+    // ---- CONTRACT (Category 21) ----
+    { method: "post", path: "/api/v1/contract/read", price: "$0.002", priceNum: "0.002000", tag: "contract", desc: "Call any view/pure function on any EVM contract" },
+    { method: "post", path: "/api/v1/contract/write", price: "$0.015", priceNum: "0.015000", tag: "contract", desc: "Encode and broadcast transaction via agent wallet" },
   ];
   const paths: Record<string, any> = {};
   for (const e of endpoints) {
     if (!paths[e.path]) paths[e.path] = {};
     const op: any = {
-      operationId: e.path.replace(/^\/api\/v1\//, "").replace(/\//g, "-"),
+      operationId: e.path.replace(/^\/api\/v1\//, "").replace(/^\//, "").replace(/\//g, "-").replace(/:/g, ""),
       summary: `${e.desc} — ${e.price}`,
       tags: [e.tag],
       description: `Paid endpoint — ${e.price} per call via x402/MPP. See ${BASE_URL}/.well-known/x402.json for full payment details.`,
@@ -1456,7 +1576,7 @@ app.get("/openapi.json", (_req, res) => {
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
-      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
+      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 99+ paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
     },
     servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
     "x-discovery": {
