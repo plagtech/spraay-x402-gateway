@@ -105,6 +105,19 @@ const SOLANA_PAY_TO = process.env.SOLANA_RECEIVE_ADDRESS || "";
 const facilitatorClient = IS_MAINNET
   ? new HTTPFacilitatorClient(coinbaseFacilitator)
   : new HTTPFacilitatorClient({ url: (FACILITATOR_URL || "https://x402.org/facilitator") as `${string}://${string}` });
+// DEBUG: Wrap facilitator to log CDP responses
+const origVerify = facilitatorClient.verify.bind(facilitatorClient);
+facilitatorClient.verify = async (...args: any[]) => {
+  const result = await origVerify(...args);
+  console.log("[BAZAAR DEBUG] verify result:", JSON.stringify(result).slice(0, 500));
+  return result;
+};
+const origSettle = facilitatorClient.settle.bind(facilitatorClient);
+facilitatorClient.settle = async (...args: any[]) => {
+  const result = await origSettle(...args);
+  console.log("[BAZAAR DEBUG] settle result:", JSON.stringify(result).slice(0, 500));
+  return result;
+};
 
 const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK, new ExactEvmScheme());
 server.register(SOLANA_NETWORK, new ExactSvmScheme());
