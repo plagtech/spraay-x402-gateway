@@ -1509,6 +1509,7 @@ Sitemap: ${BASE_URL}/openapi.json
 `;
   res.type("text/plain; charset=utf-8").send(body);
 });
+app.get("/favicon.ico", (_req, res) => res.redirect(301, "https://spraay.app/spraay-logo-200x200.jpg"));
 
 // ============================================
 // PHANTOM ENDPOINT FIXES
