@@ -102,7 +102,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
 
 export interface EmbeddingsRequest {
   model: ModelDef;
-  input: string | string[];
+  input: string;
 }
 
 export interface EmbeddingsResponse {
