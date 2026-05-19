@@ -257,7 +257,7 @@ interface BatchJob {
   // stt
   audio_url?: string;
   // embeddings
-  input?: string | string[];
+  input?: string;
 }
 
 export async function computeBatchHandler(req: Request, res: Response) {
@@ -317,8 +317,7 @@ export async function computeBatchHandler(req: Request, res: Response) {
               return { job_index: index, type: job.type, status: r.status, result: r };
             }
             case "embeddings": {
-              const embInput: string = typeof job.input === "string" ? job.input : Array.isArray(job.input) ? job.input[0] || "" : "";
-              const r = await generateEmbeddings({ model, input: embInput });
+              const r = await generateEmbeddings({ model, input: job.input || "" });
               return { job_index: index, type: job.type, status: "completed", result: r };
             }
             default:
