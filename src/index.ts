@@ -1250,11 +1250,39 @@ app.get("/", (_req, res) => {
         "POST /bittensor/v1/chat/completions": "$0.03 - Bittensor inference",
         "POST /bittensor/v1/images/generations": "$0.05 - Bittensor image gen",
         "POST /bittensor/v1/embeddings": "$0.005 - Bittensor embeddings",
+        // Compute Services
+      "POST /api/v1/compute/text-inference": "$0.003-$0.10 - LLM text inference (11 models)",
+      "POST /api/v1/compute/image-generation": "$0.02-$0.08 - AI image generation (FLUX, SDXL)",
+      "POST /api/v1/compute/video-generation": "$0.40-$0.50 - AI video generation",
+      "POST /api/v1/compute/text-to-speech": "$0.03-$0.05 - Text to speech (TTS)",
+      "POST /api/v1/compute/speech-to-text": "$0.02 - Speech to text (STT)",
+      "POST /api/v1/compute/embeddings": "$0.005 - Text embeddings (RAG)",
+      "POST /api/v1/compute/batch": "$0.05 - Batch compute (up to 50 jobs, 10% discount)",
+      "GET /api/v1/compute/status/:jobId": "$0.001 - Poll job status",
+      // Solana
+      "GET /api/v1/solana/jupiter/quote": "$0.005 - Jupiter swap quote",
+      "POST /api/v1/solana/jupiter/swap-tx": "$0.01 - Jupiter swap transaction",
+      "GET /api/v1/solana/helius/assets-by-owner": "$0.003 - Helius DAS assets",
+      "GET /api/v1/solana/helius/asset": "$0.002 - Helius DAS single asset",
+      "GET /api/v1/solana/pyth/price": "$0.005 - Pyth price feed",
+      "GET /api/v1/solana/pyth/prices": "$0.008 - Pyth batch prices",
+      // Portfolio & Contract
+      "GET /api/v1/portfolio/tokens": "$0.005 - Portfolio tokens",
+      "GET /api/v1/portfolio/nfts": "$0.005 - Portfolio NFTs",
+      "POST /api/v1/contract/read": "$0.002 - Read contract",
+      "POST /api/v1/contract/write": "$0.01 - Write contract",
+      "GET /api/v1/defi/positions": "$0.008 - DeFi positions",
+      // XRP & Stellar
+      "POST /api/v1/xrp/batch": "$0.02 - XRP batch payments",
+      "POST /api/v1/xrp/estimate": "$0.001 - XRP batch estimate",
+      "GET /api/v1/xrp/info": "$0.001 - XRP Ledger info",
+      "POST /api/v1/stellar/batch": "$0.02 - Stellar batch payments",
+      "POST /api/v1/stellar/estimate": "$0.001 - Stellar batch estimate",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 93,
+    totalEndpoints: 109,
     protocols: {
       x402: {
         status: "active",
@@ -1312,7 +1340,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
   res.json({
     mppVersion: "1.0",
     name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 93+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    description: "Universal agent payment gateway — 109+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
     homepage: BASE_URL,
     status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
     paymentMethods: {
@@ -1324,7 +1352,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
       },
     },
     endpoints: {
-      total: 93,
+      total: 109,
       docs: `${BASE_URL}/.well-known/x402.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
@@ -1350,7 +1378,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
     description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 93+ paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
-    version: "3.7.0",
+    version: "3.8.0",
     documentationUrl: "https://docs.spraay.app",
     capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
     authentication: {
@@ -1382,7 +1410,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
     },
-    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    _gateway: { provider: "spraay-x402", version: "3.8.0" },
   });
 };
 app.get("/.well-known/agent.json", agentCardResponse);
@@ -1416,7 +1444,7 @@ solanaPayment: {
   txHeader: "X-Solana-Tx",
   discovery: `${BASE_URL}/.well-known/solana.json`,
 },
-_gateway: { provider: "spraay", version: "3.7.0", protocols: ["x402", "mpp", "solana-usdc"] },
+_gateway: { provider: "spraay", version: "3.8.0", protocols: ["x402", "mpp", "solana-usdc"] },
   });
 });
 
@@ -1878,7 +1906,7 @@ app.get("/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "Spraay x402 Gateway",
-      version: "3.7.0",
+      version: "3.8.0",
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
@@ -1949,7 +1977,7 @@ app.post("/api/v1/ai/chat", (_req, res) => res.redirect(308, "/api/v1/chat/compl
 app.get("/api/v1/analytics", (_req, res) => {
   res.json({
     gateway: "spraay-x402",
-    version: "3.7.0",
+    version: "3.8.0",
     network: CAIP2_NETWORK,
     status: "operational",
     paidEndpoints: {
@@ -1961,7 +1989,7 @@ app.get("/api/v1/analytics", (_req, res) => {
       openapi: `${BASE_URL}/openapi.json`,
     },
     note: "This is a public overview. For per-wallet analytics, use the paid endpoints above.",
-    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    _gateway: { provider: "spraay-x402", version: "3.8.0" },
     timestamp: new Date().toISOString(),
   });
 });
@@ -1977,7 +2005,7 @@ app.post("/api/v1/notify/send", (_req, res) => {
         { method: "POST", path: "/api/v1/notify/email", price: "$0.01", description: "Send transactional email" },
         { method: "POST", path: "/api/v1/notify/sms", price: "$0.02", description: "Send SMS" },
       ],
-      _gateway: { provider: "spraay-x402", version: "3.7.0" },
+      _gateway: { provider: "spraay-x402", version: "3.8.0" },
     });
 });
 
@@ -1992,7 +2020,7 @@ app.post("/api/v1/rpc", (_req, res) => {
         { method: "POST", path: "/api/v1/rpc/call", price: "$0.001", description: "JSON-RPC call to any supported chain" },
         { method: "GET", path: "/api/v1/rpc/chains", price: "$0.001", description: "List supported RPC chains" },
       ],
-      _gateway: { provider: "spraay-x402", version: "3.7.0" },
+      _gateway: { provider: "spraay-x402", version: "3.8.0" },
     });
 });
 
@@ -2007,7 +2035,7 @@ app.post("/api/v1/bridge/transfer", (_req, res) => {
       { method: "GET", path: "/api/v1/bridge/chains", price: "$0.002", description: "List supported bridge chains" },
     ],
     manifest: `${BASE_URL}/.well-known/x402.json`,
-    _gateway: { provider: "spraay-x402", version: "3.7.0" },
+    _gateway: { provider: "spraay-x402", version: "3.8.0" },
     timestamp: new Date().toISOString(),
   });
 });
