@@ -257,7 +257,7 @@ interface BatchJob {
   // stt
   audio_url?: string;
   // embeddings
-  input?: string | string[];
+  input?: string;
 }
 
 export async function computeBatchHandler(req: Request, res: Response) {
