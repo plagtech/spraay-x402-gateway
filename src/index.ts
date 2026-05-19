@@ -67,6 +67,12 @@ import { healthHandler, statsHandler } from "./routes/health.js";
 import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
 // NEW: Bittensor Drop-in API (Category 19)
 import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
+// NEW: Compute Services
+import {
+  textInferenceHandler, imageGenerationHandler, videoGenerationHandler,
+  textToSpeechHandler, speechToTextHandler, embeddingsHandler,
+  computeBatchHandler, computeStatusHandler, computeModelsHandler, computeEstimateHandler,
+} from "./routes/compute.js";
 import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
 import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
@@ -751,6 +757,55 @@ app.use(
         description: "Text embeddings via Bittensor. OpenAI /v1/embeddings compatible. Use for RAG, semantic search, similarity.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { model: "BAAI/bge-large-en-v1.5", input: "Decentralized AI" }, inputSchema: { properties: { model: { type: "string" }, input: { type: "string" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { object: "list", data: [{ embedding: [0.0023] }] }, schema: { properties: { data: { type: "array" } } } } }) },
       },
+      // ---- COMPUTE SERVICES ----
+      "POST /api/v1/compute/text-inference": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "LLM chat completion and text generation. 11 models from 3B to 405B parameters. Providers: Chutes AI (Bittensor SN64), OpenRouter. Pay per request, pick your model or use auto.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { messages: [{ role: "user", content: "Classify this wallet address" }], model: "auto" }, inputSchema: { properties: { messages: { type: "array" }, model: { type: "string" }, max_tokens: { type: "number" }, temperature: { type: "number" } }, required: ["messages"] }, bodyType: "json", output: { example: { provider: "chutes", model: "meta-llama/Llama-3.3-70B-Instruct", choices: [{ message: { content: "..." } }], usage: { total_tokens: 150 }, price_usdc: "0.030" }, schema: { properties: { provider: { type: "string" }, model: { type: "string" }, choices: { type: "array" }, usage: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/compute/image-generation": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "AI image generation from text prompts. FLUX Schnell, FLUX Dev, FLUX Pro, Stable Diffusion XL via Replicate. Text to image.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { prompt: "A futuristic city powered by decentralized compute", model: "auto", width: 1024, height: 1024 }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, width: { type: "number" }, height: { type: "number" }, num_outputs: { type: "number" } }, required: ["prompt"] }, bodyType: "json", output: { example: { provider: "replicate", model: "black-forest-labs/flux-schnell", images: [{ url: "https://...", width: 1024, height: 1024 }], price_usdc: "0.030" }, schema: { properties: { images: { type: "array" }, status: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/compute/video-generation": {
+        accepts: [{ scheme: "exact", price: "$0.50", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.50", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "AI video generation from text prompts. MiniMax Video 01, Wan 2.1 via Replicate. Text to video. Async — poll /compute/status for results.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { prompt: "A drone flyover of a mountain range at golden hour", model: "auto", duration_seconds: 4 }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, duration_seconds: { type: "number" } }, required: ["prompt"] }, bodyType: "json", output: { example: { status: "processing", prediction_id: "abc123", poll_url: "/api/v1/compute/status/abc123", price_usdc: "0.500" }, schema: { properties: { status: { type: "string" }, video_url: { type: "string" }, prediction_id: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/compute/text-to-speech": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Text to speech (TTS) and AI music generation. XTTS V2 for natural voice synthesis with cloning, MusicGen for music from text. Voice generation.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { text: "Welcome to Spraay compute services.", model: "auto", language: "en" }, inputSchema: { properties: { text: { type: "string" }, model: { type: "string" }, language: { type: "string" } }, required: ["text"] }, bodyType: "json", output: { example: { status: "completed", audio_url: "https://...", price_usdc: "0.030" }, schema: { properties: { status: { type: "string" }, audio_url: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/compute/speech-to-text": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Speech to text (STT) transcription. Whisper Large V3 via Replicate. Audio transcription, speech recognition. 100+ languages.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { audio_url: "https://example.com/audio.mp3", model: "auto" }, inputSchema: { properties: { audio_url: { type: "string" }, model: { type: "string" } }, required: ["audio_url"] }, bodyType: "json", output: { example: { status: "completed", transcription: "Hello world...", price_usdc: "0.020" }, schema: { properties: { status: { type: "string" }, transcription: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/compute/embeddings": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Text embeddings for RAG, semantic search, and similarity. Vector embeddings via Chutes AI (Bittensor). BGE Large v1.5.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { input: "Decentralized AI compute marketplace", model: "auto" }, inputSchema: { properties: { input: { type: "string" }, model: { type: "string" } }, required: ["input"] }, bodyType: "json", output: { example: { data: [{ embedding: [0.0023], index: 0 }], usage: { total_tokens: 5 }, price_usdc: "0.005" }, schema: { properties: { data: { type: "array" }, usage: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/compute/batch": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Batch compute — submit up to 50 jobs in a single x402 payment. 10% batch discount. Mix any compute types: text inference, image generation, TTS, STT, embeddings, video.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { jobs: [{ type: "text-inference", messages: [{ role: "user", content: "Classify 0x..." }] }, { type: "image-generation", prompt: "Company logo" }] }, inputSchema: { properties: { jobs: { type: "array" } }, required: ["jobs"] }, bodyType: "json", output: { example: { batch_id: "batch_abc123", jobs_submitted: 2, total_cost_usdc: "0.054", results: [] }, schema: { properties: { batch_id: { type: "string" }, total_cost_usdc: { type: "string" }, results: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/compute/status/:jobId": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Poll async compute job status. For video generation and batch items that are still processing.",
+        mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { jobId: "abc123" }, inputSchema: { properties: { jobId: { type: "string" } }, required: ["jobId"] }, output: { example: { prediction_id: "abc123", status: "succeeded", output: [] }, schema: { properties: { prediction_id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
       // ---- CATEGORY 18: SCTP (Supply Chain Task Protocol) ----
       "POST /api/v1/sctp/supplier": {
         accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -934,6 +989,17 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/bittensor/v1/chat/completions`, method: "POST", price: "$0.03", category: "bittensor", bittensor: { openaiCompat: true, description: "Chat completions via Bittensor SN64" } },
       { resource: `${BASE_URL}/bittensor/v1/images/generations`, method: "POST", price: "$0.05", category: "bittensor", bittensor: { openaiCompat: true, description: "Image generation via Bittensor SN19" } },
       { resource: `${BASE_URL}/bittensor/v1/embeddings`, method: "POST", price: "$0.005", category: "bittensor", bittensor: { openaiCompat: true, description: "Text embeddings via Bittensor" } },
+      // Compute Services
+      { resource: `${BASE_URL}/api/v1/compute/text-inference`, method: "POST", price: "$0.003-$0.10", category: "compute", compute: { type: "text-inference", searchTerms: ["LLM", "chat completion", "text generation"], models: 11, providers: ["chutes", "openrouter"] } },
+      { resource: `${BASE_URL}/api/v1/compute/image-generation`, method: "POST", price: "$0.02-$0.08", category: "compute", compute: { type: "image-generation", searchTerms: ["text to image", "AI image generation", "FLUX"], models: 4, providers: ["replicate"] } },
+      { resource: `${BASE_URL}/api/v1/compute/video-generation`, method: "POST", price: "$0.40-$0.50", category: "compute", compute: { type: "video-generation", searchTerms: ["text to video", "AI video generation"], models: 2, providers: ["replicate"] } },
+      { resource: `${BASE_URL}/api/v1/compute/text-to-speech`, method: "POST", price: "$0.03-$0.05", category: "compute", compute: { type: "text-to-speech", searchTerms: ["TTS", "voice synthesis", "text to speech"], models: 2, providers: ["replicate"] } },
+      { resource: `${BASE_URL}/api/v1/compute/speech-to-text`, method: "POST", price: "$0.02", category: "compute", compute: { type: "speech-to-text", searchTerms: ["STT", "transcription", "speech recognition", "whisper"], models: 1, providers: ["replicate"] } },
+      { resource: `${BASE_URL}/api/v1/compute/embeddings`, method: "POST", price: "$0.005", category: "compute", compute: { type: "embeddings", searchTerms: ["text embeddings", "vector embeddings", "RAG", "semantic search"], models: 1, providers: ["chutes"] } },
+      { resource: `${BASE_URL}/api/v1/compute/batch`, method: "POST", price: "varies", category: "compute", compute: { type: "batch", searchTerms: ["batch inference", "bulk compute"], maxJobs: 50, discount: "10%" } },
+      { resource: `${BASE_URL}/api/v1/compute/status/:jobId`, method: "GET", price: "$0.001", category: "compute" },
+      { resource: `${BASE_URL}/api/v1/compute/models`, method: "GET", price: "free", category: "compute", compute: { description: "List all available compute models with pricing" } },
+      { resource: `${BASE_URL}/api/v1/compute/estimate`, method: "POST", price: "free", category: "compute", compute: { description: "Price estimation before committing" } },
       // XRP Ledger (Chain #15)
       { resource: `${BASE_URL}/api/v1/xrp/batch`, method: "POST", price: "$0.02", category: "payments", chain: "xrp-ledger" },
       { resource: `${BASE_URL}/api/v1/xrp/estimate`, method: "POST", price: "$0.001", category: "payments", chain: "xrp-ledger" },
@@ -2091,6 +2157,17 @@ app.post("/bittensor/v1/chat/completions", dropinChatHandler);
 app.post("/bittensor/v1/images/generations", dropinImageHandler);
 app.post("/bittensor/v1/embeddings", dropinEmbeddingsHandler);
 app.get("/bittensor/v1/health", dropinHealthHandler);
+// Compute Services
+app.post("/api/v1/compute/text-inference", textInferenceHandler);
+app.post("/api/v1/compute/image-generation", imageGenerationHandler);
+app.post("/api/v1/compute/video-generation", videoGenerationHandler);
+app.post("/api/v1/compute/text-to-speech", textToSpeechHandler);
+app.post("/api/v1/compute/speech-to-text", speechToTextHandler);
+app.post("/api/v1/compute/embeddings", embeddingsHandler);
+app.post("/api/v1/compute/batch", computeBatchHandler);
+app.get("/api/v1/compute/status/:jobId", computeStatusHandler);
+app.get("/api/v1/compute/models", computeModelsHandler);
+app.post("/api/v1/compute/estimate", computeEstimateHandler);
 
 app.listen(PORT, async () => {
   await initMpp();
@@ -2101,6 +2178,7 @@ app.listen(PORT, async () => {
   console.log(`👛 Agent Wallet provisioning active (Category 17)`);
   console.log(`📦 SCTP Supply Chain endpoints active (Category 18)`);
   console.log(`τ  Bittensor Drop-in API active (Category 19) — SN64 Chutes AI`);
+  console.log(`⚡ Compute Services active — text-inference, image-gen, video-gen, TTS, STT, embeddings, batch`);
   console.log(`🔍 Discovery endpoints active — .well-known suite, OpenAPI, llms.txt, agent cards`);
   console.log(`💼 Portfolio + Contract + DeFi Positions endpoints active (Categories 20, 21)`);
   console.log(`💳 MPP: ${process.env.MPP_ENABLED === "true" ? "ACTIVE" : "disabled"}`);
@@ -2108,7 +2186,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Jupiter endpoints active — quote + swap-tx${process.env.JUPITER_API_KEY ? " (paid tier)" : " (public tier)"}`);
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
-  console.log(`\n🌐 99 paid endpoints live across 31 categories\n`);
+  console.log(`\n🌐 109 paid endpoints live across 32 categories\n`);
 });
 
 export default app;
