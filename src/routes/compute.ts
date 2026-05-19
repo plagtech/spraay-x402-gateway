@@ -222,7 +222,7 @@ export async function embeddingsHandler(req: Request, res: Response) {
       return res.status(400).json({ error: `Model '${requestedModel}' not available for embeddings.` });
     }
 
-    const result = await generateEmbeddings({ model: modelDef, input });
+    const result = await generateEmbeddings({ model: modelDef, input: String(input) });
 
     return res.json({
       provider: result.provider,
