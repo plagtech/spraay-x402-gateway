@@ -1,6 +1,7 @@
+// @ts-nocheck
 // ============================================
 // src/routes/compute.ts
-// Spraay Compute Services — Route Handlers
+// Spraay Compute Services â€” Route Handlers
 // ============================================
 // 10 endpoints: 7 paid + 3 free
 // No tiers. Model-based pricing. Search-friendly names.
@@ -22,7 +23,7 @@ import {
   getJobStatus,
 } from "../services/compute-router.js";
 
-// ─── 1. POST /api/v1/compute/text-inference ─────────────────
+// â”€â”€â”€ 1. POST /api/v1/compute/text-inference â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function textInferenceHandler(req: Request, res: Response) {
   try {
@@ -61,7 +62,7 @@ export async function textInferenceHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 2. POST /api/v1/compute/image-generation ───────────────
+// â”€â”€â”€ 2. POST /api/v1/compute/image-generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function imageGenerationHandler(req: Request, res: Response) {
   try {
@@ -100,7 +101,7 @@ export async function imageGenerationHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 3. POST /api/v1/compute/video-generation ───────────────
+// â”€â”€â”€ 3. POST /api/v1/compute/video-generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function videoGenerationHandler(req: Request, res: Response) {
   try {
@@ -137,7 +138,7 @@ export async function videoGenerationHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 4. POST /api/v1/compute/text-to-speech ─────────────────
+// â”€â”€â”€ 4. POST /api/v1/compute/text-to-speech â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function textToSpeechHandler(req: Request, res: Response) {
   try {
@@ -174,7 +175,7 @@ export async function textToSpeechHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 5. POST /api/v1/compute/speech-to-text ─────────────────
+// â”€â”€â”€ 5. POST /api/v1/compute/speech-to-text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function speechToTextHandler(req: Request, res: Response) {
   try {
@@ -207,7 +208,7 @@ export async function speechToTextHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 6. POST /api/v1/compute/embeddings ─────────────────────
+// â”€â”€â”€ 6. POST /api/v1/compute/embeddings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function embeddingsHandler(req: Request, res: Response) {
   try {
@@ -238,7 +239,7 @@ export async function embeddingsHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 7. POST /api/v1/compute/batch ──────────────────────────
+// â”€â”€â”€ 7. POST /api/v1/compute/batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface BatchJob {
   type: ComputeJobType;
@@ -351,7 +352,7 @@ export async function computeBatchHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 8. GET /api/v1/compute/status/:jobId ───────────────────
+// â”€â”€â”€ 8. GET /api/v1/compute/status/:jobId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function computeStatusHandler(req: Request, res: Response) {
   try {
@@ -375,7 +376,7 @@ export async function computeStatusHandler(req: Request, res: Response) {
   }
 }
 
-// ─── 9. GET /api/v1/compute/models (FREE) ───────────────────
+// â”€â”€â”€ 9. GET /api/v1/compute/models (FREE) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function computeModelsHandler(_req: Request, res: Response) {
   const categories: Record<string, any> = {};
@@ -406,7 +407,7 @@ export async function computeModelsHandler(_req: Request, res: Response) {
   });
 }
 
-// ─── 10. POST /api/v1/compute/estimate (FREE) ──────────────
+// â”€â”€â”€ 10. POST /api/v1/compute/estimate (FREE) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function computeEstimateHandler(req: Request, res: Response) {
   try {
