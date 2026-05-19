@@ -317,7 +317,7 @@ export async function computeBatchHandler(req: Request, res: Response) {
               return { job_index: index, type: job.type, status: r.status, result: r };
             }
             case "embeddings": {
-              const r = await generateEmbeddings({ model, input: Array.isArray(job.input) ? job.input.join(" ") : (job.input || "") });
+              const r = await generateEmbeddings({ model, input: typeof job.input === "string" ? job.input : Array.isArray(job.input) ? job.input[0] || "" : "" });
               return { job_index: index, type: job.type, status: "completed", result: r };
             }
             default:
