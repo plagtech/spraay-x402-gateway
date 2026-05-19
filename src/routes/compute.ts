@@ -293,7 +293,7 @@ export async function computeBatchHandler(req: Request, res: Response) {
 
     // Execute all jobs concurrently
     const results = await Promise.allSettled(
-      resolvedJobs.map(async ({ job, model, index }) => {
+      resolvedJobs.map(async ({ job, model, index }: { job: BatchJob; model: any; index: number }) => {
         try {
           switch (job.type) {
             case "text-inference": {
