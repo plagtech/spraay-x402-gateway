@@ -1,21 +1,23 @@
 // ============================================
 // src/routes/compute-futures.ts
-// Spraay Compute Futures — Prepaid Compute Credits
+// Spraay Compute Futures — On-Chain Escrow
 // ============================================
-// Deposit USDC into escrow → get a credit balance → draw down per inference
-// User can refund unused balance at any time
-// Gateway never holds funds — escrow contract does
+// Contract: SpraayComputeFutures on Base mainnet
+// - Agent deposits USDC via approve() + deposit() on the contract
+// - Gateway calls drawdown() after each inference
+// - Agent calls refund() directly on the contract — Spraay can't block it
+// - Spraay NEVER holds agent funds
 //
 // 6 endpoints:
-//   POST /api/v1/compute-futures/deposit    — create prepaid account ($0.01 x402 fee)
-//   GET  /api/v1/compute-futures/balance    — check remaining credits ($0.001)
-//   POST /api/v1/compute-futures/execute    — run compute, deduct from balance ($0.001)
-//   GET  /api/v1/compute-futures/history    — usage ledger ($0.002)
-//   POST /api/v1/compute-futures/refund     — withdraw unused balance ($0.01)
+//   POST /api/v1/compute-futures/deposit    — build approve+deposit tx ($0.01 x402 fee)
+//   GET  /api/v1/compute-futures/balance    — read on-chain balance ($0.001)
+//   POST /api/v1/compute-futures/execute    — run compute, drawdown from contract ($0.001)
+//   GET  /api/v1/compute-futures/history    — usage ledger from Supabase ($0.002)
+//   POST /api/v1/compute-futures/refund     — instructions to refund directly on-chain ($0.01)
 //   GET  /api/v1/compute-futures/pricing    — tier discounts and per-model costs ($0.001)
 
 import { Request, Response } from "express";
-import { isAddress, parseUnits, formatUnits, hexlify, randomBytes } from "ethers";
+import { ethers, isAddress, parseUnits, formatUnits, Contract, JsonRpcProvider, Wallet } from "ethers";
 import { trackRequest } from "./health.js";
 import { computeFuturesDb } from "../db.js";
 import {
@@ -32,43 +34,86 @@ import {
   speechToText,
 } from "../services/compute-router.js";
 
-// ── Constants ─────────────────────────────────────────────────────
+// ── Contract Config ───────────────────────────────────────────────
 
+const FUTURES_CONTRACT = process.env.COMPUTE_FUTURES_CONTRACT || "0xaf4e43d512c73c6731769620ca6b73f0fcff9118";
+const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_DECIMALS = 6;
+const BASE_RPC = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+const OPERATOR_KEY = process.env.FACILITATOR_PRIVATE_KEY || process.env.AGENT_WALLET_DEPLOYER_KEY || "";
 const GATEWAY_ADDRESS = process.env.PAY_TO_ADDRESS || "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8";
 
-// Tier discounts: deposit more, pay less per inference
-const TIERS = [
-  { name: "starter",    minDeposit: 1,    discount: 0,    label: "No discount" },
-  { name: "builder",    minDeposit: 10,   discount: 0.05, label: "5% discount" },
-  { name: "scale",      minDeposit: 50,   discount: 0.10, label: "10% discount" },
-  { name: "enterprise", minDeposit: 200,  discount: 0.15, label: "15% discount" },
+const FUTURES_ABI = [
+  "function deposit(uint256 amount) external",
+  "function drawdown(address depositor, uint256 amount) external",
+  "function refund() external",
+  "function refundPartial(uint256 amount) external",
+  "function getAccount(address depositor) external view returns (uint256 balance, uint256 deposited, uint256 totalDrawn, uint256 totalRefunded, uint256 jobCount, uint8 tier, uint256 discountBps)",
+  "function balanceOf(address depositor) external view returns (uint256)",
+  "function getDiscount(uint8 tier) external pure returns (uint256)",
+  "function totalDeposits() external view returns (uint256)",
+  "function depositorCount() external view returns (uint256)",
+  "function operator() external view returns (address)",
 ];
 
-function getTier(depositAmount: number) {
-  let tier = TIERS[0];
-  for (const t of TIERS) {
-    if (depositAmount >= t.minDeposit) tier = t;
-  }
-  return tier;
+const USDC_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+];
+
+// Tier labels
+const TIER_NAMES: Record<number, string> = { 0: "starter", 1: "builder", 2: "scale", 3: "enterprise" };
+const TIER_LABELS: Record<number, string> = { 0: "No discount", 1: "5% discount", 2: "10% discount", 3: "15% discount" };
+
+// Lazy init
+let _provider: JsonRpcProvider | null = null;
+let _signer: Wallet | null = null;
+let _contract: Contract | null = null;
+let _readContract: Contract | null = null;
+
+function getProvider() {
+  if (!_provider) _provider = new JsonRpcProvider(BASE_RPC);
+  return _provider;
 }
 
-function generateFuturesId(): string {
-  return "CFE-" + hexlify(randomBytes(8)).slice(2).toUpperCase();
+function getSigner() {
+  if (!_signer) {
+    if (!OPERATOR_KEY) throw new Error("FACILITATOR_PRIVATE_KEY or AGENT_WALLET_DEPLOYER_KEY not set");
+    _signer = new Wallet(OPERATOR_KEY, getProvider());
+  }
+  return _signer;
+}
+
+function getContract() {
+  if (!_contract) _contract = new Contract(FUTURES_CONTRACT, FUTURES_ABI, getSigner());
+  return _contract;
+}
+
+function getReadContract() {
+  if (!_readContract) _readContract = new Contract(FUTURES_CONTRACT, FUTURES_ABI, getProvider());
+  return _readContract;
 }
 
 // ── 1. POST /api/v1/compute-futures/deposit ───────────────────────
 
 export async function computeFuturesDepositHandler(req: Request, res: Response) {
   try {
-    const { depositor, amount, expiresInDays } = req.body;
+    const { depositor, amount } = req.body;
 
     if (!depositor || !amount) {
       return res.status(400).json({
         error: "Missing required fields",
         required: { depositor: "0x... (your wallet address)", amount: "USDC amount to deposit (e.g. '50')" },
-        optional: { expiresInDays: "number (default 90)" },
-        tiers: TIERS.map(t => ({ name: t.name, minDeposit: `$${t.minDeposit}`, discount: t.label })),
+        howItWorks: [
+          "1. You call approve() on USDC to allow the contract to spend your tokens",
+          "2. You call deposit() on the SpraayComputeFutures contract",
+          "3. The contract holds your USDC — Spraay never touches it",
+          "4. Use /compute-futures/execute to run inference, cost is deducted on-chain",
+          "5. Call refund() on the contract anytime to withdraw your remaining balance",
+        ],
+        contract: FUTURES_CONTRACT,
+        usdc: USDC_ADDRESS,
+        basescan: `https://basescan.org/address/${FUTURES_CONTRACT}`,
         example: { depositor: "0xYourAddress", amount: "50" },
       });
     }
@@ -82,61 +127,58 @@ export async function computeFuturesDepositHandler(req: Request, res: Response) 
       return res.status(400).json({ error: "Minimum deposit is $1 USDC" });
     }
 
-    const tier = getTier(depositFloat);
-    const futuresId = generateFuturesId();
-    const now = new Date();
-    const days = typeof expiresInDays === "number" && expiresInDays > 0 ? expiresInDays : 90;
-    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-    const amountRaw = parseUnits(amount, USDC_DECIMALS).toString();
+    const amountRaw = parseUnits(amount, USDC_DECIMALS);
 
-    const record = {
-      id: futuresId,
-      depositor,
-      beneficiary: GATEWAY_ADDRESS,
-      depositAmount: amount,
-      depositAmountRaw: amountRaw,
-      balanceRemaining: amount,
-      balanceRemainingRaw: amountRaw,
-      totalUsed: "0",
-      totalUsedRaw: "0",
-      tier: tier.name,
-      discount: tier.discount,
-      status: "active",     // active | exhausted | refunded | expired
-      jobCount: 0,
-      expiresAt,
-      refundedAt: null,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
+    // Build the two transactions the agent needs to sign and submit:
+    // 1. approve() on USDC
+    // 2. deposit() on SpraayComputeFutures
+    const usdcInterface = new ethers.Interface(USDC_ABI);
+    const futuresInterface = new ethers.Interface(FUTURES_ABI);
+
+    const approveTx = {
+      to: USDC_ADDRESS,
+      data: usdcInterface.encodeFunctionData("approve", [FUTURES_CONTRACT, amountRaw]),
+      value: "0x0",
+      chainId: 8453,
+      description: `Approve SpraayComputeFutures to spend ${amount} USDC`,
     };
 
-    await computeFuturesDb.create(record);
+    const depositTx = {
+      to: FUTURES_CONTRACT,
+      data: futuresInterface.encodeFunctionData("deposit", [amountRaw]),
+      value: "0x0",
+      chainId: 8453,
+      description: `Deposit ${amount} USDC into compute futures escrow`,
+    };
+
     trackRequest("compute_futures_deposit");
 
     return res.json({
-      status: "active",
-      computeFuture: {
-        id: futuresId,
-        depositor,
-        depositAmount: `${amount} USDC`,
-        balanceRemaining: `${amount} USDC`,
-        tier: tier.name,
-        discount: tier.label,
-        expiresAt,
-        expiresInDays: days,
+      status: "sign_required",
+      message: `Sign and submit these 2 transactions to deposit ${amount} USDC into the on-chain escrow.`,
+      transactions: [approveTx, depositTx],
+      contract: {
+        address: FUTURES_CONTRACT,
+        basescan: `https://basescan.org/address/${FUTURES_CONTRACT}`,
+        note: "The contract holds your USDC. Spraay never touches it. You can call refund() directly on the contract at any time.",
       },
-      actions: {
-        execute: { endpoint: "POST /api/v1/compute-futures/execute", body: { futuresId, type: "text-inference", messages: [{ role: "user", content: "Hello" }] } },
-        balance: { endpoint: `GET /api/v1/compute-futures/balance?id=${futuresId}` },
-        history: { endpoint: `GET /api/v1/compute-futures/history?id=${futuresId}` },
-        refund: { endpoint: "POST /api/v1/compute-futures/refund", body: { futuresId, caller: depositor } },
+      tiers: [
+        { name: "starter",    minDeposit: "$1",   discount: "0%" },
+        { name: "builder",    minDeposit: "$10",  discount: "5%" },
+        { name: "scale",      minDeposit: "$50",  discount: "10%" },
+        { name: "enterprise", minDeposit: "$200", discount: "15%" },
+      ],
+      afterDeposit: {
+        execute: "POST /api/v1/compute-futures/execute",
+        balance: `GET /api/v1/compute-futures/balance?address=${depositor}`,
+        refund: `Call refund() directly on ${FUTURES_CONTRACT}`,
       },
-      note: "Deposit USDC to the escrow contract. Your balance is drawn down per compute call. Refund unused balance anytime.",
-      _gateway: { provider: "spraay-x402", version: "3.8.0", endpoint: "POST /api/v1/compute-futures/deposit" },
-      timestamp: now.toISOString(),
+      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "POST /api/v1/compute-futures/deposit" },
+      timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error("[compute-futures/deposit]", error.message);
-    return res.status(500).json({ error: "Failed to create compute future", details: error.message });
+    return res.status(500).json({ error: "Failed to build deposit transactions", details: error.message });
   }
 }
 
@@ -144,37 +186,42 @@ export async function computeFuturesDepositHandler(req: Request, res: Response) 
 
 export async function computeFuturesBalanceHandler(req: Request, res: Response) {
   try {
-    const id = req.query.id as string;
-    if (!id) return res.status(400).json({ error: "id query param required", example: "/api/v1/compute-futures/balance?id=CFE-..." });
-
-    const record = await computeFuturesDb.get(id);
-    if (!record) return res.status(404).json({ error: `Compute future not found: ${id}` });
-
-    // Check expiry
-    if (record.status === "active" && new Date(record.expiresAt) < new Date()) {
-      await computeFuturesDb.update(id, { status: "expired" });
-      record.status = "expired";
+    const address = (req.query.address || req.query.id) as string;
+    if (!address || !isAddress(address)) {
+      return res.status(400).json({
+        error: "address query param required",
+        example: "/api/v1/compute-futures/balance?address=0xYourAddress",
+      });
     }
 
-    const tier = getTier(parseFloat(record.depositAmount));
+    const contract = getReadContract();
+    const [balance, deposited, totalDrawn, totalRefunded, jobCount, tier, discountBps] =
+      await contract.getAccount(address);
+
+    const balanceFormatted = formatUnits(balance, USDC_DECIMALS);
+    const depositedFormatted = formatUnits(deposited, USDC_DECIMALS);
+    const drawnFormatted = formatUnits(totalDrawn, USDC_DECIMALS);
+    const refundedFormatted = formatUnits(totalRefunded, USDC_DECIMALS);
+
     trackRequest("compute_futures_balance");
 
     return res.json({
-      id: record.id,
-      depositor: record.depositor,
-      depositAmount: `${record.depositAmount} USDC`,
-      balanceRemaining: `${record.balanceRemaining} USDC`,
-      totalUsed: `${record.totalUsed} USDC`,
-      tier: tier.name,
-      discount: tier.label,
-      jobCount: record.jobCount,
-      status: record.status,
-      expiresAt: record.expiresAt,
-      _gateway: { provider: "spraay-x402", version: "3.8.0" },
+      address,
+      balance: `${balanceFormatted} USDC`,
+      deposited: `${depositedFormatted} USDC`,
+      totalDrawn: `${drawnFormatted} USDC`,
+      totalRefunded: `${refundedFormatted} USDC`,
+      jobCount: Number(jobCount),
+      tier: TIER_NAMES[Number(tier)] || "starter",
+      discount: TIER_LABELS[Number(tier)] || "No discount",
+      discountBps: Number(discountBps),
+      contract: FUTURES_CONTRACT,
+      source: "on-chain",
+      _gateway: { provider: "spraay-x402", version: "3.8.1" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    return res.status(500).json({ error: "Failed to fetch balance", details: error.message });
+    return res.status(500).json({ error: "Failed to read on-chain balance", details: error.message });
   }
 }
 
@@ -182,28 +229,28 @@ export async function computeFuturesBalanceHandler(req: Request, res: Response) 
 
 export async function computeFuturesExecuteHandler(req: Request, res: Response) {
   try {
-    const { futuresId, type, model: requestedModel, ...jobParams } = req.body;
+    const { depositor, type, model: requestedModel, ...jobParams } = req.body;
 
-    if (!futuresId || !type) {
+    if (!depositor || !type) {
       return res.status(400).json({
-        error: "futuresId and type are required",
+        error: "depositor (address) and type are required",
         types: ["text-inference", "image-generation", "video-generation", "text-to-speech", "speech-to-text", "embeddings"],
-        example: { futuresId: "CFE-...", type: "text-inference", messages: [{ role: "user", content: "Hello" }] },
+        example: { depositor: "0xYourAddress", type: "text-inference", messages: [{ role: "user", content: "Hello" }] },
       });
     }
 
+    if (!isAddress(depositor)) return res.status(400).json({ error: "Invalid depositor address" });
     if (!isValidJobType(type)) {
       return res.status(400).json({ error: `Invalid compute type: ${type}`, valid: ["text-inference", "image-generation", "video-generation", "text-to-speech", "speech-to-text", "embeddings"] });
     }
 
-    const record = await computeFuturesDb.get(futuresId);
-    if (!record) return res.status(404).json({ error: `Compute future not found: ${futuresId}` });
-    if (record.status !== "active") return res.status(400).json({ error: `Cannot execute: account status is '${record.status}'` });
+    // Read on-chain balance
+    const readContract = getReadContract();
+    const [balance, , , , , tier, discountBps] = await readContract.getAccount(depositor);
+    const balanceFloat = parseFloat(formatUnits(balance, USDC_DECIMALS));
 
-    // Check expiry
-    if (new Date(record.expiresAt) < new Date()) {
-      await computeFuturesDb.update(futuresId, { status: "expired" });
-      return res.status(400).json({ error: "Compute future has expired. Refund remaining balance or create a new deposit." });
+    if (balanceFloat <= 0) {
+      return res.status(402).json({ error: "No compute credits. Deposit USDC first.", contract: FUTURES_CONTRACT });
     }
 
     // Resolve model and price
@@ -213,11 +260,9 @@ export async function computeFuturesExecuteHandler(req: Request, res: Response) 
     }
 
     // Apply tier discount
-    const discount = record.discount || 0;
-    const effectivePrice = modelDef.price * (1 - discount);
+    const discountRate = Number(discountBps) / 10000;
+    const effectivePrice = modelDef.price * (1 - discountRate);
 
-    // Check balance
-    const balanceFloat = parseFloat(record.balanceRemaining);
     if (effectivePrice > balanceFloat) {
       return res.status(402).json({
         error: "Insufficient compute credits",
@@ -232,97 +277,76 @@ export async function computeFuturesExecuteHandler(req: Request, res: Response) 
     try {
       switch (type) {
         case "text-inference":
-          if (!jobParams.messages || !Array.isArray(jobParams.messages)) {
+          if (!jobParams.messages || !Array.isArray(jobParams.messages))
             return res.status(400).json({ error: "messages array required for text-inference" });
-          }
-          result = await chatCompletion({
-            model: modelDef,
-            messages: jobParams.messages,
-            max_tokens: jobParams.max_tokens || 1024,
-            temperature: jobParams.temperature ?? 0.7,
-            stream: false,
-          });
+          result = await chatCompletion({ model: modelDef, messages: jobParams.messages, max_tokens: jobParams.max_tokens || 1024, temperature: jobParams.temperature ?? 0.7, stream: false });
           break;
         case "image-generation":
-          if (!jobParams.prompt) return res.status(400).json({ error: "prompt required for image-generation" });
-          result = await imageGeneration({
-            model: modelDef,
-            prompt: jobParams.prompt,
-            width: jobParams.width || 1024,
-            height: jobParams.height || 1024,
-            num_outputs: jobParams.num_outputs || 1,
-          });
+          if (!jobParams.prompt) return res.status(400).json({ error: "prompt required" });
+          result = await imageGeneration({ model: modelDef, prompt: jobParams.prompt, width: jobParams.width || 1024, height: jobParams.height || 1024, num_outputs: jobParams.num_outputs || 1 });
           break;
         case "video-generation":
-          if (!jobParams.prompt) return res.status(400).json({ error: "prompt required for video-generation" });
-          result = await videoGeneration({
-            model: modelDef,
-            prompt: jobParams.prompt,
-            duration_seconds: jobParams.duration_seconds || 4,
-          });
+          if (!jobParams.prompt) return res.status(400).json({ error: "prompt required" });
+          result = await videoGeneration({ model: modelDef, prompt: jobParams.prompt, duration_seconds: jobParams.duration_seconds || 4 });
           break;
         case "text-to-speech":
-          if (!jobParams.text) return res.status(400).json({ error: "text required for text-to-speech" });
-          result = await textToSpeech({
-            model: modelDef,
-            text: jobParams.text,
-            language: jobParams.language || "en",
-          });
+          if (!jobParams.text) return res.status(400).json({ error: "text required" });
+          result = await textToSpeech({ model: modelDef, text: jobParams.text, language: jobParams.language || "en" });
           break;
         case "speech-to-text":
-          if (!jobParams.audio_url) return res.status(400).json({ error: "audio_url required for speech-to-text" });
-          result = await speechToText({
-            model: modelDef,
-            audio_url: jobParams.audio_url,
-          });
+          if (!jobParams.audio_url) return res.status(400).json({ error: "audio_url required" });
+          result = await speechToText({ model: modelDef, audio_url: jobParams.audio_url });
           break;
         case "embeddings":
-          if (!jobParams.input) return res.status(400).json({ error: "input required for embeddings" });
-          result = await generateEmbeddings({
-            model: modelDef,
-            input: jobParams.input,
-          });
+          if (!jobParams.input) return res.status(400).json({ error: "input required" });
+          result = await generateEmbeddings({ model: modelDef, input: jobParams.input });
           break;
         default:
           return res.status(400).json({ error: `Unsupported type: ${type}` });
       }
     } catch (computeErr: any) {
-      // Compute failed — do NOT deduct balance
       return res.status(502).json({
-        error: `Compute failed (balance not charged)`,
+        error: "Compute failed (balance NOT charged)",
         details: computeErr.message,
         balanceRemaining: `${balanceFloat.toFixed(4)} USDC`,
       });
     }
 
-    // Deduct from balance
-    const newBalance = (balanceFloat - effectivePrice).toFixed(6);
-    const newTotalUsed = (parseFloat(record.totalUsed) + effectivePrice).toFixed(6);
-    const newJobCount = record.jobCount + 1;
-    const newStatus = parseFloat(newBalance) <= 0.0001 ? "exhausted" : "active";
+    // Drawdown on-chain (operator calls contract)
+    const drawdownAmount = parseUnits(effectivePrice.toFixed(USDC_DECIMALS), USDC_DECIMALS);
+    let txHash: string;
+    try {
+      const contract = getContract();
+      const tx = await contract.drawdown(depositor, drawdownAmount);
+      await tx.wait();
+      txHash = tx.hash;
+    } catch (drawdownErr: any) {
+      // Compute succeeded but drawdown failed — log for manual reconciliation
+      console.error("[compute-futures/execute] DRAWDOWN FAILED — compute delivered but not charged:", drawdownErr.message);
+      return res.status(500).json({
+        error: "Compute succeeded but on-chain drawdown failed. You were NOT charged. Please retry.",
+        details: drawdownErr.message,
+        compute: { type, model: modelDef.id, result },
+      });
+    }
 
-    await computeFuturesDb.update(futuresId, {
-      balanceRemaining: newBalance,
-      balanceRemainingRaw: parseUnits(newBalance, USDC_DECIMALS).toString(),
-      totalUsed: newTotalUsed,
-      totalUsedRaw: parseUnits(newTotalUsed, USDC_DECIMALS).toString(),
-      jobCount: newJobCount,
-      status: newStatus,
-    });
+    // Read updated balance
+    const [newBalance] = await readContract.getAccount(depositor);
+    const newBalanceFormatted = formatUnits(newBalance, USDC_DECIMALS);
 
-    // Log the usage
+    // Log to Supabase for history
     await computeFuturesDb.logUsage({
-      futuresId,
+      futuresId: depositor,
       jobType: type,
       model: modelDef.id,
       modelLabel: modelDef.label,
       basePrice: modelDef.price.toFixed(6),
-      discount: discount.toFixed(4),
+      discount: discountRate.toFixed(4),
       effectivePrice: effectivePrice.toFixed(6),
       balanceBefore: balanceFloat.toFixed(6),
-      balanceAfter: newBalance,
+      balanceAfter: newBalanceFormatted,
       timestamp: new Date().toISOString(),
-    });
+    }).catch((err: any) => console.error("[compute-futures] usage log failed:", err.message));
 
     trackRequest("compute_futures_execute");
 
@@ -330,11 +354,11 @@ export async function computeFuturesExecuteHandler(req: Request, res: Response) 
       status: "completed",
       billing: {
         basePrice: `$${modelDef.price.toFixed(4)}`,
-        discount: discount > 0 ? `${(discount * 100).toFixed(0)}%` : "none",
+        discount: discountRate > 0 ? `${(discountRate * 100).toFixed(0)}%` : "none",
         charged: `$${effectivePrice.toFixed(4)} USDC`,
-        balanceRemaining: `$${newBalance} USDC`,
-        jobNumber: newJobCount,
-        accountStatus: newStatus,
+        balanceRemaining: `$${newBalanceFormatted} USDC`,
+        drawdownTx: txHash,
+        settlement: "on-chain",
       },
       compute: {
         type,
@@ -343,7 +367,8 @@ export async function computeFuturesExecuteHandler(req: Request, res: Response) 
         provider: result.provider || modelDef.provider,
         result,
       },
-      _gateway: { provider: "spraay-x402", version: "3.8.0", endpoint: "POST /api/v1/compute-futures/execute" },
+      contract: FUTURES_CONTRACT,
+      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "POST /api/v1/compute-futures/execute" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -356,26 +381,33 @@ export async function computeFuturesExecuteHandler(req: Request, res: Response) 
 
 export async function computeFuturesHistoryHandler(req: Request, res: Response) {
   try {
-    const id = req.query.id as string;
+    const address = (req.query.address || req.query.id) as string;
     const limit = parseInt(req.query.limit as string) || 50;
-    if (!id) return res.status(400).json({ error: "id query param required" });
+    if (!address) return res.status(400).json({ error: "address query param required" });
 
-    const record = await computeFuturesDb.get(id);
-    if (!record) return res.status(404).json({ error: `Compute future not found: ${id}` });
+    // On-chain summary
+    const readContract = getReadContract();
+    const [balance, deposited, totalDrawn, totalRefunded, jobCount, tier] =
+      await readContract.getAccount(address);
 
-    const usage = await computeFuturesDb.getUsage(id, limit);
+    // Off-chain usage ledger
+    const usage = await computeFuturesDb.getUsage(address, limit);
+
     trackRequest("compute_futures_history");
 
     return res.json({
-      id: record.id,
-      depositor: record.depositor,
-      depositAmount: `${record.depositAmount} USDC`,
-      balanceRemaining: `${record.balanceRemaining} USDC`,
-      totalUsed: `${record.totalUsed} USDC`,
-      jobCount: record.jobCount,
-      status: record.status,
+      address,
+      onChain: {
+        balance: `${formatUnits(balance, USDC_DECIMALS)} USDC`,
+        deposited: `${formatUnits(deposited, USDC_DECIMALS)} USDC`,
+        totalDrawn: `${formatUnits(totalDrawn, USDC_DECIMALS)} USDC`,
+        totalRefunded: `${formatUnits(totalRefunded, USDC_DECIMALS)} USDC`,
+        jobCount: Number(jobCount),
+        tier: TIER_NAMES[Number(tier)] || "starter",
+      },
       usage,
-      _gateway: { provider: "spraay-x402", version: "3.8.0" },
+      contract: FUTURES_CONTRACT,
+      _gateway: { provider: "spraay-x402", version: "3.8.1" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -387,56 +419,52 @@ export async function computeFuturesHistoryHandler(req: Request, res: Response) 
 
 export async function computeFuturesRefundHandler(req: Request, res: Response) {
   try {
-    const { futuresId, caller } = req.body;
+    const { depositor } = req.body;
 
-    if (!futuresId || !caller) {
+    if (!depositor || !isAddress(depositor)) {
       return res.status(400).json({
-        error: "futuresId and caller are required",
-        example: { futuresId: "CFE-...", caller: "0xYourAddress" },
+        error: "depositor address required",
+        example: { depositor: "0xYourAddress" },
       });
     }
 
-    if (!isAddress(caller)) return res.status(400).json({ error: "Invalid caller address" });
+    // Read on-chain balance
+    const readContract = getReadContract();
+    const [balance] = await readContract.getAccount(depositor);
+    const balanceFormatted = formatUnits(balance, USDC_DECIMALS);
 
-    const record = await computeFuturesDb.get(futuresId);
-    if (!record) return res.status(404).json({ error: `Compute future not found: ${futuresId}` });
-
-    if (caller.toLowerCase() !== record.depositor.toLowerCase()) {
-      return res.status(403).json({ error: "Only the depositor can request a refund" });
+    if (Number(balance) === 0) {
+      return res.status(400).json({ error: "No balance to refund" });
     }
 
-    if (record.status === "refunded") {
-      return res.status(400).json({ error: "Already refunded" });
-    }
+    // Build the refund transaction for the agent to sign directly
+    const futuresInterface = new ethers.Interface(FUTURES_ABI);
+    const refundTx = {
+      to: FUTURES_CONTRACT,
+      data: futuresInterface.encodeFunctionData("refund"),
+      value: "0x0",
+      chainId: 8453,
+      description: `Refund ${balanceFormatted} USDC from compute futures escrow`,
+    };
 
-    const balanceFloat = parseFloat(record.balanceRemaining);
-    if (balanceFloat <= 0) {
-      return res.status(400).json({ error: "No balance remaining to refund" });
-    }
-
-    const now = new Date().toISOString();
-    await computeFuturesDb.update(futuresId, {
-      status: "refunded",
-      refundedAt: now,
-    });
     trackRequest("compute_futures_refund");
 
     return res.json({
-      status: "refunded",
-      refund: {
-        futuresId,
-        depositor: record.depositor,
-        refundAmount: `${record.balanceRemaining} USDC`,
-        totalUsed: `${record.totalUsed} USDC`,
-        jobsExecuted: record.jobCount,
+      status: "sign_required",
+      message: `Sign and submit this transaction to refund ${balanceFormatted} USDC. Only you (the depositor) can execute this — Spraay cannot block your refund.`,
+      refundAmount: `${balanceFormatted} USDC`,
+      transaction: refundTx,
+      contract: {
+        address: FUTURES_CONTRACT,
+        basescan: `https://basescan.org/address/${FUTURES_CONTRACT}`,
+        note: "You can also call refund() directly on the contract via Basescan or any wallet. No gateway permission needed.",
       },
-      note: "Remaining USDC balance is released back to the depositor via the escrow contract.",
-      _gateway: { provider: "spraay-x402", version: "3.8.0", endpoint: "POST /api/v1/compute-futures/refund" },
-      timestamp: now,
+      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "POST /api/v1/compute-futures/refund" },
+      timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error("[compute-futures/refund]", error.message);
-    return res.status(500).json({ error: "Failed to process refund", details: error.message });
+    return res.status(500).json({ error: "Failed to build refund transaction", details: error.message });
   }
 }
 
@@ -444,35 +472,58 @@ export async function computeFuturesRefundHandler(req: Request, res: Response) {
 
 export async function computeFuturesPricingHandler(req: Request, res: Response) {
   try {
-    trackRequest("compute_futures_pricing");
+    // Read contract stats
+    let totalDeposits = "N/A";
+    let depositorCount = "N/A";
+    try {
+      const readContract = getReadContract();
+      const total = await readContract.totalDeposits();
+      const count = await readContract.depositorCount();
+      totalDeposits = `${formatUnits(total, USDC_DECIMALS)} USDC`;
+      depositorCount = count.toString();
+    } catch (_) {}
 
     // Build pricing table from compute models
     const pricing: Record<string, any[]> = {};
     for (const [jobType, def] of Object.entries(COMPUTE_JOBS)) {
-      pricing[jobType] = def.models.map(m => ({
+      pricing[jobType] = def.models.map((m: any) => ({
         model: m.id,
         label: m.label,
         provider: m.provider,
         basePrice: `$${m.price.toFixed(3)}`,
-        // Show discounted prices per tier
-        tierPrices: TIERS.filter(t => t.discount > 0).map(t => ({
-          tier: t.name,
-          price: `$${(m.price * (1 - t.discount)).toFixed(4)}`,
-          discount: t.label,
-        })),
+        tierPrices: {
+          starter: `$${m.price.toFixed(4)} (0% off)`,
+          builder: `$${(m.price * 0.95).toFixed(4)} (5% off)`,
+          scale: `$${(m.price * 0.90).toFixed(4)} (10% off)`,
+          enterprise: `$${(m.price * 0.85).toFixed(4)} (15% off)`,
+        },
       }));
     }
 
+    trackRequest("compute_futures_pricing");
+
     return res.json({
-      tiers: TIERS.map(t => ({
-        name: t.name,
-        minDeposit: `$${t.minDeposit} USDC`,
-        discount: t.label,
-      })),
+      tiers: [
+        { name: "starter",    minDeposit: "$1 USDC",   discount: "0%" },
+        { name: "builder",    minDeposit: "$10 USDC",  discount: "5%" },
+        { name: "scale",      minDeposit: "$50 USDC",  discount: "10%" },
+        { name: "enterprise", minDeposit: "$200 USDC", discount: "15%" },
+      ],
       pricing,
       batchDiscount: `${(BATCH_DISCOUNT * 100).toFixed(0)}% (via /compute/batch)`,
-      note: "Deposit USDC → get tier discount on all compute. Higher deposits = lower per-inference costs. Unused balance refundable anytime.",
-      _gateway: { provider: "spraay-x402", version: "3.8.0", endpoint: "GET /api/v1/compute-futures/pricing" },
+      contract: {
+        address: FUTURES_CONTRACT,
+        totalDeposits,
+        depositorCount,
+        basescan: `https://basescan.org/address/${FUTURES_CONTRACT}`,
+      },
+      howItWorks: [
+        "1. POST /compute-futures/deposit → get approve+deposit transactions to sign",
+        "2. Sign and submit both transactions → USDC is held by the contract",
+        "3. POST /compute-futures/execute → run inference, cost deducted on-chain",
+        "4. Call refund() on the contract anytime to withdraw unused balance",
+      ],
+      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "GET /api/v1/compute-futures/pricing" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
