@@ -425,3 +425,106 @@ export const logsDb = {
 };
 
 export default supabase;
+
+// ============================================
+// COMPUTE FUTURES
+// ============================================
+
+export const computeFuturesDb = {
+  async create(record: any) {
+    return insert("compute_futures", {
+      id: record.id,
+      depositor: record.depositor,
+      beneficiary: record.beneficiary,
+      deposit_amount: record.depositAmount,
+      deposit_amount_raw: record.depositAmountRaw,
+      balance_remaining: record.balanceRemaining,
+      balance_remaining_raw: record.balanceRemainingRaw,
+      total_used: record.totalUsed,
+      total_used_raw: record.totalUsedRaw,
+      tier: record.tier,
+      discount: record.discount,
+      status: record.status,
+      job_count: record.jobCount,
+      expires_at: record.expiresAt,
+      refunded_at: record.refundedAt,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    });
+  },
+
+  async get(id: string) {
+    const row = await getById<any>("compute_futures", id.toUpperCase());
+    return row ? computeFuturesDb._fromRow(row) : null;
+  },
+
+  async update(id: string, updates: Record<string, any>) {
+    const mapped: Record<string, any> = {};
+    if ("balanceRemaining" in updates) mapped.balance_remaining = updates.balanceRemaining;
+    if ("balanceRemainingRaw" in updates) mapped.balance_remaining_raw = updates.balanceRemainingRaw;
+    if ("totalUsed" in updates) mapped.total_used = updates.totalUsed;
+    if ("totalUsedRaw" in updates) mapped.total_used_raw = updates.totalUsedRaw;
+    if ("jobCount" in updates) mapped.job_count = updates.jobCount;
+    if ("status" in updates) mapped.status = updates.status;
+    if ("refundedAt" in updates) mapped.refunded_at = updates.refundedAt;
+    mapped.updated_at = new Date().toISOString();
+    await update("compute_futures", id.toUpperCase(), mapped);
+  },
+
+  async logUsage(entry: any) {
+    return insert("compute_futures_usage", {
+      futures_id: entry.futuresId,
+      job_type: entry.jobType,
+      model: entry.model,
+      model_label: entry.modelLabel,
+      base_price: entry.basePrice,
+      discount: entry.discount,
+      effective_price: entry.effectivePrice,
+      balance_before: entry.balanceBefore,
+      balance_after: entry.balanceAfter,
+      created_at: entry.timestamp,
+    });
+  },
+
+  async getUsage(futuresId: string, limit: number = 50) {
+    const { data, error } = await supabase.from("compute_futures_usage")
+      .select("*")
+      .eq("futures_id", futuresId.toUpperCase())
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`DB query compute_futures_usage: ${error.message}`);
+    return (data || []).map((row: any) => ({
+      jobType: row.job_type,
+      model: row.model,
+      modelLabel: row.model_label,
+      basePrice: row.base_price,
+      discount: row.discount,
+      effectivePrice: row.effective_price,
+      balanceBefore: row.balance_before,
+      balanceAfter: row.balance_after,
+      timestamp: row.created_at,
+    }));
+  },
+
+  _fromRow(row: any) {
+    return {
+      id: row.id,
+      depositor: row.depositor,
+      beneficiary: row.beneficiary,
+      depositAmount: row.deposit_amount,
+      depositAmountRaw: row.deposit_amount_raw,
+      balanceRemaining: row.balance_remaining,
+      balanceRemainingRaw: row.balance_remaining_raw,
+      totalUsed: row.total_used,
+      totalUsedRaw: row.total_used_raw,
+      tier: row.tier,
+      discount: row.discount,
+      status: row.status,
+      jobCount: row.job_count,
+      expiresAt: row.expires_at,
+      refundedAt: row.refunded_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  },
+};

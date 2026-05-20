@@ -1,2220 +1,1841 @@
+#!/usr/bin/env node
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import axios from "axios";
+import { x402Client, wrapAxiosWithPayment } from "@x402/axios";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
+import { createWalletClient, createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { config } from "dotenv";
+import { z } from "zod";
 import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { paymentMiddleware, x402ResourceServer } from "@x402/express";
-import { ExactEvmScheme } from "@x402/evm/exact/server";
-import { ExactSvmScheme } from "@x402/svm/exact/server";
-import { HTTPFacilitatorClient } from "@x402/core/server";
-import { facilitator as coinbaseFacilitator } from "@coinbase/x402";
-import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
-import { xrpBatchHandler, xrpEstimateHandler, xrpInfoHandler } from "./routes/xrp-batch.js";
-import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
-import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
-import { stellarBatchHandler, stellarEstimateHandler } from "./routes/stellar-batch.js";
+import { registerAutoTools, autoToolCount } from "./auto-tools.js";
 
-import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
-import { swapExecuteHandler } from "./routes/swap-execute.js";
-import { oraclePricesHandler, oracleGasHandler, oracleFxHandler } from "./routes/oracle.js";
-import { bridgeQuoteHandler, bridgeChainsHandler } from "./routes/bridge.js";
-import { payrollExecuteHandler, payrollEstimateHandler, payrollTokensHandler } from "./routes/payroll.js";
-import { invoiceCreateHandler, invoiceGetHandler, invoiceListHandler } from "./routes/invoice.js";
-import { analyticsWalletHandler, analyticsTxHistoryHandler } from "./routes/analytics.js";
-import { escrowCreateHandler, escrowGetHandler, escrowFundHandler, escrowReleaseHandler, escrowCancelHandler, escrowListHandler } from "./routes/escrow.js";
-import { classifyAddressHandler, classifyTxHandler, explainContractHandler, summarizeHandler } from "./routes/inference.js";
-// NEW: Communication
-import { notifyEmailHandler, notifySmsHandler, notifyStatusHandler } from "./routes/email-sms.js";
-import { webhookRegisterHandler, webhookTestHandler, webhookListHandler, webhookDeleteHandler } from "./routes/webhook.js";
-import { xmtpSendHandler, xmtpInboxHandler } from "./routes/xmtp-relay.js";
-// NEW: Infrastructure
-import { rpcCallHandler, rpcChainsHandler } from "./routes/rpc.js";
-import { storagePinHandler, storageGetHandler, storageStatusHandler } from "./routes/ipfs.js";
-import { cronCreateHandler, cronListHandler, cronCancelHandler } from "./routes/cron.js";
-import { logsIngestHandler, logsQueryHandler } from "./routes/logging.js";
-// NEW: Identity & Access
-import { kycVerifyHandler, kycStatusHandler } from "./routes/kyc.js";
-import { authSessionHandler, authVerifyHandler } from "./routes/auth.js";
-// NEW: Compliance
-import { auditLogHandler, auditQueryHandler } from "./routes/audit.js";
-import { taxCalculateHandler, taxReportHandler } from "./routes/tax.js";
-// NEW: GPU/Compute
-import { gpuRunHandler, gpuStatusHandler, gpuModelsHandler } from "./routes/gpu.js";
-// NEW: Wallet Provisioning (Category 14)
-import { walletCreateHandler, walletGetHandler, walletListHandler, walletSignMessageHandler, walletSendTxHandler, walletAddressesHandler } from "./routes/wallet.js";
-// NEW: Agent Wallet (Category 17)
-import { agentWalletProvisionHandler, agentWalletSessionKeyHandler, agentWalletInfoHandler, agentWalletRevokeKeyHandler, agentWalletPredictHandler } from "./routes/agent-wallet.js";
-// NEW: Search/RAG
-import { searchWebHandler, searchExtractHandler, searchQnaHandler } from "./routes/search.js";
-// NEW: Robotics / RTP (Category 15)
-import { robotRegisterHandler, robotTaskHandler, robotCompleteHandler, robotListHandler, robotTaskStatusHandler, robotProfileHandler, robotUpdateHandler, robotDeregisterHandler } from "./routes/robots.js";
-// Existing
-import { pricesHandler } from "./routes/prices.js";
-import { balancesHandler } from "./routes/balances.js";
-// NEW: Portfolio (Category 20)
-import { portfolioTokensHandler, portfolioNftsHandler } from "./routes/portfolio.js";
-// NEW: Contract (Category 21)
-import { contractReadHandler, contractWriteHandler } from "./routes/contract.js";
-// NEW: DeFi Positions (extends DeFi category)
-import { defiPositionsHandler } from "./routes/defi.js";
-// NEW: Solana Jupiter (Category 22)
-import { jupiterQuoteHandler, jupiterSwapTxHandler } from "./routes/jupiter.js";
-// NEW: Solana Helius DAS
-import { heliusAssetsByOwnerHandler, heliusAssetHandler } from "./routes/helius.js";
-// NEW: Solana Pyth price feeds
-import { pythPriceHandler, pythPricesHandler } from "./routes/pyth.js";
-import { resolveHandler } from "./routes/resolve.js";
-import { healthHandler, statsHandler } from "./routes/health.js";
-// NEW: Supply Chain Task Protocol (Category 18)
-import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
-// NEW: Bittensor Drop-in API (Category 19)
-import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
-// NEW: Compute Services
-import {
-  textInferenceHandler, imageGenerationHandler, videoGenerationHandler,
-  textToSpeechHandler, speechToTextHandler, embeddingsHandler,
-  computeBatchHandler, computeStatusHandler, computeModelsHandler, computeEstimateHandler,
-} from "./routes/compute.js";
-import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
-import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
-import { enrich402Middleware } from "./middleware/enrich402.js";
-import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
-import { protocolDetectorMiddleware } from "./middleware/protocolDetector.js";
-import { mppMiddleware, initMpp } from "./middleware/mppMiddleware.js";
-// Solana payment rail
-import { solanaPaymentMiddleware } from "./middleware/solanaPaymentMiddleware.js";
-import { solanaEnrich402Middleware } from "./middleware/solanaEnrich402.js";
-import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
-import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
+config();
 
-dotenv.config();
-const app = express();
-app.set('trust proxy', true);
-app.use(cors({
-  origin: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-PAYMENT', 'X-MPP-PAYMENT'],
-  exposedHeaders: ['X-PAYMENT-RESPONSE', 'X-MPP-PAYMENT-RESPONSE'],
-}));
-app.post("/v1/webhooks/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
-app.use(express.json());
-app.use(gatewayEventsMiddleware);
+const gatewayURL = process.env.SPRAAY_GATEWAY_URL || "https://gateway.spraay.app";
+const PORT = process.env.MCP_PORT || process.env.PORT || 3000;
+const TRANSPORT = process.env.MCP_TRANSPORT || "stdio";
 
-const PAY_TO = process.env.PAY_TO_ADDRESS!;
-const NETWORK = process.env.X402_NETWORK || "eip155:84532";
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "";
-const PORT = process.env.PORT || 3402;
-const IS_MAINNET = NETWORK === "eip155:8453";
-const BASE_URL = process.env.BASE_URL || "https://gateway.spraay.app";
-const CAIP2_NETWORK = NETWORK as `${string}:${string}`;
-const SOLANA_NETWORK = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" as `${string}:${string}`;
-const SOLANA_PAY_TO = process.env.SOLANA_RECEIVE_ADDRESS || "";
+// Reusable Zod validators
+const ethAddr = z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Must be a valid Ethereum address");
+const txHash = z.string().regex(/^0x[a-fA-F0-9]{64}$/, "Must be a valid transaction hash");
+const positiveAmount = z.string().regex(/^\d+(\.\d+)?$/, "Must be a positive number");
 
-const facilitatorClient = IS_MAINNET
-  ? new HTTPFacilitatorClient(coinbaseFacilitator)
-  : new HTTPFacilitatorClient({ url: (FACILITATOR_URL || "https://x402.org/facilitator") as `${string}://${string}` });
+async function createPaymentClient() {
+  const evmPrivateKey = process.env.EVM_PRIVATE_KEY as `0x${string}`;
+  if (!evmPrivateKey) {
+    throw new Error(
+      "EVM_PRIVATE_KEY is required. Set it to a wallet with USDC on Base."
+    );
+  }
+  const client = new x402Client();
+  const account = privateKeyToAccount(evmPrivateKey);
+  const walletClient = createWalletClient({
+    account,
+    chain: base,
+    transport: http(),
+  });
+  const publicClient = createPublicClient({
+    chain: base,
+    transport: http(),
+  });
+  const signer = {
+    ...walletClient,
+    readContract: publicClient.readContract,
+  } as any;
+  registerExactEvmScheme(client, { signer });
+  return wrapAxiosWithPayment(axios.create({ baseURL: gatewayURL }), client);
+}
 
-const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK, new ExactEvmScheme());
-server.register(SOLANA_NETWORK, new ExactSvmScheme());
-server.registerExtension(bazaarResourceServerExtension);
-app.use(enrich402Middleware);
-app.use(solanaEnrich402Middleware);    
-app.use(protocolDetectorMiddleware);
-app.use(solanaPaymentMiddleware);     
-app.use(mppMiddleware);
-app.use(apiKeyAuthMiddleware);
-app.use(
-  wrapWithSolanaBypass(paymentMiddleware(
+function registerTools(server: McpServer, api: any) {
+
+  // ============================================
+  // AI (2 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_chat",
+    "Send a message to 200+ AI models (GPT-4o, Claude, Llama 3, Gemini, Mistral, etc.) via the Spraay x402 Gateway. Returns the model's completion. Use spraay_models to discover available model IDs. Costs $0.005 USDC.",
     {
-      "POST /api/v1/chat/completions": {
-        accepts: [{ scheme: "exact", price: "$0.04", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.04", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI chat completions via 200+ models.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { model: "openai/gpt-4o-mini", messages: [{ role: "user", content: "Hello" }] }, inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { choices: [{ message: { content: "Hello!" } }] }, schema: { properties: { choices: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/models": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List AI models.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { models: [], count: 200 }, schema: { properties: { models: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/batch/execute": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Batch payments via Spraay.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", recipients: ["0x..."], amounts: ["1000000"], sender: "0x..." }, inputSchema: { properties: { token: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, sender: { type: "string" } }, required: ["token", "recipients", "amounts", "sender"] }, bodyType: "json", output: { example: { transactions: [] }, schema: { properties: { transactions: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/batch/estimate": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Estimate batch gas.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { recipientCount: 5 }, inputSchema: { properties: { recipientCount: { type: "number" } }, required: ["recipientCount"] }, bodyType: "json", output: { example: { estimatedGas: "185000" }, schema: { properties: { estimatedGas: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/stellar/batch": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Batch XLM payments on Stellar.", mimeType: "application/json",
-      },
-      "POST /api/v1/stellar/estimate": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Estimate Stellar batch cost.", mimeType: "application/json",
-      },
-      "POST /api/v1/xrp/batch": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Batch XRP payments on XRP Ledger.", mimeType: "application/json",
-      },
-      "POST /api/v1/xrp/estimate": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Estimate XRP batch cost.", mimeType: "application/json",
-      },
-      "GET /api/v1/xrp/info": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "XRP Ledger fee and reserve info.", mimeType: "application/json",
-      },
-      "GET /api/v1/swap/quote": {
-        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Swap quotes via Uniswap V3.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { tokenIn: "USDC", tokenOut: "WETH", amountIn: "1000000" }, inputSchema: { properties: { tokenIn: { type: "string" }, tokenOut: { type: "string" }, amountIn: { type: "string" } }, required: ["tokenIn", "tokenOut", "amountIn"] }, output: { example: { amountOut: "384215000000000" }, schema: { properties: { amountOut: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/swap/tokens": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Supported swap tokens.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { tokens: [] }, schema: { properties: { tokens: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/swap/execute": {
-        accepts: [{ scheme: "exact", price: "$0.015", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.015", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Execute swap via Uniswap V3.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { tokenIn: "USDC", tokenOut: "WETH", amountIn: "100", recipient: "0x..." }, inputSchema: { properties: { tokenIn: { type: "string" }, tokenOut: { type: "string" }, amountIn: { type: "string" }, recipient: { type: "string" } }, required: ["tokenIn", "tokenOut", "amountIn", "recipient"] }, bodyType: "json", output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/solana/jupiter/quote": {
-        accepts: [
-          { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
-          { scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO },
-        ],
-        description: "Jupiter v6 swap quote on Solana — price, route, slippage. Solana-native.",
-        mimeType: "application/json",
-        extensions: {
-          ...declareDiscoveryExtension({
-            input: { inputMint: "USDC", outputMint: "SOL", amount: "1000000", slippageBps: 50 },
-            inputSchema: {
-              properties: {
-                inputMint: { type: "string" },
-                outputMint: { type: "string" },
-                amount: { type: "string" },
-                slippageBps: { type: "number" },
-              },
-              required: ["inputMint", "outputMint", "amount"],
-            },
-            output: {
-              schema: {
-                properties: {
-                  inputMint: { type: "string" },
-                  outputMint: { type: "string" },
-                  inAmount: { type: "string" },
-                  outAmount: { type: "string" },
-                  priceImpactPct: { type: "string" },
-                  slippageBps: { type: "number" },
-                  routeHops: { type: "number" },
-                },
-              },
-            },
-          }),
-        },
-      },
-      "POST /api/v1/solana/jupiter/swap-tx": {
-        accepts: [
-          { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
-          { scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO },
-        ],
-        description: "Build unsigned Jupiter swap transaction on Solana. Client signs and submits.",
-        mimeType: "application/json",
-        extensions: {
-          ...declareDiscoveryExtension({
-            inputSchema: {
-              properties: {
-                quoteResponse: { type: "object" },
-                userPublicKey: { type: "string" },
-                wrapAndUnwrapSol: { type: "boolean" },
-                prioritizationFeeLamports: {},
-              },
-              required: ["quoteResponse", "userPublicKey"],
-            },
-            bodyType: "json",
-            output: {
-              schema: {
-                properties: {
-                  swapTransaction: { type: "string" },
-                  lastValidBlockHeight: { type: "number" },
-                  prioritizationFeeLamports: { type: "number" },
-                },
-              },
-            },
-          }),
-        },
-      },
-      "GET /api/v1/solana/helius/assets-by-owner": {
-  accepts: [
-    { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
-    { scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO },
-  ],
-  description: "Helius DAS: list all assets (SPL tokens + NFTs) owned by a Solana wallet.",
-  mimeType: "application/json",
-  extensions: {
-    ...declareDiscoveryExtension({
-      input: { owner: "DemoWalletAddressHere11111111111111111111111", page: 1, limit: 100 },
-      inputSchema: {
-        properties: {
-          owner: { type: "string" },
-          page: { type: "number" },
-          limit: { type: "number" },
-          showFungible: { type: "boolean" },
-        },
-        required: ["owner"],
-      },
-      output: {
-        schema: {
-          properties: {
-            owner: { type: "string" },
-            total: { type: "number" },
-            page: { type: "number" },
-            items: { type: "array" },
-            nativeBalance: { type: "object" },
-          },
-        },
-      },
-    }),
-  },
-},
-"GET /api/v1/solana/helius/asset": {
-  accepts: [
-    { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
-    { scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO },
-  ],
-  description: "Helius DAS: full metadata for a single Solana asset (SPL token or compressed NFT).",
-  mimeType: "application/json",
-  extensions: {
-    ...declareDiscoveryExtension({
-      inputSchema: {
-        properties: { id: { type: "string" } },
-        required: ["id"],
-      },
-      output: {
-        schema: {
-          properties: {
-            id: { type: "string" },
-            asset: { type: "object" },
-          },
-        },
-      },
-    }),
-  },
-},
-"GET /api/v1/solana/pyth/price": {
-  accepts: [
-    { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
-    { scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO },
-  ],
-  description: "Pyth latest price for one feed (symbol alias or 64-char hex feed ID).",
-  mimeType: "application/json",
-  extensions: {
-    ...declareDiscoveryExtension({
-      input: { feedId: "SOL" },
-      inputSchema: {
-        properties: { feedId: { type: "string" } },
-        required: ["feedId"],
-      },
-      output: {
-        schema: {
-          properties: {
-            symbol: { type: "string" },
-            price: { type: "number" },
-            confidence: { type: "number" },
-            publishTime: { type: "number" },
-            emaPrice: { type: "number" },
-          },
-        },
-      },
-    }),
-  },
-},
-"GET /api/v1/solana/pyth/prices": {
-  accepts: [
-    { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
-    { scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO },
-  ],
-  description: "Pyth batch latest prices (up to 50 feeds, comma-separated symbols or hex IDs).",
-  mimeType: "application/json",
-  extensions: {
-    ...declareDiscoveryExtension({
-      input: { feedIds: "SOL,BTC,ETH,USDC" },
-      inputSchema: {
-        properties: { feedIds: { type: "string" } },
-        required: ["feedIds"],
-      },
-      output: {
-        schema: {
-          properties: {
-            count: { type: "number" },
-            prices: { type: "object" },
-          },
-        },
-      },
-    }),
-  },
-},
-      "GET /api/v1/oracle/prices": {
-        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Multi-token price feed.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { tokens: "ETH,cbBTC" }, inputSchema: { properties: { tokens: { type: "string" } } }, output: { example: { prices: {} }, schema: { properties: { prices: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/oracle/gas": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Gas prices on Base.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { gas: {} }, schema: { properties: { gas: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/oracle/fx": {
-        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Stablecoin FX rates.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { base: "USDC" }, inputSchema: { properties: { base: { type: "string" } } }, output: { example: { rates: {} }, schema: { properties: { rates: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/bridge/quote": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Cross-chain bridge quote.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { fromChain: "base", toChain: "ethereum", token: "USDC", amount: "1000000000", fromAddress: "0x..." }, inputSchema: { properties: { fromChain: { type: "string" }, toChain: { type: "string" }, token: { type: "string" }, amount: { type: "string" }, fromAddress: { type: "string" } }, required: ["fromChain", "toChain", "token", "amount", "fromAddress"] }, output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/bridge/chains": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Supported bridge chains.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { chains: [] }, schema: { properties: { chains: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/payroll/execute": {
-        accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.10", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Execute payroll via Spraay V2.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", sender: "0x...", employees: [{ address: "0x...", amount: "3000" }] }, inputSchema: { properties: { token: { type: "string" }, sender: { type: "string" }, employees: { type: "array" } }, required: ["token", "sender", "employees"] }, bodyType: "json", output: { example: { status: "ready" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/payroll/estimate": {
-        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Estimate payroll costs.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { employeeCount: 10 }, inputSchema: { properties: { employeeCount: { type: "number" } }, required: ["employeeCount"] }, bodyType: "json", output: { example: { estimate: {} }, schema: { properties: { estimate: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/payroll/tokens": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Payroll stablecoins.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { tokens: [] }, schema: { properties: { tokens: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/invoice/create": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create invoice with payment tx.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { creator: "0x...", token: "USDC", amount: "1500" }, inputSchema: { properties: { creator: { type: "string" }, token: { type: "string" }, amount: { type: "string" } }, required: ["creator", "token", "amount"] }, bodyType: "json", output: { example: { status: "created", invoice: { id: "INV-A1B2" } }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/invoice/list": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List invoices by address.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0x..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { invoices: [], count: 0 }, schema: { properties: { invoices: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/invoice/:id": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Invoice lookup.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "INV-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { invoice: { status: "pending" } }, schema: { properties: { invoice: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/analytics/wallet": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Wallet profile.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { classification: { walletType: "active" } }, schema: { properties: { classification: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/analytics/txhistory": {
-        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Transaction history.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", limit: "10" }, inputSchema: { properties: { address: { type: "string" }, limit: { type: "string" } }, required: ["address"] }, output: { example: { transactions: [] }, schema: { properties: { transactions: { type: "array" } } } } }) },
-      },
-
-      // ---- ESCROW (flat routes) ----
-      "POST /api/v1/escrow/create": {
-        accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.10", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create conditional escrow with milestones and expiry.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { depositor: "0xClient", beneficiary: "0xFreelancer", token: "USDC", amount: "5000" }, inputSchema: { properties: { depositor: { type: "string" }, beneficiary: { type: "string" }, token: { type: "string" }, amount: { type: "string" }, arbiter: { type: "string" }, conditions: { type: "array" }, expiresIn: { type: "number" } }, required: ["depositor", "beneficiary", "token", "amount"] }, bodyType: "json", output: { example: { status: "created", escrow: { id: "ESC-A1B2" } }, schema: { properties: { status: { type: "string" }, escrow: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/escrow/list": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List escrows by address.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0x..." }, inputSchema: { properties: { address: { type: "string" }, status: { type: "string" } }, required: ["address"] }, output: { example: { escrows: [], count: 0 }, schema: { properties: { escrows: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/escrow/:id": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Escrow status.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "ESC-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { escrow: { status: "funded" } }, schema: { properties: { escrow: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/escrow/fund": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Mark escrow as funded. Pass escrowId in body.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { escrowId: "ESC-A1B2" }, inputSchema: { properties: { escrowId: { type: "string" } }, required: ["escrowId"] }, bodyType: "json", output: { example: { status: "funded" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/escrow/release": {
-        accepts: [{ scheme: "exact", price: "$0.08", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.08", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Release escrow funds. Returns unsigned transfer tx. Depositor or arbiter only.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { escrowId: "ESC-A1B2", caller: "0xDepositor" }, inputSchema: { properties: { escrowId: { type: "string" }, caller: { type: "string" } }, required: ["escrowId", "caller"] }, bodyType: "json", output: { example: { status: "released", transaction: {} }, schema: { properties: { status: { type: "string" }, transaction: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/escrow/cancel": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Cancel escrow.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { escrowId: "ESC-A1B2", caller: "0xDepositor" }, inputSchema: { properties: { escrowId: { type: "string" }, caller: { type: "string" } }, required: ["escrowId", "caller"] }, bodyType: "json", output: { example: { status: "cancelled" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-
-      // ---- INFERENCE ----
-      "POST /api/v1/inference/classify-address": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI-powered wallet classification with risk scoring.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { classification: { classification: "whale", riskLevel: "low", riskScore: 15 } }, schema: { properties: { classification: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/inference/classify-tx": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI-powered transaction classification with risk scoring.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { hash: "0xabc123..." }, inputSchema: { properties: { hash: { type: "string" } }, required: ["hash"] }, bodyType: "json", output: { example: { classification: { type: "swap", riskLevel: "low" } }, schema: { properties: { classification: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/inference/explain-contract": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI-powered smart contract analysis.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { analysis: { type: "erc20-token", riskLevel: "low" } }, schema: { properties: { analysis: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/inference/summarize": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI intelligence briefing for any address or transaction.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { target: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", context: "defi" }, inputSchema: { properties: { target: { type: "string" }, context: { type: "string" } }, required: ["target"] }, bodyType: "json", output: { example: { briefing: { headline: "Active DeFi whale", riskAssessment: { level: "low" } } }, schema: { properties: { briefing: { type: "object" } } } } }) },
-      },
-
-      // ---- COMMUNICATION ----
-      "POST /api/v1/notify/email": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Send email notification for payment confirmations, alerts, receipts.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { to: "user@example.com", subject: "Payment Received", body: "Your batch payment of 500 USDC has been confirmed." }, inputSchema: { properties: { to: { type: "string" }, subject: { type: "string" }, body: { type: "string" }, cc: { type: "string" }, replyTo: { type: "string" } }, required: ["to", "body"] }, bodyType: "json", output: { example: { id: "ntf_123", status: "queued" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/notify/sms": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Send SMS notification for payment alerts.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { to: "+14155551234", body: "Spraay: 500 USDC payment confirmed. Tx: 0xabc..." }, inputSchema: { properties: { to: { type: "string" }, body: { type: "string" } }, required: ["to", "body"] }, bodyType: "json", output: { example: { id: "ntf_123", status: "queued", segments: 1 }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/notify/status": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Check notification delivery status.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "ntf_123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { id: "ntf_123", status: "delivered" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/webhook/register": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Register webhook for payment/escrow/swap events.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { url: "https://myapp.com/hooks/spraay", events: ["payment.sent", "escrow.funded"] }, inputSchema: { properties: { url: { type: "string" }, events: { type: "array" } }, required: ["url", "events"] }, bodyType: "json", output: { example: { id: "whk_123", secret: "whsec_abc", status: "active" }, schema: { properties: { id: { type: "string" }, secret: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/webhook/test": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Send test event to a registered webhook.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { webhookId: "whk_123" }, inputSchema: { properties: { webhookId: { type: "string" } }, required: ["webhookId"] }, bodyType: "json", output: { example: { delivered: true }, schema: { properties: { delivered: { type: "boolean" } } } } }) },
-      },
-      "GET /api/v1/webhook/list": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List registered webhooks.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { webhooks: [], total: 0 }, schema: { properties: { webhooks: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/webhook/delete": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Delete a webhook.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { webhookId: "whk_123" }, inputSchema: { properties: { webhookId: { type: "string" } }, required: ["webhookId"] }, bodyType: "json", output: { example: { deleted: true }, schema: { properties: { deleted: { type: "boolean" } } } } }) },
-      },
-      "POST /api/v1/xmtp/send": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Send encrypted XMTP message to any Ethereum address.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", content: "Your payment of 500 USDC has been sent." }, inputSchema: { properties: { to: { type: "string" }, content: { type: "string" }, contentType: { type: "string" } }, required: ["to", "content"] }, bodyType: "json", output: { example: { id: "xmtp_123", status: "sent" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/xmtp/inbox": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Read XMTP inbox for an Ethereum address.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA..." }, inputSchema: { properties: { address: { type: "string" }, limit: { type: "string" } }, required: ["address"] }, output: { example: { messages: [], total: 0 }, schema: { properties: { messages: { type: "array" } } } } }) },
-      },
-
-      // ---- INFRASTRUCTURE ----
-      "POST /api/v1/rpc/call": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Premium multi-chain RPC call via Alchemy/Helius.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { chain: "base", method: "eth_getBalance", params: ["0xd8dA...", "latest"] }, inputSchema: { properties: { chain: { type: "string" }, method: { type: "string" }, params: { type: "array" } }, required: ["chain", "method"] }, bodyType: "json", output: { example: { jsonrpc: "2.0", result: "0x1234" }, schema: { properties: { result: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/rpc/chains": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List supported RPC chains and methods.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { chains: [], allowedMethods: [] }, schema: { properties: { chains: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/storage/pin": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Pin content to IPFS or Arweave for permanent storage.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { data: "{\"receipt\":\"batch_123\"}", contentType: "application/json", provider: "ipfs" }, inputSchema: { properties: { data: { type: "string" }, contentType: { type: "string" }, provider: { type: "string" } }, required: ["data"] }, bodyType: "json", output: { example: { cid: "bafy...", status: "pinning" }, schema: { properties: { cid: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/storage/get": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Retrieve pinned content by CID.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { cid: "bafy..." }, inputSchema: { properties: { cid: { type: "string" } }, required: ["cid"] }, output: { example: { cid: "bafy...", status: "pinned" }, schema: { properties: { cid: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/storage/status": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Check pin status.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "pin_123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { status: "pinned" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/cron/create": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create scheduled job for recurring payments, DCA, reminders.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { action: "batch.execute", schedule: "0 9 * * 1", payload: { token: "USDC", recipients: ["0x..."] } }, inputSchema: { properties: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" }, maxRuns: { type: "number" } }, required: ["action", "schedule", "payload"] }, bodyType: "json", output: { example: { id: "cron_123", status: "active" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/cron/list": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List scheduled jobs.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { jobs: [], total: 0 }, schema: { properties: { jobs: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/cron/cancel": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Cancel a scheduled job.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { jobId: "cron_123" }, inputSchema: { properties: { jobId: { type: "string" } }, required: ["jobId"] }, bodyType: "json", output: { example: { status: "cancelled" }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/logs/ingest": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Ingest structured logs for debugging agent workflows.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { entries: [{ level: "info", service: "batch-agent", message: "Payment sent" }] }, inputSchema: { properties: { entries: { type: "array" } }, required: ["entries"] }, bodyType: "json", output: { example: { ingested: 1, ids: ["log_123"] }, schema: { properties: { ingested: { type: "number" } } } } }) },
-      },
-      "GET /api/v1/logs/query": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Query structured logs by service, level, time.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { service: "batch-agent", level: "error" }, inputSchema: { properties: { service: { type: "string" }, level: { type: "string" }, since: { type: "string" }, limit: { type: "string" } } }, output: { example: { logs: [], total: 0 }, schema: { properties: { logs: { type: "array" } } } } }) },
-      },
-
-      // ---- IDENTITY & ACCESS ----
-      "POST /api/v1/kyc/verify": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "OFAC SDN sanctions screening via on-chain Chainalysis oracle.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", type: "individual", chain: "base" }, inputSchema: { properties: { address: { type: "string" }, type: { type: "string" }, chain: { type: "string" } }, required: ["address"] }, bodyType: "json", output: { example: { id: "kyc_123", status: "approved", result: { isSanctioned: false, listSource: "OFAC SDN (US Treasury)" } }, schema: { properties: { id: { type: "string" }, status: { type: "string" }, result: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/kyc/status": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Check KYC verification status.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "kyc_123" }, inputSchema: { properties: { id: { type: "string" }, address: { type: "string" } } }, output: { example: { status: "approved", checks: { identity: true, sanctions: true } }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/auth/session": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create authenticated session with scoped permissions.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA...", permissions: ["batch:execute", "swap:execute"], ttlSeconds: 3600 }, inputSchema: { properties: { address: { type: "string" }, permissions: { type: "array" }, ttlSeconds: { type: "number" } }, required: ["address"] }, bodyType: "json", output: { example: { token: "spr_abc...", expiresAt: "2026-03-05T00:00:00Z" }, schema: { properties: { token: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/auth/verify": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Verify session token and check permissions.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { token: "spr_abc..." }, inputSchema: { properties: { token: { type: "string" } }, required: ["token"] }, output: { example: { valid: true, permissions: [] }, schema: { properties: { valid: { type: "boolean" } } } } }) },
-      },
-
-      // ---- COMPLIANCE ----
-      "POST /api/v1/audit/log": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Record immutable audit trail entry for payments, escrows, compliance.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { action: "payment.sent", actor: "0xd8dA...", resource: "batch_123", details: { amount: "500 USDC" } }, inputSchema: { properties: { action: { type: "string" }, actor: { type: "string" }, resource: { type: "string" }, details: { type: "object" }, txHash: { type: "string" } }, required: ["action", "actor", "resource"] }, bodyType: "json", output: { example: { id: "aud_123", recorded: true }, schema: { properties: { id: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/audit/query": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Query audit trail by actor, action, resource, time range.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { actor: "0xd8dA...", action: "payment.sent" }, inputSchema: { properties: { actor: { type: "string" }, action: { type: "string" }, resource: { type: "string" }, since: { type: "string" }, until: { type: "string" } } }, output: { example: { entries: [], total: 0 }, schema: { properties: { entries: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/tax/calculate": {
-        accepts: [{ scheme: "exact", price: "$0.08", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.08", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Calculate crypto tax gain/loss using FIFO method.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { transactions: [{ type: "swap", asset: "ETH", amount: 1.5, costBasisUsd: 3000, proceedsUsd: 4500, holdingDays: 400 }] }, inputSchema: { properties: { transactions: { type: "array" } }, required: ["transactions"] }, bodyType: "json", output: { example: { summary: { totalGainLossUsd: 1500 } }, schema: { properties: { summary: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/tax/report": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Retrieve tax report with IRS 8949-compatible data.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { reportId: "tax_123" }, inputSchema: { properties: { reportId: { type: "string" } } }, output: { example: { events: [], total: 0 }, schema: { properties: { events: { type: "array" } } } } }) },
-      },
-
-      // ---- GPU/COMPUTE ----
-      "POST /api/v1/gpu/run": {
-        accepts: [{ scheme: "exact", price: "$0.06", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.06", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "GPU/Compute — run AI model inference via Replicate (image, video, LLM, audio, utility).", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { model: "flux-pro", input: { prompt: "a serene mountain lake at sunset" } }, inputSchema: { properties: { model: { type: "string" }, input: { type: "object" }, version: { type: "string" }, webhook: { type: "string" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { id: "abc123", status: "succeeded", model: "black-forest-labs/flux-1.1-pro", output: ["https://replicate.delivery/..."] }, schema: { properties: { id: { type: "string" }, status: { type: "string" }, output: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/gpu/status/:id": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "GPU/Compute — check prediction status for async jobs.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "abc123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { id: "abc123", status: "succeeded", output: [] }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-
-      // ---- SEARCH/RAG ----
-      "POST /api/v1/search/web": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Web search with clean, LLM-ready results via Tavily. Basic or advanced depth.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { query: "latest Base ecosystem news", search_depth: "basic", max_results: 5 }, inputSchema: { properties: { query: { type: "string" }, search_depth: { type: "string" }, max_results: { type: "number" }, topic: { type: "string" }, include_domains: { type: "array" }, exclude_domains: { type: "array" } }, required: ["query"] }, bodyType: "json", output: { example: { query: "...", answer: "...", results: [{ title: "...", url: "...", content: "..." }] }, schema: { properties: { query: { type: "string" }, answer: { type: "string" }, results: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/search/extract": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Extract clean content from URLs for RAG pipelines. Up to 5 URLs per request.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { urls: ["https://docs.base.org/overview"] }, inputSchema: { properties: { urls: { type: "array" } }, required: ["urls"] }, bodyType: "json", output: { example: { results: [{ url: "...", content: "..." }], failed: [] }, schema: { properties: { results: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/search/qna": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Direct question answering — searches web and synthesizes an answer with sources.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { query: "What is x402 protocol?", topic: "general" }, inputSchema: { properties: { query: { type: "string" }, topic: { type: "string" } }, required: ["query"] }, bodyType: "json", output: { example: { query: "...", answer: "...", sources: [{ title: "...", url: "..." }] }, schema: { properties: { query: { type: "string" }, answer: { type: "string" }, sources: { type: "array" } } } } }) },
-      },
-
-      // ---- EXISTING ----
-      "GET /api/v1/prices": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Live token prices.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { token: "WETH" }, inputSchema: { properties: { token: { type: "string" } } }, output: { example: { prices: {} }, schema: { properties: { prices: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/balances": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Token balances.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { balances: [] }, schema: { properties: { balances: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/resolve": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "ENS/Basename resolution.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { name: "vitalik.eth" }, inputSchema: { properties: { name: { type: "string" } }, required: ["name"] }, output: { example: { address: "0xd8dA..." }, schema: { properties: { address: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/wallet/list": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List agent wallets with pagination.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { wallets: [], pagination: {} }, schema: { properties: { wallets: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/wallet/:walletId": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Get agent wallet details.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { walletId: "", addresses: {} }, schema: { properties: { walletId: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/wallet/:walletId/addresses": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Get chain-specific addresses for a wallet.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { addresses: {} }, schema: { properties: { addresses: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/wallet/sign-message": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Sign a message with an agent wallet.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { walletId: "...", message: "Hello" }, inputSchema: { properties: { walletId: { type: "string" }, message: { type: "string" } }, required: ["walletId", "message"] }, bodyType: "json", output: { example: { signature: "..." }, schema: { properties: { signature: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/wallet/send-transaction": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Sign and broadcast a transaction from an agent wallet.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { walletId: "...", transaction: {}, networkId: "base-mainnet" }, inputSchema: { properties: { walletId: { type: "string" }, transaction: { type: "object" }, networkId: { type: "string" } }, required: ["walletId", "transaction", "networkId"] }, bodyType: "json", output: { example: { signature: "..." }, schema: { properties: { signature: { type: "string" } } } } }) },
-      },
-      // Robotics / RTP (Category 15)
-      "POST /api/v1/robots/task": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Dispatch a paid task to an RTP-registered robot. x402 payment held in escrow until completion.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { robot_id: "robo_abc123", task: "pick", parameters: { item: "SKU-00421", from_location: "bin_A3" } }, inputSchema: { properties: { robot_id: { type: "string" }, task: { type: "string" }, parameters: { type: "object" }, callback_url: { type: "string" }, timeout_seconds: { type: "number" } }, required: ["robot_id", "task"] }, bodyType: "json", output: { example: { status: "DISPATCHED", task_id: "task_xyz789", escrow_id: "escrow_001" }, schema: { properties: { status: { type: "string" }, task_id: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/robots/list": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Discover RTP robots. Filter by capability, chain, price, status.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { capability: "pick", max_price: "0.10" }, inputSchema: { properties: { capability: { type: "string" }, chain: { type: "string" }, max_price: { type: "string" }, status: { type: "string" } } }, output: { example: { robots: [], total: 0 }, schema: { properties: { robots: { type: "array" }, total: { type: "number" } } } } }) },
-      },
-      "GET /api/v1/robots/status": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Poll RTP task status: PENDING, DISPATCHED, IN_PROGRESS, COMPLETED, FAILED, TIMEOUT.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { task_id: "task_xyz789" }, inputSchema: { properties: { task_id: { type: "string" } }, required: ["task_id"] }, output: { example: { task_id: "task_xyz789", status: "COMPLETED", result: {} }, schema: { properties: { status: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/robots/profile": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Full RTP robot profile: capabilities, pricing, connection type.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { robot_id: "robo_abc123" }, inputSchema: { properties: { robot_id: { type: "string" } }, required: ["robot_id"] }, output: { example: { robot_id: "robo_abc123", capabilities: ["pick", "place"] }, schema: { properties: { robot_id: { type: "string" }, capabilities: { type: "array" } } } } }) },
-      },
-      // ---- AGENT WALLET (Category 17) ----
-      "POST /api/v1/agent-wallet/provision": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create a smart contract wallet for an AI agent on Base. Returns wallet address and optional encrypted key.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { agentId: "trading-bot-007", agentType: "langchain", mode: "managed" }, inputSchema: { properties: { agentId: { type: "string" }, agentType: { type: "string" }, mode: { type: "string" }, ownerAddress: { type: "string" } }, required: ["agentId"] }, bodyType: "json", output: { example: { status: "created", wallet: { walletAddress: "0x...", chainId: 8453 } }, schema: { properties: { status: { type: "string" }, wallet: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/agent-wallet/session-key": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Add a session key with spending limits and time bounds to an agent wallet.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { walletAddress: "0x...", sessionKeyAddress: "0x...", spendLimitEth: "0.5", durationHours: 24 }, inputSchema: { properties: { walletAddress: { type: "string" }, sessionKeyAddress: { type: "string" }, spendLimitEth: { type: "string" }, durationHours: { type: "number" }, allowedTargets: { type: "array" } }, required: ["walletAddress", "sessionKeyAddress", "spendLimitEth", "durationHours"] }, bodyType: "json", output: { example: { status: "created", session: { expiresAt: "2025-01-01T00:00:00Z" } }, schema: { properties: { status: { type: "string" }, session: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/agent-wallet/info": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Get agent wallet info including balance, metadata, and session keys.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0x..." }, inputSchema: { properties: { address: { type: "string" } }, required: ["address"] }, output: { example: { wallet: { balanceEth: "0.5", agentId: "bot-001" } }, schema: { properties: { wallet: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/agent-wallet/revoke-key": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Revoke a session key immediately.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { walletAddress: "0x...", sessionKeyAddress: "0x..." }, inputSchema: { properties: { walletAddress: { type: "string" }, sessionKeyAddress: { type: "string" } }, required: ["walletAddress", "sessionKeyAddress"] }, bodyType: "json", output: { example: { status: "revoked", txHash: "0x..." }, schema: { properties: { status: { type: "string" }, txHash: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/agent-wallet/predict": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Predict agent wallet address before deployment.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { ownerAddress: "0x...", agentId: "bot-001" }, inputSchema: { properties: { ownerAddress: { type: "string" }, agentId: { type: "string" } }, required: ["ownerAddress", "agentId"] }, output: { example: { predictedAddress: "0x..." }, schema: { properties: { predictedAddress: { type: "string" } } } } }) },
-      },
-
-      // ---- CATEGORY 19: BITTENSOR DROP-IN API (OpenAI-compatible) ----
-      "GET /bittensor/v1/models": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List all AI models on Bittensor. OpenAI /v1/models compatible. Drop-in: just change base_url to gateway.spraay.app/bittensor/v1", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { object: "list", data: [{ id: "deepseek-ai/DeepSeek-R1-0528", object: "model" }] }, schema: { properties: { object: { type: "string" }, data: { type: "array" } } } } }) },
-      },
-      "POST /bittensor/v1/chat/completions": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Chat completions via Bittensor decentralized AI. Fully OpenAI-compatible. 43+ models (DeepSeek, Qwen, Llama, Mistral). Streaming, function calling, TEE-verified. Drop-in: just change base_url.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { model: "deepseek-ai/DeepSeek-V3-0324", messages: [{ role: "user", content: "What is decentralized AI?" }], max_tokens: 256 }, inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" }, max_tokens: { type: "number" }, temperature: { type: "number" }, stream: { type: "boolean" }, tools: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { id: "chatcmpl-abc", choices: [{ message: { role: "assistant", content: "..." } }], usage: { total_tokens: 57 } }, schema: { properties: { choices: { type: "array" }, usage: { type: "object" } } } } }) },
-      },
-      "POST /bittensor/v1/images/generations": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Image generation via Bittensor Subnet 19 (Nineteen AI). OpenAI /v1/images/generations compatible.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { prompt: "A cyberpunk city powered by decentralized AI" }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, n: { type: "number" }, size: { type: "string" } }, required: ["prompt"] }, bodyType: "json", output: { example: { data: [{ url: "https://..." }] }, schema: { properties: { data: { type: "array" } } } } }) },
-      },
-      "POST /bittensor/v1/embeddings": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Text embeddings via Bittensor. OpenAI /v1/embeddings compatible. Use for RAG, semantic search, similarity.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { model: "BAAI/bge-large-en-v1.5", input: "Decentralized AI" }, inputSchema: { properties: { model: { type: "string" }, input: { type: "string" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { object: "list", data: [{ embedding: [0.0023] }] }, schema: { properties: { data: { type: "array" } } } } }) },
-      },
-      // ---- COMPUTE SERVICES ----
-      "POST /api/v1/compute/text-inference": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "LLM chat completion and text generation. 11 models from 3B to 405B parameters. Providers: Chutes AI (Bittensor SN64), OpenRouter. Pay per request, pick your model or use auto.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { messages: [{ role: "user", content: "Classify this wallet address" }], model: "auto" }, inputSchema: { properties: { messages: { type: "array" }, model: { type: "string" }, max_tokens: { type: "number" }, temperature: { type: "number" } }, required: ["messages"] }, bodyType: "json", output: { example: { provider: "chutes", model: "meta-llama/Llama-3.3-70B-Instruct", choices: [{ message: { content: "..." } }], usage: { total_tokens: 150 }, price_usdc: "0.030" }, schema: { properties: { provider: { type: "string" }, model: { type: "string" }, choices: { type: "array" }, usage: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/compute/image-generation": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI image generation from text prompts. FLUX Schnell, FLUX Dev, FLUX Pro, Stable Diffusion XL via Replicate. Text to image.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { prompt: "A futuristic city powered by decentralized compute", model: "auto", width: 1024, height: 1024 }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, width: { type: "number" }, height: { type: "number" }, num_outputs: { type: "number" } }, required: ["prompt"] }, bodyType: "json", output: { example: { provider: "replicate", model: "black-forest-labs/flux-schnell", images: [{ url: "https://...", width: 1024, height: 1024 }], price_usdc: "0.030" }, schema: { properties: { images: { type: "array" }, status: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/compute/video-generation": {
-        accepts: [{ scheme: "exact", price: "$0.50", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.50", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI video generation from text prompts. MiniMax Video 01, Wan 2.1 via Replicate. Text to video. Async — poll /compute/status for results.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { prompt: "A drone flyover of a mountain range at golden hour", model: "auto", duration_seconds: 4 }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, duration_seconds: { type: "number" } }, required: ["prompt"] }, bodyType: "json", output: { example: { status: "processing", prediction_id: "abc123", poll_url: "/api/v1/compute/status/abc123", price_usdc: "0.500" }, schema: { properties: { status: { type: "string" }, video_url: { type: "string" }, prediction_id: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/compute/text-to-speech": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Text to speech (TTS) and AI music generation. XTTS V2 for natural voice synthesis with cloning, MusicGen for music from text. Voice generation.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { text: "Welcome to Spraay compute services.", model: "auto", language: "en" }, inputSchema: { properties: { text: { type: "string" }, model: { type: "string" }, language: { type: "string" } }, required: ["text"] }, bodyType: "json", output: { example: { status: "completed", audio_url: "https://...", price_usdc: "0.030" }, schema: { properties: { status: { type: "string" }, audio_url: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/compute/speech-to-text": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Speech to text (STT) transcription. Whisper Large V3 via Replicate. Audio transcription, speech recognition. 100+ languages.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { audio_url: "https://example.com/audio.mp3", model: "auto" }, inputSchema: { properties: { audio_url: { type: "string" }, model: { type: "string" } }, required: ["audio_url"] }, bodyType: "json", output: { example: { status: "completed", transcription: "Hello world...", price_usdc: "0.020" }, schema: { properties: { status: { type: "string" }, transcription: { type: "string" } } } } }) },
-      },
-      "POST /api/v1/compute/embeddings": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Text embeddings for RAG, semantic search, and similarity. Vector embeddings via Chutes AI (Bittensor). BGE Large v1.5.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { input: "Decentralized AI compute marketplace", model: "auto" }, inputSchema: { properties: { input: { type: "string" }, model: { type: "string" } }, required: ["input"] }, bodyType: "json", output: { example: { data: [{ embedding: [0.0023], index: 0 }], usage: { total_tokens: 5 }, price_usdc: "0.005" }, schema: { properties: { data: { type: "array" }, usage: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/compute/batch": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Batch compute — submit up to 50 jobs in a single x402 payment. 10% batch discount. Mix any compute types: text inference, image generation, TTS, STT, embeddings, video.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { jobs: [{ type: "text-inference", messages: [{ role: "user", content: "Classify 0x..." }] }, { type: "image-generation", prompt: "Company logo" }] }, inputSchema: { properties: { jobs: { type: "array" } }, required: ["jobs"] }, bodyType: "json", output: { example: { batch_id: "batch_abc123", jobs_submitted: 2, total_cost_usdc: "0.054", results: [] }, schema: { properties: { batch_id: { type: "string" }, total_cost_usdc: { type: "string" }, results: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/compute/status/:jobId": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Poll async compute job status. For video generation and batch items that are still processing.",
-        mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { jobId: "abc123" }, inputSchema: { properties: { jobId: { type: "string" } }, required: ["jobId"] }, output: { example: { prediction_id: "abc123", status: "succeeded", output: [] }, schema: { properties: { prediction_id: { type: "string" }, status: { type: "string" } } } } }) },
-      },
-      // ---- CATEGORY 18: SCTP (Supply Chain Task Protocol) ----
-      "POST /api/v1/sctp/supplier": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Register a supplier in the SCTP directory.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { name: "Acme Corp", wallet: "0x...", paymentPrefs: { token: "USDC" } }, inputSchema: { properties: { name: { type: "string" }, wallet: { type: "string" }, paymentPrefs: { type: "object" } }, required: ["name", "wallet"] }, bodyType: "json", output: { example: { status: "created", supplier: { id: "SUP-A1B2" } }, schema: { properties: { status: { type: "string" }, supplier: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/sctp/supplier/:id": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Get supplier details by ID.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "SUP-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { supplier: { id: "SUP-A1B2", name: "Acme Corp" } }, schema: { properties: { supplier: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/sctp/po": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create a purchase order with line items and supplier.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { supplierId: "SUP-A1B2", lineItems: [{ sku: "ABC", qty: 10, price: "100" }], currency: "USDC" }, inputSchema: { properties: { supplierId: { type: "string" }, lineItems: { type: "array" }, currency: { type: "string" } }, required: ["supplierId", "lineItems"] }, bodyType: "json", output: { example: { status: "created", po: { id: "PO-A1B2" } }, schema: { properties: { status: { type: "string" }, po: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/sctp/po/:id": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Get purchase order details.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "PO-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { po: { id: "PO-A1B2", status: "open" } }, schema: { properties: { po: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/sctp/invoice": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Submit an invoice linked to a purchase order.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { poId: "PO-A1B2", supplierId: "SUP-A1B2", amount: "1000", currency: "USDC" }, inputSchema: { properties: { poId: { type: "string" }, supplierId: { type: "string" }, amount: { type: "string" }, currency: { type: "string" } }, required: ["poId", "supplierId", "amount"] }, bodyType: "json", output: { example: { status: "submitted", invoice: { id: "INV-A1B2" } }, schema: { properties: { status: { type: "string" }, invoice: { type: "object" } } } } }) },
-      },
-      "GET /api/v1/sctp/invoice/:id": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Get invoice details.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { id: "INV-A1B2" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { invoice: { id: "INV-A1B2", status: "submitted" } }, schema: { properties: { invoice: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/sctp/invoice/verify": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "AI-verify an invoice against its purchase order. Returns match score and flags.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { invoiceId: "INV-A1B2" }, inputSchema: { properties: { invoiceId: { type: "string" } }, required: ["invoiceId"] }, bodyType: "json", output: { example: { verification: { matchScore: 0.98, flags: [], status: "verified" } }, schema: { properties: { verification: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/sctp/pay": {
-        accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.10", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Execute supplier payment for a verified invoice via batch settlement.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { invoiceId: "INV-A1B2", batch: false }, inputSchema: { properties: { invoiceId: { type: "string" }, batch: { type: "boolean" } }, required: ["invoiceId"] }, bodyType: "json", output: { example: { status: "paid", txHash: "0x...", amount: "1000" }, schema: { properties: { status: { type: "string" }, txHash: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/portfolio/tokens": {
-        accepts: [{ scheme: "exact", price: "$0.008", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.008", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Multi-chain token portfolio (native + ERC-20) with USD values.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", networks: "base-mainnet,eth-mainnet" }, inputSchema: { properties: { address: { type: "string" }, networks: { type: "string" }, includeNative: { type: "boolean" }, includeErc20: { type: "boolean" }, includePrices: { type: "boolean" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", token_count: 42, total_usd_value: 12345.67, tokens: [] }, schema: { properties: { address: { type: "string" }, token_count: { type: "number" }, total_usd_value: { type: "number" }, tokens: { type: "array" } } } } }) },
-      },
-      "GET /api/v1/portfolio/nfts": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Multi-chain NFT holdings with metadata.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", networks: "base-mainnet" }, inputSchema: { properties: { address: { type: "string" }, networks: { type: "string" }, withMetadata: { type: "boolean" }, pageSize: { type: "number" }, pageKey: { type: "string" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", total_count: 12, returned_count: 12, nfts: [] }, schema: { properties: { address: { type: "string" }, total_count: { type: "number" }, nfts: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/contract/read": {
-        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Call any view/pure function on any EVM contract.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", method: "balanceOf(address)", args: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"] }, inputSchema: { properties: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" }, abi: { type: "array" } }, required: ["address", "method"] }, bodyType: "json", output: { example: { chain: "base-mainnet", address: "0x833...", method: "balanceOf(address)", result: "1000000" }, schema: { properties: { chain: { type: "string" }, result: {} } } } }) },
-      },
-      "POST /api/v1/contract/write": {
-        accepts: [{ scheme: "exact", price: "$0.015", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.015", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Encode and broadcast a transaction via an agent wallet.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", method: "transfer(address,uint256)", args: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "1000000"], walletId: "wallet_abc" }, inputSchema: { properties: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" }, abi: { type: "array" }, value: { type: "string" }, walletId: { type: "string" }, privateKey: { type: "string" } }, required: ["address", "method"] }, bodyType: "json", output: { example: { tx_hash: "0xabc...", from: "0x...", explorer: "https://basescan.org/tx/0xabc..." }, schema: { properties: { tx_hash: { type: "string" }, from: { type: "string" }, explorer: { type: "string" } } } } }) },
-      },
-      "GET /api/v1/defi/positions": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "On-chain DeFi positions across Aave V3, Compound V3, Aerodrome on Base.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chain: "base-mainnet" }, inputSchema: { properties: { address: { type: "string" }, chain: { type: "string" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", chain: "base-mainnet", total_positions: 3, protocols_with_exposure: ["aave-v3", "aerodrome"], positions: [] }, schema: { properties: { address: { type: "string" }, total_positions: { type: "number" }, positions: { type: "array" } } } } }) },
-      },
+      model: z.string().default("openai/gpt-4o-mini").describe("Model ID in OpenRouter format (e.g. 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3-70b-instruct'). Use spraay_models to list all."),
+      message: z.string().min(1).max(32000).describe("User message to send to the model"),
+      systemPrompt: z.string().max(8000).optional().describe("Optional system prompt to set model behavior and context"),
     },
-    server
-  ))
-);
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ model, message, systemPrompt }) => {
+      try {
+        const messages: any[] = [];
+        if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+        messages.push({ role: "user", content: message });
+        const res = await api.post("/api/v1/chat/completions", { model, messages, max_tokens: 1000 });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Chat error: ${error.message}. Verify model ID with spraay_models.` }] };
+      }
+    }
+  );
 
-// FREE ROUTES
-app.get("/.well-known/x402.json", (_req, res) => {
-  res.json({
-    x402Version: 2, name: "Spraay x402 Gateway",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, identity, compliance, scheduling, GPU/Compute, Search/RAG & more.",
-    homepage: BASE_URL, repository: "https://github.com/plagtech/spraay-x402-gateway",
-    network: CAIP2_NETWORK, payTo: PAY_TO,
-    facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
-    resources: [
-      { resource: `${BASE_URL}/api/v1/chat/completions`, method: "POST", price: "$0.04", category: "ai" },
-      { resource: `${BASE_URL}/api/v1/models`, method: "GET", price: "$0.001", category: "ai" },
-      { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.02", category: "payments" },
-      { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", category: "payments" },
-      { resource: `${BASE_URL}/api/v1/swap/quote`, method: "GET", price: "$0.008", category: "defi" },
-      { resource: `${BASE_URL}/api/v1/swap/tokens`, method: "GET", price: "$0.001", category: "defi" },
-      { resource: `${BASE_URL}/api/v1/swap/execute`, method: "POST", price: "$0.015", category: "defi" },
-      { resource: `${BASE_URL}/api/v1/oracle/prices`, method: "GET", price: "$0.008", category: "oracle" },
-      { resource: `${BASE_URL}/api/v1/oracle/gas`, method: "GET", price: "$0.005", category: "oracle" },
-      { resource: `${BASE_URL}/api/v1/oracle/fx`, method: "GET", price: "$0.008", category: "oracle" },
-      { resource: `${BASE_URL}/api/v1/bridge/quote`, method: "GET", price: "$0.05", category: "bridge" },
-      { resource: `${BASE_URL}/api/v1/bridge/chains`, method: "GET", price: "$0.002", category: "bridge" },
-      { resource: `${BASE_URL}/api/v1/payroll/execute`, method: "POST", price: "$0.10", category: "payroll" },
-      { resource: `${BASE_URL}/api/v1/payroll/estimate`, method: "POST", price: "$0.003", category: "payroll" },
-      { resource: `${BASE_URL}/api/v1/payroll/tokens`, method: "GET", price: "$0.002", category: "payroll" },
-      { resource: `${BASE_URL}/api/v1/invoice/create`, method: "POST", price: "$0.05", category: "invoice" },
-      { resource: `${BASE_URL}/api/v1/invoice/list`, method: "GET", price: "$0.01", category: "invoice" },
-      { resource: `${BASE_URL}/api/v1/invoice/:id`, method: "GET", price: "$0.001", category: "invoice" },
-      { resource: `${BASE_URL}/api/v1/analytics/wallet`, method: "GET", price: "$0.01", category: "analytics" },
-      { resource: `${BASE_URL}/api/v1/analytics/txhistory`, method: "GET", price: "$0.008", category: "analytics" },
-      { resource: `${BASE_URL}/api/v1/escrow/create`, method: "POST", price: "$0.10", category: "escrow" },
-      { resource: `${BASE_URL}/api/v1/escrow/list`, method: "GET", price: "$0.02", category: "escrow" },
-      { resource: `${BASE_URL}/api/v1/escrow/:id`, method: "GET", price: "$0.001", category: "escrow" },
-      { resource: `${BASE_URL}/api/v1/escrow/fund`, method: "POST", price: "$0.02", category: "escrow" },
-      { resource: `${BASE_URL}/api/v1/escrow/release`, method: "POST", price: "$0.08", category: "escrow" },
-      { resource: `${BASE_URL}/api/v1/escrow/cancel`, method: "POST", price: "$0.02", category: "escrow" },
-      { resource: `${BASE_URL}/api/v1/inference/classify-address`, method: "POST", price: "$0.03", category: "inference" },
-      { resource: `${BASE_URL}/api/v1/inference/classify-tx`, method: "POST", price: "$0.03", category: "inference" },
-      { resource: `${BASE_URL}/api/v1/inference/explain-contract`, method: "POST", price: "$0.03", category: "inference" },
-      { resource: `${BASE_URL}/api/v1/inference/summarize`, method: "POST", price: "$0.03", category: "inference" },
-      // Communication
-      { resource: `${BASE_URL}/api/v1/notify/email`, method: "POST", price: "$0.01", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/notify/sms`, method: "POST", price: "$0.02", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/notify/status`, method: "GET", price: "$0.002", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/webhook/register`, method: "POST", price: "$0.01", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/webhook/test`, method: "POST", price: "$0.005", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/webhook/list`, method: "GET", price: "$0.002", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/webhook/delete`, method: "POST", price: "$0.002", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/xmtp/send`, method: "POST", price: "$0.01", category: "communication" },
-      { resource: `${BASE_URL}/api/v1/xmtp/inbox`, method: "GET", price: "$0.01", category: "communication" },
-      // Infrastructure
-      { resource: `${BASE_URL}/api/v1/rpc/call`, method: "POST", price: "$0.001", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/rpc/chains`, method: "GET", price: "$0.001", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/storage/pin`, method: "POST", price: "$0.01", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/storage/get`, method: "GET", price: "$0.005", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/storage/status`, method: "GET", price: "$0.002", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/cron/create`, method: "POST", price: "$0.01", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/cron/list`, method: "GET", price: "$0.002", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/cron/cancel`, method: "POST", price: "$0.002", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/logs/ingest`, method: "POST", price: "$0.002", category: "infrastructure" },
-      { resource: `${BASE_URL}/api/v1/logs/query`, method: "GET", price: "$0.005", category: "infrastructure" },
-      // Identity & Access
-      { resource: `${BASE_URL}/api/v1/kyc/verify`, method: "POST", price: "$0.02", category: "identity" },
-      { resource: `${BASE_URL}/api/v1/kyc/status`, method: "GET", price: "$0.01", category: "identity" },
-      { resource: `${BASE_URL}/api/v1/auth/session`, method: "POST", price: "$0.01", category: "identity" },
-      { resource: `${BASE_URL}/api/v1/auth/verify`, method: "GET", price: "$0.005", category: "identity" },
-      // Compliance
-      { resource: `${BASE_URL}/api/v1/audit/log`, method: "POST", price: "$0.001", category: "compliance" },
-      { resource: `${BASE_URL}/api/v1/audit/query`, method: "GET", price: "$0.03", category: "compliance" },
-      { resource: `${BASE_URL}/api/v1/tax/calculate`, method: "POST", price: "$0.08", category: "compliance" },
-      { resource: `${BASE_URL}/api/v1/tax/report`, method: "GET", price: "$0.05", category: "compliance" },
-      // GPU/Compute
-      { resource: `${BASE_URL}/api/v1/gpu/run`, method: "POST", price: "$0.06", category: "gpu" },
-      { resource: `${BASE_URL}/api/v1/gpu/status/:id`, method: "GET", price: "$0.005", category: "gpu" },
-      { resource: `${BASE_URL}/api/v1/gpu/models`, method: "GET", price: "free", category: "gpu" },
-      // Search/RAG
-      { resource: `${BASE_URL}/api/v1/search/web`, method: "POST", price: "$0.02", category: "search" },
-      { resource: `${BASE_URL}/api/v1/search/extract`, method: "POST", price: "$0.02", category: "search" },
-      { resource: `${BASE_URL}/api/v1/search/qna`, method: "POST", price: "$0.03", category: "search" },
-      // Robotics / RTP
-      { resource: `${BASE_URL}/api/v1/robots/register`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
-      { resource: `${BASE_URL}/api/v1/robots/task`, method: "POST", price: "$0.05", category: "rtp", rtp: { version: "1.0", description: "Dispatch paid task to robot" } },
-      { resource: `${BASE_URL}/api/v1/robots/complete`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
-      { resource: `${BASE_URL}/api/v1/robots/list`, method: "GET", price: "$0.005", category: "rtp", rtp: { version: "1.0", description: "Discover robots by capability" } },
-      { resource: `${BASE_URL}/api/v1/robots/status`, method: "GET", price: "$0.002", category: "rtp", rtp: { version: "1.0" } },
-      { resource: `${BASE_URL}/api/v1/robots/profile`, method: "GET", price: "$0.002", category: "rtp", rtp: { version: "1.0" } },
-      { resource: `${BASE_URL}/api/v1/robots/update`, method: "PATCH", price: "free", category: "rtp", rtp: { version: "1.0" } },
-      { resource: `${BASE_URL}/api/v1/robots/deregister`, method: "POST", price: "free", category: "rtp", rtp: { version: "1.0" } },
-      // Agent Wallet (Category 17)
-      { resource: `${BASE_URL}/api/v1/agent-wallet/provision`, method: "POST", price: "$0.05", category: "agent-wallet" },
-      { resource: `${BASE_URL}/api/v1/agent-wallet/session-key`, method: "POST", price: "$0.02", category: "agent-wallet" },
-      { resource: `${BASE_URL}/api/v1/agent-wallet/info`, method: "GET", price: "$0.005", category: "agent-wallet" },
-      { resource: `${BASE_URL}/api/v1/agent-wallet/revoke-key`, method: "POST", price: "$0.02", category: "agent-wallet" },
-      { resource: `${BASE_URL}/api/v1/agent-wallet/predict`, method: "GET", price: "$0.001", category: "agent-wallet" },
-      // Existing data
-      { resource: `${BASE_URL}/api/v1/prices`, method: "GET", price: "$0.002", category: "defi" },
-      { resource: `${BASE_URL}/api/v1/balances`, method: "GET", price: "$0.005", category: "data" },
-      { resource: `${BASE_URL}/api/v1/resolve`, method: "GET", price: "$0.002", category: "identity" },
-      { resource: `${BASE_URL}/api/v1/tokens`, method: "GET", price: "free", category: "discovery" },
-      // Supply Chain / SCTP (Category 18)
-      { resource: `${BASE_URL}/api/v1/sctp/supplier`, method: "POST", price: "$0.02", category: "supply-chain", sctp: { version: "0.1" } },
-      { resource: `${BASE_URL}/api/v1/sctp/supplier/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
-      { resource: `${BASE_URL}/api/v1/sctp/po`, method: "POST", price: "$0.02", category: "supply-chain", sctp: { version: "0.1" } },
-      { resource: `${BASE_URL}/api/v1/sctp/po/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
-      { resource: `${BASE_URL}/api/v1/sctp/invoice`, method: "POST", price: "$0.02", category: "supply-chain", sctp: { version: "0.1" } },
-      { resource: `${BASE_URL}/api/v1/sctp/invoice/:id`, method: "GET", price: "$0.005", category: "supply-chain", sctp: { version: "0.1" } },
-      { resource: `${BASE_URL}/api/v1/sctp/invoice/verify`, method: "POST", price: "$0.03", category: "supply-chain", sctp: { version: "0.1", description: "AI-powered invoice verification" } },
-      { resource: `${BASE_URL}/api/v1/sctp/pay`, method: "POST", price: "$0.10", category: "supply-chain", sctp: { version: "0.1", description: "Execute supplier payment via Spraay batch contracts" } },
-      // Bittensor Drop-in API (Category 19)
-      { resource: `${BASE_URL}/bittensor/v1/models`, method: "GET", price: "$0.001", category: "bittensor", bittensor: { openaiCompat: true, description: "List decentralized AI models" } },
-      { resource: `${BASE_URL}/bittensor/v1/chat/completions`, method: "POST", price: "$0.03", category: "bittensor", bittensor: { openaiCompat: true, description: "Chat completions via Bittensor SN64" } },
-      { resource: `${BASE_URL}/bittensor/v1/images/generations`, method: "POST", price: "$0.05", category: "bittensor", bittensor: { openaiCompat: true, description: "Image generation via Bittensor SN19" } },
-      { resource: `${BASE_URL}/bittensor/v1/embeddings`, method: "POST", price: "$0.005", category: "bittensor", bittensor: { openaiCompat: true, description: "Text embeddings via Bittensor" } },
-      // Compute Services
-      { resource: `${BASE_URL}/api/v1/compute/text-inference`, method: "POST", price: "$0.003-$0.10", category: "compute", compute: { type: "text-inference", searchTerms: ["LLM", "chat completion", "text generation"], models: 11, providers: ["chutes", "openrouter"] } },
-      { resource: `${BASE_URL}/api/v1/compute/image-generation`, method: "POST", price: "$0.02-$0.08", category: "compute", compute: { type: "image-generation", searchTerms: ["text to image", "AI image generation", "FLUX"], models: 4, providers: ["replicate"] } },
-      { resource: `${BASE_URL}/api/v1/compute/video-generation`, method: "POST", price: "$0.40-$0.50", category: "compute", compute: { type: "video-generation", searchTerms: ["text to video", "AI video generation"], models: 2, providers: ["replicate"] } },
-      { resource: `${BASE_URL}/api/v1/compute/text-to-speech`, method: "POST", price: "$0.03-$0.05", category: "compute", compute: { type: "text-to-speech", searchTerms: ["TTS", "voice synthesis", "text to speech"], models: 2, providers: ["replicate"] } },
-      { resource: `${BASE_URL}/api/v1/compute/speech-to-text`, method: "POST", price: "$0.02", category: "compute", compute: { type: "speech-to-text", searchTerms: ["STT", "transcription", "speech recognition", "whisper"], models: 1, providers: ["replicate"] } },
-      { resource: `${BASE_URL}/api/v1/compute/embeddings`, method: "POST", price: "$0.005", category: "compute", compute: { type: "embeddings", searchTerms: ["text embeddings", "vector embeddings", "RAG", "semantic search"], models: 1, providers: ["chutes"] } },
-      { resource: `${BASE_URL}/api/v1/compute/batch`, method: "POST", price: "varies", category: "compute", compute: { type: "batch", searchTerms: ["batch inference", "bulk compute"], maxJobs: 50, discount: "10%" } },
-      { resource: `${BASE_URL}/api/v1/compute/status/:jobId`, method: "GET", price: "$0.001", category: "compute" },
-      { resource: `${BASE_URL}/api/v1/compute/models`, method: "GET", price: "free", category: "compute", compute: { description: "List all available compute models with pricing" } },
-      { resource: `${BASE_URL}/api/v1/compute/estimate`, method: "POST", price: "free", category: "compute", compute: { description: "Price estimation before committing" } },
-      // XRP Ledger (Chain #15)
-      { resource: `${BASE_URL}/api/v1/xrp/batch`, method: "POST", price: "$0.02", category: "payments", chain: "xrp-ledger" },
-      { resource: `${BASE_URL}/api/v1/xrp/estimate`, method: "POST", price: "$0.001", category: "payments", chain: "xrp-ledger" },
-      { resource: `${BASE_URL}/api/v1/xrp/info`, method: "GET", price: "$0.001", category: "payments", chain: "xrp-ledger" },
-      // Stellar (Chain #14)
-      { resource: `${BASE_URL}/api/v1/stellar/batch`, method: "POST", price: "$0.02", category: "payments", chain: "stellar" },
-      { resource: `${BASE_URL}/api/v1/stellar/estimate`, method: "POST", price: "$0.001", category: "payments", chain: "stellar" },
-    ],
-    solanaPayment: {
-      enabled: true,
-      chain: "solana",
-      cluster: "mainnet-beta",
-      receiveAddress: process.env.SOLANA_RECEIVE_ADDRESS || "",
-      usdcMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-      txHeader: "X-Solana-Tx",
-      discovery: `${BASE_URL}/.well-known/solana.json`,
+  server.tool(
+    "spraay_models",
+    "List all 200+ AI models available on the Spraay x402 Gateway. Returns model IDs, providers, and context window sizes. Costs $0.001 USDC.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/models");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Models list error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Payments (2 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_batch_execute",
+    "Execute a batch payment to up to 200 recipients in a single Base transaction via the Spraay protocol. Supports any ERC-20 token or native ETH. Returns unsigned transaction data for the sender to sign. Costs $0.01 USDC.",
+    {
+      token: z.string().min(1).describe("Token symbol (e.g. 'USDC', 'ETH', 'WETH', 'DAI') or ERC-20 contract address on Base"),
+      recipients: z.array(ethAddr.describe("Recipient wallet address")).min(1).max(200).describe("Array of 1-200 recipient wallet addresses"),
+      amounts: z.array(z.string().min(1)).min(1).max(200).describe("Array of amounts in token units (e.g. '100' for 100 USDC). Must match recipients length."),
+      sender: ethAddr.describe("Sender wallet address that will sign the transaction"),
     },
-    supportedChains: ["base", "solana"],
-    updatedAt: new Date().toISOString(),
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ token, recipients, amounts, sender }) => {
+      try {
+        const res = await api.post("/api/v1/batch/execute", { token, recipients, amounts, sender });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Batch execute error: ${error.message}. Ensure sender has sufficient ${token} balance.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_batch_estimate",
+    "Estimate gas cost for a batch payment before executing. Returns estimated gas in wei and USD equivalent. Costs $0.001 USDC.",
+    {
+      recipientCount: z.number().min(1).max(200).describe("Number of recipients (1-200)"),
+      token: z.string().optional().describe("Token symbol (default: USDC)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ recipientCount, token }) => {
+      try {
+        const res = await api.post("/api/v1/batch/estimate", { recipientCount, ...(token && { token }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Batch estimate error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // DeFi — Swap (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_swap_quote",
+    "Get a swap quote from Uniswap V3 on Base. Returns expected output amount, price impact, and route details. Use spraay_swap_tokens to see available tokens. Costs $0.002 USDC.",
+    {
+      tokenIn: z.string().min(1).describe("Input token symbol (e.g. 'USDC', 'WETH', 'DAI') or contract address"),
+      tokenOut: z.string().min(1).describe("Output token symbol (e.g. 'WETH', 'USDC') or contract address"),
+      amountIn: z.string().min(1).describe("Amount to swap in human-readable units (e.g. '1000' for 1000 USDC)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ tokenIn, tokenOut, amountIn }) => {
+      try {
+        const res = await api.get("/api/v1/swap/quote", { params: { tokenIn, tokenOut, amountIn } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Swap quote error: ${error.message}. Check token symbols with spraay_swap_tokens.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_swap_tokens",
+    "List all tokens available for swapping on Spraay via Uniswap V3 on Base. Returns symbols, addresses, and decimals. Costs $0.001 USDC.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/swap/tokens");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Swap tokens error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_swap_execute",
+    "Execute a token swap via Uniswap V3 on Base. Returns unsigned transaction data for the caller to sign and broadcast. Get a quote first with spraay_swap_quote. Costs $0.01 USDC.",
+    {
+      tokenIn: z.string().min(1).describe("Input token symbol (e.g. 'USDC') or contract address"),
+      tokenOut: z.string().min(1).describe("Output token symbol (e.g. 'WETH') or contract address"),
+      amountIn: z.string().min(1).describe("Amount to swap in human-readable units"),
+      recipient: ethAddr.describe("Recipient address for swap output (e.g. '0xYourWallet')"),
+      slippage: z.number().min(0.01).max(50).optional().describe("Slippage tolerance in percent (default: 0.5, max: 50)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ tokenIn, tokenOut, amountIn, recipient, slippage }) => {
+      try {
+        const res = await api.post("/api/v1/swap/execute", { tokenIn, tokenOut, amountIn, recipient, ...(slippage && { slippage }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Swap execute error: ${error.message}. Get a quote first with spraay_swap_quote.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Oracle (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_oracle_prices",
+    "Get real-time on-chain token prices with confidence scores from Uniswap V3 QuoterV2 on Base. Returns USD prices for ETH, WETH, cbBTC, USDT, DAI, EURC, and more. Costs $0.003 USDC.",
+    {
+      tokens: z.string().max(500).optional().describe("Comma-separated token symbols (e.g. 'ETH,cbBTC,USDT'). Omit to get all supported token prices."),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ tokens }) => {
+      try {
+        const res = await api.get("/api/v1/oracle/prices", { params: tokens ? { tokens } : {} });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Oracle prices error: ${error.message}. Try specific tokens: 'ETH,USDC'.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_oracle_gas",
+    "Get current gas prices on Base in gwei. Returns base fee, priority fee, and estimated transaction costs. Costs $0.001 USDC.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/oracle/gas");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Oracle gas error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_oracle_fx",
+    "Get stablecoin exchange rates with depeg detection. Returns cross-rates between USDC, USDT, DAI, and EURC. Costs $0.002 USDC.",
+    {
+      base: z.string().optional().describe("Base stablecoin for rate calculation (default: 'USDC'). Options: USDC, USDT, DAI, EURC"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ base: baseCoin }) => {
+      try {
+        const res = await api.get("/api/v1/oracle/fx", { params: baseCoin ? { base: baseCoin } : {} });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Oracle FX error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Bridge (2 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_bridge_quote",
+    "Get a cross-chain bridge quote via LI.FI aggregator. Supports Base, Ethereum, Arbitrum, Polygon, BNB Chain, Avalanche, Optimism, and more. Returns estimated output, fees, and execution time. Costs $0.005 USDC.",
+    {
+      fromChain: z.string().min(1).describe("Source chain name (e.g. 'base', 'ethereum', 'arbitrum', 'polygon')"),
+      toChain: z.string().min(1).describe("Destination chain name (e.g. 'ethereum', 'arbitrum', 'polygon')"),
+      token: z.string().min(1).describe("Token symbol to bridge (e.g. 'USDC', 'ETH')"),
+      amount: z.string().min(1).describe("Amount in smallest units (e.g. '1000000' for 1 USDC with 6 decimals)"),
+      fromAddress: ethAddr.describe("Sender wallet address on source chain"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ fromChain, toChain, token, amount, fromAddress }) => {
+      try {
+        const res = await api.get("/api/v1/bridge/quote", { params: { fromChain, toChain, token, amount, fromAddress } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Bridge quote error: ${error.message}. Check supported chains with spraay_bridge_chains.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_bridge_chains",
+    "List all chains supported by the Spraay bridge aggregator (LI.FI). Returns chain names, IDs, and supported tokens. Costs $0.001 USDC.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/bridge/chains");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Bridge chains error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Payroll (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_payroll_execute",
+    "Execute a payroll batch payment via Spraay V2 contract on Base. Pay up to 200 employees in a single transaction with any stablecoin. Returns unsigned transaction data. Costs $0.02 USDC.",
+    {
+      token: z.string().min(1).describe("Payment token symbol (e.g. 'USDC', 'USDT', 'DAI')"),
+      sender: ethAddr.describe("Employer/sender wallet address"),
+      employees: z.array(z.object({
+        address: ethAddr.describe("Employee wallet address"),
+        amount: z.string().min(1).describe("Payment amount in token units (e.g. '2500' for $2500)"),
+        label: z.string().max(100).optional().describe("Employee label/name for record-keeping"),
+      })).min(1).max(200).describe("Array of 1-200 employee payment objects"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ token, sender, employees }) => {
+      try {
+        const res = await api.post("/api/v1/payroll/execute", { token, sender, employees });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Payroll execute error: ${error.message}. Check supported tokens with spraay_payroll_tokens.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_payroll_estimate",
+    "Estimate gas and fees for a payroll batch before executing. Returns estimated gas in wei and USD. Costs $0.002 USDC.",
+    {
+      employeeCount: z.number().min(1).max(200).describe("Number of employees to pay (1-200)"),
+      token: z.string().optional().describe("Payment token symbol (default: 'USDC')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ employeeCount, token }) => {
+      try {
+        const res = await api.post("/api/v1/payroll/estimate", { employeeCount, ...(token && { token }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Payroll estimate error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_payroll_tokens",
+    "List all stablecoins supported for payroll on Base. Returns symbols, addresses, and decimals. Costs $0.001 USDC.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/payroll/tokens");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Payroll tokens error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Invoice (3 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_invoice_create",
+    "Create a payment invoice with a pre-encoded ERC-20 transfer transaction. Supports USDC, USDT, DAI, EURC, WETH on Base. Data persists in Supabase. Returns invoice ID, payment instructions, and unsigned tx. Costs $0.005 USDC.",
+    {
+      creator: ethAddr.describe("Invoice creator/payee wallet address (e.g. '0xYourAddress')"),
+      token: z.string().min(1).describe("Payment token symbol (e.g. 'USDC', 'USDT', 'DAI', 'EURC', 'WETH')"),
+      amount: positiveAmount.describe("Invoice amount in human-readable units (e.g. '1500.00' for $1500)"),
+      recipient: ethAddr.optional().describe("Payer address — omit for open invoice (anyone can pay)"),
+      memo: z.string().max(500).optional().describe("Invoice description/memo (e.g. 'Web development - March 2026')"),
+      dueDate: z.string().optional().describe("Payment deadline in ISO 8601 format (e.g. '2026-04-15')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ creator, token, amount, recipient, memo, dueDate }) => {
+      try {
+        const res = await api.post("/api/v1/invoice/create", { creator, token, amount, ...(recipient && { recipient }), ...(memo && { memo }), ...(dueDate && { dueDate }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Invoice create error: ${error.message}. Supported tokens: USDC, USDT, DAI, EURC, WETH.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_invoice_list",
+    "List invoices by creator or payer address with optional status filter. Data persists in Supabase. Costs $0.002 USDC.",
+    {
+      address: ethAddr.describe("Creator or payer address to filter by (e.g. '0xYourAddress')"),
+      status: z.enum(["pending", "paid", "expired", "cancelled"]).optional().describe("Filter by invoice status"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ address, status }) => {
+      try {
+        const res = await api.get("/api/v1/invoice/list", { params: { address, ...(status && { status }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Invoice list error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_invoice_get",
+    "Look up a specific invoice by ID. Returns full invoice details, on-chain balance check, and payment status. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      id: z.string().min(1).describe("Invoice ID (e.g. 'INV-A1B2C3D4E5F6')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ id }) => {
+      try {
+        const res = await api.get(`/api/v1/invoice/${id}`);
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Invoice get error: ${error.message}. Check invoice ID format: INV-XXXX.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Analytics (2 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_analytics_wallet",
+    "Get a comprehensive wallet profile including ETH + token balances, wallet age, entity classification, and portfolio breakdown on Base. Costs $0.005 USDC.",
+    {
+      address: ethAddr.describe("Wallet address to analyze (e.g. '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ address }) => {
+      try {
+        const res = await api.get("/api/v1/analytics/wallet", { params: { address } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Wallet analytics error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_analytics_txhistory",
+    "Get decoded transaction history for any address on Base. Returns transaction types, values, timestamps, and decoded method calls. Costs $0.003 USDC.",
+    {
+      address: ethAddr.describe("Wallet address to get history for"),
+      limit: z.string().optional().describe("Max transactions to return (default: '10', max: '100')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ address, limit }) => {
+      try {
+        const res = await api.get("/api/v1/analytics/txhistory", { params: { address, ...(limit && { limit }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `TX history error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Escrow (6 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_escrow_create",
+    "Create a conditional escrow with optional milestones, arbiter, and expiry on Base. Funds are held until release conditions are met. Data persists in Supabase. Returns escrow ID and next-step actions. Costs $0.008 USDC.",
+    {
+      depositor: ethAddr.describe("Depositor/client address who will fund the escrow"),
+      beneficiary: ethAddr.describe("Beneficiary/freelancer address who receives funds on release"),
+      token: z.string().min(1).describe("Token symbol (e.g. 'USDC', 'USDT', 'DAI', 'EURC', 'WETH')"),
+      amount: positiveAmount.describe("Escrow amount in human-readable units (e.g. '5000.00')"),
+      arbiter: ethAddr.optional().describe("Optional third-party arbiter who can release or cancel"),
+      conditions: z.array(z.string().min(1).max(500)).max(20).optional().describe("Milestone conditions (e.g. ['Design approved', 'Dev complete'])"),
+      expiresIn: z.number().min(1).max(8760).optional().describe("Expiry in hours (1-8760, default: 168 = 7 days)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ depositor, beneficiary, token, amount, arbiter, conditions, expiresIn }) => {
+      try {
+        const res = await api.post("/api/v1/escrow/create", { depositor, beneficiary, token, amount, ...(arbiter && { arbiter }), ...(conditions && { conditions }), ...(expiresIn && { expiresIn }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Escrow create error: ${error.message}. Depositor and beneficiary must be different addresses.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_escrow_list",
+    "List escrows by address (depositor, beneficiary, or arbiter) with optional status filter. Data persists in Supabase. Costs $0.002 USDC.",
+    {
+      address: ethAddr.describe("Address to list escrows for (depositor, beneficiary, or arbiter)"),
+      status: z.enum(["created", "funded", "released", "cancelled", "expired"]).optional().describe("Filter by escrow status"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ address, status }) => {
+      try {
+        const res = await api.get("/api/v1/escrow/list", { params: { address, ...(status && { status }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Escrow list error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_escrow_get",
+    "Get full escrow details including status, participants, conditions, balance check, and timestamps by ID. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      id: z.string().min(1).describe("Escrow ID (e.g. 'ESC-A1B2C3D4E5F6')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ id }) => {
+      try {
+        const res = await api.get(`/api/v1/escrow/${id}`);
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Escrow get error: ${error.message}. Check ID format: ESC-XXXX.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_escrow_fund",
+    "Mark an escrow as funded. Changes status from 'created' to 'funded'. Only works on unfunded, non-expired escrows. Data persists in Supabase. Costs $0.002 USDC.",
+    {
+      escrowId: z.string().min(1).describe("Escrow ID to fund (e.g. 'ESC-A1B2C3D4E5F6')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ escrowId }) => {
+      try {
+        const res = await api.post("/api/v1/escrow/fund", { escrowId });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Escrow fund error: ${error.message}. Escrow must be in 'created' status.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_escrow_release",
+    "Release escrow funds to the beneficiary. Returns an unsigned ERC-20 transfer transaction for the depositor to sign. Only depositor or arbiter can release. Data persists in Supabase. Costs $0.005 USDC.",
+    {
+      escrowId: z.string().min(1).describe("Escrow ID to release (e.g. 'ESC-A1B2C3D4E5F6')"),
+      caller: ethAddr.describe("Caller address — must be depositor or arbiter"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ escrowId, caller }) => {
+      try {
+        const res = await api.post("/api/v1/escrow/release", { escrowId, caller });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Escrow release error: ${error.message}. Only depositor or arbiter can release.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_escrow_cancel",
+    "Cancel an escrow. Depositor can cancel unfunded escrows; depositor or arbiter can cancel funded ones. Data persists in Supabase. Costs $0.002 USDC.",
+    {
+      escrowId: z.string().min(1).describe("Escrow ID to cancel (e.g. 'ESC-A1B2C3D4E5F6')"),
+      caller: ethAddr.describe("Caller address — must be depositor (or arbiter for funded escrows)"),
+    },
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    async ({ escrowId, caller }) => {
+      try {
+        const res = await api.post("/api/v1/escrow/cancel", { escrowId, caller });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Escrow cancel error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Inference (4 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_classify_address",
+    "AI-powered wallet classification with risk scoring. Analyzes on-chain activity to classify addresses as whale, retail, MEV bot, exchange, bridge, or contract. Returns risk score, classification, confidence, and behavioral signals. Costs $0.008 USDC.",
+    {
+      address: ethAddr.describe("Ethereum/Base address to classify (e.g. '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ address }) => {
+      try {
+        const res = await api.post("/api/v1/inference/classify-address", { address });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Address classification error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_classify_tx",
+    "AI-powered transaction classification with risk scoring. Decodes, categorizes, and analyzes any Base transaction. Returns type (swap, transfer, contract call, etc.), risk level, and decoded parameters. Costs $0.008 USDC.",
+    {
+      hash: txHash.describe("Transaction hash to classify (e.g. '0xabc123...')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ hash }) => {
+      try {
+        const res = await api.post("/api/v1/inference/classify-tx", { hash });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `TX classification error: ${error.message}. Ensure hash is a valid 0x-prefixed 64-char hex string.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_explain_contract",
+    "AI-powered smart contract analysis. Explains what a verified contract does, lists its functions, identifies patterns (ERC-20, ERC-721, etc.), and flags security properties. Costs $0.01 USDC.",
+    {
+      address: ethAddr.describe("Contract address to analyze on Base (e.g. '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' for USDC)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ address }) => {
+      try {
+        const res = await api.post("/api/v1/inference/explain-contract", { address });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Contract explain error: ${error.message}. Contract must be verified on BaseScan.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_summarize",
+    "AI intelligence briefing for any wallet address or transaction hash. Returns structured risk assessment, entity classification, activity summary, and actionable insights. Costs $0.008 USDC.",
+    {
+      target: z.string().min(1).describe("Address (0x..., 40 hex chars) or transaction hash (0x..., 64 hex chars) to summarize"),
+      context: z.string().optional().describe("Context hint to improve analysis (e.g. 'defi', 'nft', 'governance', 'bridge', 'mev')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ target, context }) => {
+      try {
+        const res = await api.post("/api/v1/inference/summarize", { target, ...(context && { context }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Summarize error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Communication — Email/SMS (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_notify_email",
+    "Send an email notification via AgentMail for payment confirmations, alerts, receipts, or general communication. Supports subject, CC, and reply-to. Costs $0.003 USDC.",
+    {
+      to: z.string().email("Must be a valid email address").describe("Recipient email address (e.g. 'user@example.com')"),
+      subject: z.string().max(200).optional().describe("Email subject line"),
+      body: z.string().min(1).max(10000).describe("Email body content (plain text or HTML)"),
+      cc: z.string().email().optional().describe("CC email address"),
+      replyTo: z.string().email().optional().describe("Reply-to email address"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ to, subject, body, cc, replyTo }) => {
+      try {
+        const res = await api.post("/api/v1/notify/email", { to, body, ...(subject && { subject }), ...(cc && { cc }), ...(replyTo && { replyTo }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Email error: ${error.message}. Verify recipient address format.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_notify_sms",
+    "Send an SMS notification for payment alerts (simulated — Twilio integration coming). Requires E.164 phone format. Costs $0.005 USDC.",
+    {
+      to: z.string().regex(/^\+[1-9]\d{1,14}$/, "Must be E.164 format (e.g. +14155551234)").describe("Phone number in E.164 format (e.g. '+14155551234')"),
+      body: z.string().min(1).max(1600).describe("SMS message body (max 1600 characters)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ to, body }) => {
+      try {
+        const res = await api.post("/api/v1/notify/sms", { to, body });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `SMS error: ${error.message}. Use E.164 format: +14155551234.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_notify_status",
+    "Check delivery status of a previously sent email or SMS notification by notification ID. Costs $0.001 USDC.",
+    {
+      id: z.string().min(1).describe("Notification ID returned from spraay_notify_email or spraay_notify_sms (e.g. 'ntf_abc123')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ id }) => {
+      try {
+        const res = await api.get("/api/v1/notify/status", { params: { id } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Notify status error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Communication — Webhook (4 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_webhook_register",
+    "Register a webhook endpoint to receive real-time POST events for payments, escrows, swaps, invoices, and more. Returns webhook ID and HMAC secret for signature verification. Data persists in Supabase. Costs $0.003 USDC.",
+    {
+      url: z.string().url("Must be a valid HTTPS URL").describe("Webhook URL to receive POST events (e.g. 'https://yourapp.com/webhook')"),
+      events: z.array(z.string().min(1)).min(1).max(20).describe("Events to subscribe to (e.g. ['payment.sent', 'escrow.funded', 'swap.completed'])"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ url, events }) => {
+      try {
+        const res = await api.post("/api/v1/webhook/register", { url, events });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Webhook register error: ${error.message}. URL must be a valid HTTPS endpoint.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_webhook_test",
+    "Send a test ping event to a registered webhook to verify delivery and signature validation. Data persists in Supabase. Costs $0.002 USDC.",
+    {
+      webhookId: z.string().min(1).describe("Webhook ID to test (e.g. 'whk_abc123')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ webhookId }) => {
+      try {
+        const res = await api.post("/api/v1/webhook/test", { webhookId });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Webhook test error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_webhook_list",
+    "List all registered webhooks with their status, subscribed events, and delivery stats. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      status: z.enum(["active", "paused", "failed"]).optional().describe("Filter by webhook status"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ status }) => {
+      try {
+        const res = await api.get("/api/v1/webhook/list", { params: status ? { status } : {} });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Webhook list error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_webhook_delete",
+    "Delete a registered webhook by ID. Removes it permanently from Supabase. Costs $0.001 USDC.",
+    {
+      webhookId: z.string().min(1).describe("Webhook ID to delete (e.g. 'whk_abc123')"),
+    },
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    async ({ webhookId }) => {
+      try {
+        const res = await api.post("/api/v1/webhook/delete", { webhookId });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Webhook delete error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Communication — XMTP (2 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_xmtp_send",
+    "Send an encrypted XMTP message to any Ethereum address on the XMTP production network. Messages are end-to-end encrypted. Costs $0.003 USDC.",
+    {
+      to: ethAddr.describe("Recipient Ethereum address (must have XMTP enabled)"),
+      content: z.string().min(1).max(10000).describe("Message content to send"),
+      contentType: z.string().optional().describe("Content type (default: 'text/plain')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ to, content, contentType }) => {
+      try {
+        const res = await api.post("/api/v1/xmtp/send", { to, content, ...(contentType && { contentType }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `XMTP send error: ${error.message}. Recipient must have XMTP enabled.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_xmtp_inbox",
+    "Read XMTP inbox messages for an Ethereum address. Returns decrypted messages from the production XMTP network. Costs $0.002 USDC.",
+    {
+      address: ethAddr.describe("Ethereum address to check inbox for"),
+      limit: z.string().optional().describe("Max messages to return (default: '20', max: '100')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ address, limit }) => {
+      try {
+        const res = await api.get("/api/v1/xmtp/inbox", { params: { address, ...(limit && { limit }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `XMTP inbox error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Infrastructure — RPC (2 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_rpc_call",
+    "Make a premium multi-chain JSON-RPC call via Alchemy (EVM) or Helius (Solana). Supports Base, Ethereum, Arbitrum, Polygon, BNB Chain, Avalanche, and Solana. Costs $0.001 USDC.",
+    {
+      chain: z.string().min(1).describe("Chain identifier (e.g. 'base', 'ethereum', 'arbitrum', 'polygon', 'bnb', 'avalanche', 'solana')"),
+      method: z.string().min(1).describe("JSON-RPC method (e.g. 'eth_getBalance', 'eth_blockNumber', 'eth_call', 'eth_getTransactionReceipt')"),
+      params: z.array(z.any()).optional().describe("RPC method parameters as array (e.g. ['0xAddress', 'latest'])"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ chain, method, params }) => {
+      try {
+        const res = await api.post("/api/v1/rpc/call", { chain, method, ...(params && { params }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `RPC call error: ${error.message}. Check supported chains with spraay_rpc_chains.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_rpc_chains",
+    "List all chains supported by the Spraay RPC proxy and their allowed JSON-RPC methods. Costs $0.001 USDC.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/rpc/chains");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `RPC chains error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Infrastructure — IPFS/Arweave (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_storage_pin",
+    "Pin content to IPFS via Pinata for permanent decentralized storage. Returns CID (content identifier) for retrieval. Supports text, JSON, and base64 data. Costs $0.005 USDC.",
+    {
+      data: z.string().min(1).max(5000000).describe("Content to pin — JSON string, plain text, or base64-encoded binary"),
+      contentType: z.string().optional().describe("MIME type (default: 'application/octet-stream', e.g. 'application/json', 'text/plain')"),
+      provider: z.enum(["ipfs", "arweave"]).optional().describe("Storage provider (default: 'ipfs')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ data, contentType, provider }) => {
+      try {
+        const res = await api.post("/api/v1/storage/pin", { data, ...(contentType && { contentType }), ...(provider && { provider }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Storage pin error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_storage_get",
+    "Retrieve previously pinned content from IPFS/Arweave by CID. Returns the stored data. Costs $0.002 USDC.",
+    {
+      cid: z.string().min(1).describe("Content identifier (CID) to retrieve (e.g. 'QmXoypizj...' or 'bafybeig...')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ cid }) => {
+      try {
+        const res = await api.get("/api/v1/storage/get", { params: { cid } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Storage get error: ${error.message}. Verify the CID is correct.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_storage_status",
+    "Check the pin status of a storage request by pin ID. Returns pinning progress and confirmation. Costs $0.001 USDC.",
+    {
+      id: z.string().min(1).describe("Pin request ID (e.g. 'pin_abc123')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ id }) => {
+      try {
+        const res = await api.get("/api/v1/storage/status", { params: { id } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Storage status error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Infrastructure — Cron/Scheduler (3 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_cron_create",
+    "Create a scheduled job for recurring payments, DCA strategies, reminders, or any gateway action. Supports standard 5-part cron expressions. Data persists in Supabase. Costs $0.005 USDC.",
+    {
+      action: z.string().min(1).describe("Gateway action to schedule (e.g. 'batch.execute', 'swap.execute', 'notify.email', 'payroll.execute', 'xmtp.send')"),
+      schedule: z.string().regex(/^(\S+\s){4}\S+$/, "Must be 5-part cron: min hour dom mon dow").describe("Cron expression (e.g. '0 9 * * 1' for every Monday at 9am)"),
+      payload: z.record(z.string(), z.any()).describe("Payload for the scheduled action (same format as the action's direct API call)"),
+      maxRuns: z.number().min(1).max(10000).optional().describe("Max executions before auto-cancel (omit for unlimited)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ action, schedule, payload, maxRuns }) => {
+      try {
+        const res = await api.post("/api/v1/cron/create", { action, schedule, payload, ...(maxRuns && { maxRuns }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Cron create error: ${error.message}. Use 5-part cron format: min hour dom mon dow.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_cron_list",
+    "List all scheduled jobs with optional status and action filters. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      status: z.enum(["active", "paused", "cancelled", "completed"]).optional().describe("Filter by job status"),
+      action: z.string().optional().describe("Filter by action type (e.g. 'batch.execute')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ status, action }) => {
+      try {
+        const res = await api.get("/api/v1/cron/list", { params: { ...(status && { status }), ...(action && { action }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Cron list error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_cron_cancel",
+    "Cancel a scheduled job by ID. Stops future executions. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      jobId: z.string().min(1).describe("Cron job ID to cancel (e.g. 'cron_abc123')"),
+    },
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    async ({ jobId }) => {
+      try {
+        const res = await api.post("/api/v1/cron/cancel", { jobId });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Cron cancel error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Infrastructure — Logging (2 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_logs_ingest",
+    "Ingest structured logs for debugging and monitoring agent workflows. Accepts up to 100 entries per batch. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      entries: z.array(z.object({
+        level: z.enum(["debug", "info", "warn", "error"]).describe("Log level"),
+        service: z.string().min(1).max(100).describe("Service name (e.g. 'batch-agent', 'swap-bot', 'payroll-scheduler')"),
+        message: z.string().min(1).max(2000).describe("Log message"),
+        data: z.record(z.string(), z.any()).optional().describe("Additional structured data as key-value pairs"),
+      })).min(1).max(100).describe("Array of 1-100 log entries"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ entries }) => {
+      try {
+        const res = await api.post("/api/v1/logs/ingest", { entries });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Logs ingest error: ${error.message}. Max 100 entries per batch.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_logs_query",
+    "Query structured logs by service, level, and time range. Returns matching log entries sorted newest first. Data persists in Supabase. Costs $0.003 USDC.",
+    {
+      service: z.string().optional().describe("Filter by service name (e.g. 'batch-agent')"),
+      level: z.enum(["debug", "info", "warn", "error"]).optional().describe("Filter by log level"),
+      since: z.string().optional().describe("Start time in ISO 8601 format (e.g. '2026-03-01T00:00:00Z')"),
+      limit: z.string().optional().describe("Max results to return (default: '50', max: '500')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ service, level, since, limit }) => {
+      try {
+        const res = await api.get("/api/v1/logs/query", { params: { ...(service && { service }), ...(level && { level }), ...(since && { since }), ...(limit && { limit }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Logs query error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Identity & Access — KYC (2 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_kyc_verify",
+    "Initiate KYC/KYB verification for compliance-gated payments. Supports individual and business verification at basic, enhanced, or full levels. Data persists in Supabase. Costs $0.05 USDC.",
+    {
+      address: ethAddr.describe("Ethereum address to verify"),
+      type: z.enum(["individual", "business"]).optional().describe("Verification type (default: 'individual')"),
+      level: z.enum(["basic", "enhanced", "full"]).optional().describe("Verification level (default: 'basic')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ address, type, level }) => {
+      try {
+        const res = await api.post("/api/v1/kyc/verify", { address, ...(type && { type }), ...(level && { level }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `KYC verify error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_kyc_status",
+    "Check KYC verification status by record ID or wallet address. Returns verification level, check results, and expiry. Data persists in Supabase. Costs $0.005 USDC.",
+    {
+      id: z.string().optional().describe("KYC record ID (e.g. 'kyc_abc123')"),
+      address: ethAddr.optional().describe("Ethereum address for lookup (alternative to ID)"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ id, address }) => {
+      try {
+        const res = await api.get("/api/v1/kyc/status", { params: { ...(id && { id }), ...(address && { address }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `KYC status error: ${error.message}. Provide either id or address.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Identity & Access — Auth/SSO (2 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_auth_session",
+    "Create an authenticated session with scoped permissions and configurable TTL. Returns a session token (spr_...) for use in Authorization headers. Data persists in Supabase. Costs $0.005 USDC.",
+    {
+      address: ethAddr.describe("Ethereum address to create session for"),
+      permissions: z.array(z.string()).optional().describe("Scoped permissions array (e.g. ['batch:execute', 'swap:execute']). Omit or pass ['*'] for all permissions."),
+      ttlSeconds: z.number().min(60).max(86400).optional().describe("Session TTL in seconds (60-86400, default: 3600 = 1 hour)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ address, permissions, ttlSeconds }) => {
+      try {
+        const res = await api.post("/api/v1/auth/session", { address, ...(permissions && { permissions }), ...(ttlSeconds && { ttlSeconds }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Auth session error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_auth_verify",
+    "Verify a session token and check its permissions, expiry, and associated address. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      token: z.string().min(1).describe("Session token to verify (e.g. 'spr_abc123...')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ token }) => {
+      try {
+        const res = await api.get("/api/v1/auth/verify", { params: { token } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Auth verify error: ${error.message}. Token may be expired or invalid.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Compliance — Audit Trail (2 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_audit_log",
+    "Record an immutable audit trail entry for payments, escrows, compliance actions, and other events. Data persists in Supabase. Costs $0.001 USDC.",
+    {
+      action: z.string().min(1).describe("Action type (e.g. 'payment.sent', 'escrow.created', 'kyc.completed', 'auth.session_created')"),
+      actor: ethAddr.describe("Actor wallet address who performed the action"),
+      resource: z.string().min(1).describe("Resource identifier (e.g. 'batch_123', 'ESC-A1B2', 'INV-C3D4')"),
+      details: z.record(z.string(), z.any()).optional().describe("Additional details as key-value pairs"),
+      txHash: txHash.optional().describe("Related on-chain transaction hash"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ action, actor, resource, details, txHash }) => {
+      try {
+        const res = await api.post("/api/v1/audit/log", { action, actor, resource, ...(details && { details }), ...(txHash && { txHash }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Audit log error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_audit_query",
+    "Query the audit trail by actor, action, resource, or time range. Returns matching entries sorted newest first. Data persists in Supabase. Costs $0.005 USDC.",
+    {
+      actor: ethAddr.optional().describe("Filter by actor wallet address"),
+      action: z.string().optional().describe("Filter by action type (e.g. 'payment.sent')"),
+      resource: z.string().optional().describe("Filter by resource identifier (partial match)"),
+      since: z.string().optional().describe("Start time in ISO 8601 (e.g. '2026-03-01T00:00:00Z')"),
+      until: z.string().optional().describe("End time in ISO 8601"),
+      limit: z.string().optional().describe("Max results (default: '50', max: '500')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ actor, action, resource, since, until, limit }) => {
+      try {
+        const res = await api.get("/api/v1/audit/query", { params: { ...(actor && { actor }), ...(action && { action }), ...(resource && { resource }), ...(since && { since }), ...(until && { until }), ...(limit && { limit }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Audit query error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Compliance — Tax (2 tools) — Supabase persistent
+  // ============================================
+
+  server.tool(
+    "spraay_tax_calculate",
+    "Calculate crypto tax gain/loss using FIFO method for up to 500 transactions. Returns per-event breakdown and aggregate summary with short/long-term classification. Data persists in Supabase. Costs $0.01 USDC.",
+    {
+      transactions: z.array(z.object({
+        type: z.string().optional().describe("Transaction type: 'swap', 'send', 'receive', 'bridge', 'payroll', 'escrow_release'"),
+        asset: z.string().optional().describe("Asset symbol (e.g. 'ETH', 'USDC')"),
+        amount: z.number().optional().describe("Amount of asset"),
+        costBasisUsd: z.number().optional().describe("Cost basis in USD"),
+        proceedsUsd: z.number().optional().describe("Proceeds in USD"),
+        holdingDays: z.number().min(0).optional().describe("Days held (>365 = long-term capital gains)"),
+        txHash: z.string().optional().describe("Transaction hash for record-keeping"),
+        timestamp: z.string().optional().describe("Transaction timestamp in ISO 8601"),
+      })).min(1).max(500).describe("Array of 1-500 transaction objects for tax calculation"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ transactions }) => {
+      try {
+        const res = await api.post("/api/v1/tax/calculate", { transactions });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Tax calculate error: ${error.message}. Max 500 transactions per batch.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_tax_report",
+    "Retrieve a previously calculated tax report by ID, or list all reports. Data persists in Supabase. Costs $0.02 USDC.",
+    {
+      reportId: z.string().optional().describe("Tax report ID from spraay_tax_calculate (e.g. 'tax_abc123'). Omit to list all reports."),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ reportId }) => {
+      try {
+        const res = await api.get("/api/v1/tax/report", { params: reportId ? { reportId } : {} });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Tax report error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // GPU/Compute (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_gpu_run",
+    "Run AI model inference on GPU via Replicate. Supports image generation (flux-pro, sdxl, ideogram), video generation (wan-video, minimax-video), LLMs (llama-70b, llama-8b, mixtral), audio (whisper transcription, musicgen), and utilities (esrgan upscaling, rembg background removal). Use shortcuts like 'flux-pro' or full model IDs like 'owner/model'. Returns output directly for fast models, or a poll URL for longer jobs. Costs $0.05 USDC.",
+    {
+      model: z.string().min(1).describe("Model shortcut (flux-pro, sdxl, llama-70b, whisper, esrgan, etc.) or full Replicate model ID (owner/model-name). Use spraay_gpu_models to list all shortcuts."),
+      input: z.record(z.string(), z.any()).describe("Model-specific input parameters. Image models: { prompt: '...' }. LLMs: { prompt: '...' }. Whisper: { audio: 'https://...' }. ESRGAN: { image: 'https://...' }."),
+      version: z.string().optional().describe("Specific model version hash (optional — not needed for official models)"),
+      webhook: z.string().optional().describe("Webhook URL for async result delivery (optional)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ model, input, version, webhook }) => {
+      try {
+        const res = await api.post("/api/v1/gpu/run", { model, input, ...(version && { version }), ...(webhook && { webhook }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `GPU run error: ${error.message}. Check model shortcuts with spraay_gpu_models.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_gpu_status",
+    "Check the status of a GPU prediction by ID. Use this to poll for results on longer-running jobs like video generation or large model inference. Returns output when complete. Costs $0.002 USDC.",
+    {
+      id: z.string().min(1).describe("Prediction ID returned from spraay_gpu_run"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ id }) => {
+      try {
+        const res = await api.get(`/api/v1/gpu/status/${id}`);
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `GPU status error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_gpu_models",
+    "List all available GPU model shortcuts grouped by category (image, video, LLM, audio, utility). Shows shortcut names, full Replicate model IDs, and descriptions. You can also use any Replicate model by its full ID. FREE — no USDC cost.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/gpu/models");
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `GPU models error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Search/RAG (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_search_web",
+    "Search the web and get clean, LLM-ready results via Tavily. Returns extracted content (not just links), plus an AI-generated answer. Supports basic and advanced search depth, domain filtering, and topic focus (general, news, finance). Costs $0.01 USDC.",
+    {
+      query: z.string().min(1).max(2000).describe("Search query (e.g. 'latest Base ecosystem developments', 'x402 protocol explained')"),
+      search_depth: z.enum(["basic", "advanced"]).optional().describe("Search depth: 'basic' (fast, default) or 'advanced' (deeper extraction, better results)"),
+      max_results: z.number().min(1).max(20).optional().describe("Number of results to return (default: 5, max: 20)"),
+      topic: z.enum(["general", "news", "finance"]).optional().describe("Topic focus: 'general' (default), 'news' (recent events), 'finance' (markets/crypto)"),
+      include_domains: z.array(z.string()).optional().describe("Only include results from these domains (e.g. ['docs.base.org', 'ethereum.org'])"),
+      exclude_domains: z.array(z.string()).optional().describe("Exclude results from these domains"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ query, search_depth, max_results, topic, include_domains, exclude_domains }) => {
+      try {
+        const res = await api.post("/api/v1/search/web", {
+          query,
+          ...(search_depth && { search_depth }),
+          ...(max_results && { max_results }),
+          ...(topic && { topic }),
+          ...(include_domains && { include_domains }),
+          ...(exclude_domains && { exclude_domains }),
+        });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Search error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_search_extract",
+    "Extract clean, structured content from specific URLs — perfect for RAG pipelines. Returns the full text content of each page, ready for LLM consumption. Up to 5 URLs per request. Costs $0.015 USDC.",
+    {
+      urls: z.array(z.string().url()).min(1).max(5).describe("Array of 1-5 URLs to extract content from (e.g. ['https://docs.base.org/overview'])"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ urls }) => {
+      try {
+        const res = await api.post("/api/v1/search/extract", { urls });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Extract error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_search_qna",
+    "Ask a question and get a direct, synthesized answer with cited sources. Searches the web, extracts relevant content, and generates a comprehensive answer. Great for research and fact-checking. Costs $0.02 USDC.",
+    {
+      query: z.string().min(1).max(2000).describe("Natural language question (e.g. 'What is x402 protocol and how does it work?')"),
+      topic: z.enum(["general", "news", "finance"]).optional().describe("Topic focus: 'general' (default), 'news', 'finance'"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ query, topic }) => {
+      try {
+        const res = await api.post("/api/v1/search/qna", { query, ...(topic && { topic }) });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Q&A error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  // ============================================
+  // Data (3 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_prices",
+    "Get live on-chain token prices on Base from Uniswap V3 pools. Returns USD prices with timestamps. Costs $0.002 USDC.",
+    {
+      token: z.string().optional().describe("Specific token symbol (e.g. 'WETH', 'cbBTC'). Omit to get all supported token prices."),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ token }) => {
+      try {
+        const res = await api.get("/api/v1/prices", { params: token ? { token } : {} });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Prices error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_balances",
+    "Get ETH + ERC-20 token balances for any wallet on Base. Returns formatted balances with USD values where available. Costs $0.002 USDC.",
+    {
+      address: ethAddr.describe("Wallet address to check (e.g. '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045')"),
+      tokens: z.string().optional().describe("Comma-separated custom ERC-20 contract addresses to include"),
+      showAll: z.enum(["true", "false"]).optional().describe("Set to 'true' to include zero balances"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ address, tokens, showAll }) => {
+      try {
+        const res = await api.get("/api/v1/balances", { params: { address, ...(tokens && { tokens }), ...(showAll && { showAll }) } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Balances error: ${error.message}.` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_resolve",
+    "Resolve ENS names (.eth) and Basenames (.base.eth) to wallet addresses, or perform reverse lookup from address to name. Costs $0.001 USDC.",
+    {
+      name: z.string().min(1).describe("ENS name (e.g. 'vitalik.eth'), Basename (e.g. 'satoshi.base.eth'), or address for reverse lookup (e.g. '0xd8dA...')"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ name }) => {
+      try {
+        const res = await api.get("/api/v1/resolve", { params: { name } });
+        return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text", text: `Resolve error: ${error.message}. Provide an ENS name, Basename, or 0x address.` }] };
+      }
+    }
+  );
+  // ============================================
+  // AUTO-GENERATED tools from gateway sync
+  // ============================================
+  registerAutoTools(server, api);
+
+  // ============================================
+  // RESOURCES — Static data for agent context
+  // ============================================
+
+  server.resource(
+    "gateway-info",
+    "spraay://gateway/info",
+    { description: "Spraay x402 Gateway metadata — version, endpoints, supported chains, and pricing overview" },
+    async () => ({
+      contents: [{
+        uri: "spraay://gateway/info",
+        mimeType: "application/json",
+        text: JSON.stringify({
+          name: "Spraay x402 Gateway", version: "4.0.0", gateway: "https://gateway.spraay.app",
+          network: "Base (eip155:8453)", paymentToken: "USDC", totalTools: 63, activeTools: 62,
+          categories: ["AI", "Payments", "Swap", "Oracle", "Bridge", "Payroll", "Invoice", "Analytics", "Escrow", "Inference", "Communication", "Infrastructure", "Identity", "Compliance", "Data", "GPU/Compute", "Search/RAG"],
+          persistence: "Supabase Postgres", protocol: "x402", facilitator: "Coinbase CDP",
+        }, null, 2),
+      }],
+    })
+  );
+
+  server.resource(
+    "supported-tokens",
+    "spraay://tokens/list",
+    { description: "All tokens supported by Spraay for payments, swaps, and escrow on Base" },
+    async () => ({
+      contents: [{
+        uri: "spraay://tokens/list",
+        mimeType: "application/json",
+        text: JSON.stringify({
+          tokens: [
+            { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+            { symbol: "USDT", address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+            { symbol: "DAI", address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals: 18 },
+            { symbol: "EURC", address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6 },
+            { symbol: "WETH", address: "0x4200000000000000000000000000000000000006", decimals: 18 },
+            { symbol: "ETH", address: "native", decimals: 18 },
+          ],
+          chain: "Base (8453)",
+        }, null, 2),
+      }],
+    })
+  );
+
+  server.resource(
+    "supported-chains",
+    "spraay://chains/list",
+    { description: "All 11 chains supported by Spraay batch payments protocol" },
+    async () => ({
+      contents: [{
+        uri: "spraay://chains/list",
+        mimeType: "application/json",
+        text: JSON.stringify({
+          chains: [
+            { name: "Base", chainId: 8453, status: "live", gateway: true },
+            { name: "Ethereum", chainId: 1, status: "live" },
+            { name: "Arbitrum", chainId: 42161, status: "live" },
+            { name: "Polygon", chainId: 137, status: "live" },
+            { name: "BNB Chain", chainId: 56, status: "live" },
+            { name: "Avalanche", chainId: 43114, status: "live" },
+            { name: "Unichain", chainId: 130, status: "live" },
+            { name: "Plasma", chainId: 7777777, status: "live" },
+            { name: "BOB", chainId: 60808, status: "live" },
+            { name: "Solana", chainId: null, status: "live" },
+            { name: "Bittensor", chainId: null, status: "live" },
+          ],
+          total: 11,
+        }, null, 2),
+      }],
+    })
+  );
+// ============================================
+  // PROMPTS — Guided workflow templates
+  // ============================================
+
+  server.prompt(
+    "analyze-wallet",
+    "Comprehensive wallet analysis: classification, balances, risk scoring, and transaction history",
+    { address: z.string().describe("Ethereum/Base wallet address to analyze") },
+    async ({ address }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: `Perform a comprehensive analysis of wallet ${address} on Base:\n\n1. Use spraay_analytics_wallet for wallet profile, balances, and classification.\n2. Use spraay_classify_address for AI-powered risk scoring.\n3. Use spraay_analytics_txhistory to review recent transactions.\n4. Use spraay_summarize for an intelligence briefing.\n\nSynthesize into a report: wallet type, risk level, portfolio, notable activity, and flags.` },
+      }],
+    })
+  );
+
+  server.prompt(
+    "create-escrow",
+    "Step-by-step escrow creation with milestones between depositor and beneficiary",
+    {
+      depositor: z.string().describe("Depositor/client wallet address"),
+      beneficiary: z.string().describe("Beneficiary/freelancer wallet address"),
+      amount: z.string().describe("Escrow amount (e.g. 5000.00)"),
+      token: z.string().optional().describe("Payment token (default: USDC)"),
+    },
+    async ({ depositor, beneficiary, amount, token }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: `Create escrow: ${depositor} → ${beneficiary} for ${amount} ${token || "USDC"}.\n\n1. spraay_escrow_create with conditions.\n2. spraay_escrow_get to confirm.\n3. spraay_escrow_fund when ready.\n4. spraay_audit_log to record.\n\nReturn escrow ID and next steps.` },
+      }],
+    })
+  );
+
+  server.prompt(
+    "batch-payroll",
+    "Execute payroll with gas estimation and audit logging",
+    {
+      sender: z.string().describe("Employer wallet address"),
+      employeeCount: z.string().describe("Number of employees"),
+    },
+    async ({ sender, employeeCount }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: `Payroll for ${employeeCount} employees from ${sender}:\n\n1. spraay_payroll_estimate for gas costs.\n2. spraay_payroll_tokens for stablecoins.\n3. spraay_payroll_execute with employee data.\n4. spraay_audit_log to record.\n5. Optionally spraay_notify_email employees.\n\nSummarize total, gas, and tx details.` },
+      }],
+    })
+  );
+
+  server.prompt(
+    "defi-swap",
+    "Get a quote and execute a token swap on Base via Uniswap V3",
+    {
+      tokenIn: z.string().describe("Token to sell (e.g. USDC)"),
+      tokenOut: z.string().describe("Token to buy (e.g. WETH)"),
+      amount: z.string().describe("Amount to swap"),
+    },
+    async ({ tokenIn, tokenOut, amount }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: `Swap ${amount} ${tokenIn} → ${tokenOut}:\n\n1. spraay_swap_quote for expected output and price impact.\n2. spraay_oracle_prices for current prices.\n3. spraay_swap_execute for unsigned tx.\n\nWarn if price impact > 1%.` },
+      }],
+    })
+  );
+
+  // ============================================
+  // Compute Services (10 tools)
+  // ============================================
+
+  server.tool(
+    "spraay_compute_text_inference",
+    "Run LLM text inference via Spraay Compute. 11 models across Chutes, Replicate, OpenRouter (DeepSeek, Llama, Qwen, Gemma). Costs $0.003-$0.10 USDC depending on model.",
+    {
+      messages: z.array(z.object({
+        role: z.enum(["system", "user", "assistant"]).describe("Message role"),
+        content: z.string().describe("Message content"),
+      })).min(1).describe("Chat messages array"),
+      model: z.string().optional().default("auto").describe("Model ID (e.g. 'deepseek-ai/DeepSeek-V3-0324', 'auto' for cheapest). Use spraay_compute_models to list all."),
+      max_tokens: z.number().optional().default(1000).describe("Maximum tokens to generate"),
+      temperature: z.number().optional().describe("Sampling temperature (0-2)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ messages, model, max_tokens, temperature }) => {
+      try {
+        const body: any = { messages, model, max_tokens };
+        if (temperature !== undefined) body.temperature = temperature;
+        const res = await api.post("/api/v1/compute/text-inference", body);
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_text_inference error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_image_generation",
+    "Generate images via Spraay Compute. FLUX Schnell, FLUX Dev, SDXL via Replicate. Text to image. Costs $0.02-$0.08 USDC.",
+    {
+      prompt: z.string().min(1).max(4000).describe("Text prompt describing the image to generate"),
+      model: z.string().optional().default("auto").describe("Model: 'auto', 'flux-schnell', 'flux-dev', 'sdxl'. Auto picks fastest."),
+      width: z.number().optional().default(1024).describe("Image width in pixels (default 1024)"),
+      height: z.number().optional().default(1024).describe("Image height in pixels (default 1024)"),
+      num_outputs: z.number().optional().default(1).describe("Number of images to generate (1-4)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ prompt, model, width, height, num_outputs }) => {
+      try {
+        const res = await api.post("/api/v1/compute/image-generation", { prompt, model, width, height, num_outputs });
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_image_generation error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_video_generation",
+    "Generate video from text via Spraay Compute. MiniMax Video 01, Wan 2.1 via Replicate. Async — poll spraay_compute_status for results. Costs $0.40-$0.50 USDC.",
+    {
+      prompt: z.string().min(1).max(2000).describe("Text prompt describing the video to generate"),
+      model: z.string().optional().default("auto").describe("Model: 'auto', 'minimax-video-01', 'wan-2.1'"),
+      duration_seconds: z.number().optional().default(4).describe("Video duration in seconds (default 4)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ prompt, model, duration_seconds }) => {
+      try {
+        const res = await api.post("/api/v1/compute/video-generation", { prompt, model, duration_seconds });
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_video_generation error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_tts",
+    "Text-to-speech via Spraay Compute. Convert text to natural-sounding audio. Replicate TTS models. Costs $0.03-$0.05 USDC.",
+    {
+      text: z.string().min(1).max(5000).describe("Text to convert to speech"),
+      model: z.string().optional().default("auto").describe("TTS model (default 'auto')"),
+      language: z.string().optional().default("en").describe("Language code (default 'en')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ text, model, language }) => {
+      try {
+        const res = await api.post("/api/v1/compute/text-to-speech", { text, model, language });
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_tts error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_stt",
+    "Speech-to-text via Spraay Compute. Transcribe audio from a URL using Whisper. Costs $0.02 USDC.",
+    {
+      audio_url: z.string().url().describe("URL of the audio file to transcribe (MP3, WAV, M4A, etc.)"),
+      model: z.string().optional().default("auto").describe("STT model (default 'auto' = Whisper)"),
+      language: z.string().optional().describe("Optional language hint (e.g. 'en', 'es', 'fr')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ audio_url, model, language }) => {
+      try {
+        const body: any = { audio_url, model };
+        if (language) body.language = language;
+        const res = await api.post("/api/v1/compute/speech-to-text", body);
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_stt error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_embeddings",
+    "Generate text embeddings via Spraay Compute. For RAG, semantic search, clustering. Costs $0.005 USDC.",
+    {
+      input: z.union([z.string(), z.array(z.string())]).describe("Text string or array of strings to embed"),
+      model: z.string().optional().default("auto").describe("Embedding model (default 'auto')"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ input, model }) => {
+      try {
+        const res = await api.post("/api/v1/compute/embeddings", { input, model });
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_embeddings error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_batch",
+    "Batch compute — submit up to 50 jobs in a single x402 payment with 10% discount. Mix any types: text-inference, image-generation, tts, stt, embeddings, video-generation. Costs $0.05+ USDC.",
+    {
+      jobs: z.array(z.object({
+        type: z.enum(["text-inference", "image-generation", "video-generation", "text-to-speech", "speech-to-text", "embeddings"]).describe("Compute job type"),
+        messages: z.array(z.object({ role: z.string(), content: z.string() })).optional().describe("For text-inference: chat messages"),
+        prompt: z.string().optional().describe("For image/video/tts: text prompt"),
+        input: z.string().optional().describe("For embeddings: text to embed"),
+        audio_url: z.string().optional().describe("For stt: audio URL"),
+        model: z.string().optional().describe("Model override"),
+      })).min(1).max(50).describe("Array of compute jobs (max 50)"),
+    },
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    async ({ jobs }) => {
+      try {
+        const res = await api.post("/api/v1/compute/batch", { jobs });
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_batch error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_status",
+    "Poll async compute job status. Use for video generation and batch jobs that return 'processing'. Costs $0.001 USDC.",
+    {
+      jobId: z.string().describe("Job ID or prediction ID returned from a compute request"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ jobId }) => {
+      try {
+        const res = await api.get(`/api/v1/compute/status/${jobId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_status error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_models",
+    "List all available compute models with pricing and capabilities. Grouped by type (text, image, video, tts, stt, embeddings). FREE — no x402 payment required.",
+    {},
+    { readOnlyHint: true, openWorldHint: true },
+    async () => {
+      try {
+        const res = await api.get("/api/v1/compute/models");
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_models error: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "spraay_compute_estimate",
+    "Estimate compute cost before committing. Returns price breakdown per job. FREE — no x402 payment required.",
+    {
+      jobs: z.array(z.object({
+        type: z.enum(["text-inference", "image-generation", "video-generation", "text-to-speech", "speech-to-text", "embeddings"]).describe("Job type"),
+        model: z.string().optional().describe("Model override"),
+      })).min(1).describe("Jobs to estimate pricing for"),
+    },
+    { readOnlyHint: true, openWorldHint: true },
+    async ({ jobs }) => {
+      try {
+        const res = await api.post("/api/v1/compute/estimate", { jobs });
+        return { content: [{ type: "text" as const, text: JSON.stringify(res.data, null, 2) }] };
+      } catch (error: any) {
+        return { isError: true, content: [{ type: "text" as const, text: `spraay_compute_estimate error: ${error.message}` }] };
+      }
+    }
+  );
+}
+
+// Sandbox server for Smithery scanning (no real credentials needed)
+export function createSandboxServer() {
+  const server = new McpServer({
+    name: "Spraay x402 Gateway",
+    version: "4.0.0",
   });
+  const mockApi = axios.create({ baseURL: gatewayURL });
+  registerTools(server, mockApi);
+  return server;
+}
+
+// HTTP transport for Smithery/remote hosting
+async function startHttpServer(api: any) {
+  const app = express();
+  app.use(express.json());
+
+  app.get("/", (_req: any, res: any) => {
+    res.json({
+      name: "Spraay x402 MCP Server",
+      version: "4.0.0",
+      description: "63 MCP tools (62 active) for full-stack DeFi infrastructure on Base with persistent Supabase storage. AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, infrastructure, identity, compliance, GPU/Compute & Search/RAG. Agents pay USDC per request via x402 protocol.",
+      mcp: "/mcp",
+      tools: 63,
+      activeTools: 62,
+      resources: 3,
+      prompts: 4,
+      gateway: gatewayURL,
+    });
+  });
+
+  app.all("/mcp", async (req: any, res: any) => {
+    const server = new McpServer({
+      name: "Spraay x402 Gateway",
+      version: "4.0.0",
+    });
+    registerTools(server, api);
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined as any });
+    res.on("close", () => { transport.close(); });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  app.listen(PORT, () => {
+    console.log(`\n💧 Spraay MCP Server (HTTP) v3.2.0 running on port ${PORT}`);
+    console.log(`📡 MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`🔗 Gateway: ${gatewayURL}`);
+    console.log(`🔧 63 tools (62 active) + 3 resources + 4 prompts\n`);
+  });
+}
+
+// Stdio transport for Claude Desktop / Cursor
+async function startStdioServer(api: any) {
+  const server = new McpServer({
+    name: "Spraay x402 Gateway",
+    version: "4.0.0",
+  });
+  registerTools(server, api);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+async function main() {
+  const api = await createPaymentClient();
+
+  if (TRANSPORT === "http") {
+    await startHttpServer(api);
+  } else {
+    await startStdioServer(api);
+  }
+}
+
+// ============================================
+// Smithery-compatible exports
+// ============================================
+
+// Config schema for Smithery UI — tells users what env vars are needed
+export const configSchema = z.object({
+  EVM_PRIVATE_KEY: z.string().describe("Private key of a wallet with USDC on Base mainnet. Used for automatic x402 micropayments."),
+  SPRAAY_GATEWAY_URL: z.string().optional().default("https://gateway.spraay.app").describe("Spraay x402 Gateway URL (optional, defaults to https://gateway.spraay.app)"),
 });
 
-app.get("/.well-known/solana.json", solanaDiscoveryHandler);
+// Default export: Smithery calls this to create the server
+// When deployed on Smithery, config comes from user input
+// When running locally, falls back to process.env
+export default function createServer({ config }: { config?: z.infer<typeof configSchema> } = {}) {
+  const gw = config?.SPRAAY_GATEWAY_URL || process.env.SPRAAY_GATEWAY_URL || "https://gateway.spraay.app";
+  const evmKey = config?.EVM_PRIVATE_KEY || process.env.EVM_PRIVATE_KEY;
 
-app.get("/.well-known/mcp/server-card.json", (_req, res) => {
-  res.json({
+  const server = new McpServer({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 76 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).",
-    version: "3.7.0",
-    icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
-    homepage: "https://spraay.app",
-    repository: "https://github.com/plagtech/spraay-x402-mcp",
-    configSchema: {
-      type: "object",
-      required: ["EVM_PRIVATE_KEY"],
-      properties: {
-        EVM_PRIVATE_KEY: { type: "string", title: "EVM Private Key", description: "Private key of a wallet with USDC on Base mainnet." },
-        SPRAAY_GATEWAY_URL: { type: "string", default: "https://gateway.spraay.app", description: "Gateway URL" },
-      },
-    },
-    tools: [
-      { name: "spraay_chat", description: "AI chat via 200+ models", price: "$0.04" },
-      { name: "spraay_models", description: "List AI models", price: "$0.001" },
-      { name: "spraay_batch_execute", description: "Batch pay up to 200 recipients", price: "$0.02" },
-      { name: "spraay_batch_estimate", description: "Estimate batch gas", price: "$0.001" },
-      { name: "spraay_swap_quote", description: "Uniswap V3 swap quote", price: "$0.008" },
-      { name: "spraay_swap_tokens", description: "List swap tokens", price: "$0.001" },
-      { name: "spraay_swap_execute", description: "Execute swap", price: "$0.015" },
-      { name: "spraay_oracle_prices", description: "On-chain token prices", price: "$0.008" },
-      { name: "spraay_oracle_gas", description: "Gas prices", price: "$0.005" },
-      { name: "spraay_oracle_fx", description: "Stablecoin FX rates", price: "$0.008" },
-      { name: "spraay_bridge_quote", description: "Cross-chain bridge quote", price: "$0.05" },
-      { name: "spraay_bridge_chains", description: "Supported bridge chains", price: "$0.002" },
-      { name: "spraay_payroll_execute", description: "Execute payroll", price: "$0.10" },
-      { name: "spraay_payroll_estimate", description: "Estimate payroll", price: "$0.003" },
-      { name: "spraay_payroll_tokens", description: "Payroll stablecoins", price: "$0.002" },
-      { name: "spraay_invoice_create", description: "Create invoice", price: "$0.05" },
-      { name: "spraay_invoice_list", description: "List invoices", price: "$0.01" },
-      { name: "spraay_invoice_get", description: "Invoice lookup", price: "$0.01" },
-      { name: "spraay_analytics_wallet", description: "Wallet profile", price: "$0.01" },
-      { name: "spraay_analytics_txhistory", description: "Tx history", price: "$0.008" },
-      { name: "spraay_escrow_create", description: "Create escrow", price: "$0.10" },
-      { name: "spraay_escrow_list", description: "List escrows", price: "$0.02" },
-      { name: "spraay_escrow_get", description: "Escrow status", price: "$0.005" },
-      { name: "spraay_escrow_fund", description: "Fund escrow", price: "$0.02" },
-      { name: "spraay_escrow_release", description: "Release escrow", price: "$0.08" },
-      { name: "spraay_escrow_cancel", description: "Cancel escrow", price: "$0.02" },
-      { name: "spraay_classify_address", description: "AI wallet classification", price: "$0.03" },
-      { name: "spraay_classify_tx", description: "AI tx classification", price: "$0.03" },
-      { name: "spraay_explain_contract", description: "AI contract analysis", price: "$0.03" },
-      { name: "spraay_summarize", description: "AI intelligence briefing", price: "$0.03" },
-      { name: "spraay_notify_email", description: "Send email", price: "$0.01" },
-      { name: "spraay_notify_sms", description: "Send SMS", price: "$0.02" },
-      { name: "spraay_notify_status", description: "Notification status", price: "$0.002" },
-      { name: "spraay_webhook_register", description: "Register webhook", price: "$0.01" },
-      { name: "spraay_webhook_test", description: "Test webhook", price: "$0.005" },
-      { name: "spraay_webhook_list", description: "List webhooks", price: "$0.002" },
-      { name: "spraay_webhook_delete", description: "Delete webhook", price: "$0.002" },
-      { name: "spraay_xmtp_send", description: "Send XMTP message", price: "$0.01" },
-      { name: "spraay_xmtp_inbox", description: "XMTP inbox", price: "$0.01" },
-      { name: "spraay_rpc_call", description: "Multi-chain RPC call", price: "$0.001" },
-      { name: "spraay_rpc_chains", description: "RPC chains list", price: "$0.001" },
-      { name: "spraay_storage_pin", description: "Pin to IPFS/Arweave", price: "$0.01" },
-      { name: "spraay_storage_get", description: "Get pinned content", price: "$0.005" },
-      { name: "spraay_storage_status", description: "Pin status", price: "$0.002" },
-      { name: "spraay_cron_create", description: "Create scheduled job", price: "$0.01" },
-      { name: "spraay_cron_list", description: "List jobs", price: "$0.002" },
-      { name: "spraay_cron_cancel", description: "Cancel job", price: "$0.002" },
-      { name: "spraay_logs_ingest", description: "Ingest logs", price: "$0.002" },
-      { name: "spraay_logs_query", description: "Query logs", price: "$0.005" },
-      { name: "spraay_kyc_verify", description: "KYC verification", price: "$0.02" },
-      { name: "spraay_kyc_status", description: "KYC status", price: "$0.01" },
-      { name: "spraay_auth_session", description: "Create auth session", price: "$0.01" },
-      { name: "spraay_auth_verify", description: "Verify token", price: "$0.005" },
-      { name: "spraay_audit_log", description: "Record audit entry", price: "$0.005" },
-      { name: "spraay_audit_query", description: "Query audit trail", price: "$0.03" },
-      { name: "spraay_tax_calculate", description: "Tax gain/loss calc", price: "$0.08" },
-      { name: "spraay_tax_report", description: "Tax report", price: "$0.05" },
-      { name: "spraay_gpu_run", description: "Run GPU inference (image, video, LLM, audio)", price: "$0.06" },
-      { name: "spraay_gpu_status", description: "Check GPU prediction status", price: "$0.005" },
-      { name: "spraay_gpu_models", description: "List GPU model shortcuts", price: "free" },
-      { name: "spraay_search_web", description: "Web search with LLM-ready results", price: "$0.02" },
-      { name: "spraay_search_extract", description: "Extract content from URLs for RAG", price: "$0.02" },
-      { name: "spraay_search_qna", description: "Question answering with sources", price: "$0.03" },
-      // Robotics / RTP
-      { name: "spraay_robot_register", description: "Register a robot on the RTP network", price: "free" },
-      { name: "spraay_robot_task", description: "Dispatch paid task to a robot", price: "$0.05" },
-      { name: "spraay_robot_complete", description: "Report robot task completion", price: "free" },
-      { name: "spraay_robot_list", description: "Discover robots by capability/price", price: "$0.005" },
-      { name: "spraay_robot_status", description: "Poll RTP task status", price: "$0.002" },
-      { name: "spraay_robot_profile", description: "Get robot capability profile", price: "$0.002" },
-      // Agent Wallet (Category 17)
-      { name: "spraay_agent_wallet_provision", description: "Create smart contract wallet for AI agent", price: "$0.05" },
-      { name: "spraay_agent_wallet_session_key", description: "Add session key with spend limits", price: "$0.02" },
-      { name: "spraay_agent_wallet_info", description: "Get agent wallet info + balance", price: "$0.005" },
-      { name: "spraay_agent_wallet_revoke_key", description: "Revoke session key", price: "$0.02" },
-      { name: "spraay_agent_wallet_predict", description: "Predict wallet address before deploy", price: "$0.001" },
-      { name: "spraay_prices", description: "Token prices", price: "$0.005" },
-      { name: "spraay_balances", description: "Token balances", price: "$0.005" },
-      { name: "spraay_resolve", description: "ENS resolution", price: "$0.002" },
-      // Supply Chain Task Protocol (Category 18)
-      { name: "spraay_sctp_supplier_create", description: "Register supplier with wallet + payment prefs", price: "$0.02" },
-      { name: "spraay_sctp_supplier_get", description: "Get supplier details", price: "$0.005" },
-      { name: "spraay_sctp_po_create", description: "Create purchase order", price: "$0.02" },
-      { name: "spraay_sctp_po_get", description: "Get purchase order", price: "$0.005" },
-      { name: "spraay_sctp_invoice_submit", description: "Submit invoice for verification", price: "$0.02" },
-      { name: "spraay_sctp_invoice_get", description: "Get invoice + verification result", price: "$0.005" },
-      { name: "spraay_sctp_invoice_verify", description: "AI-powered invoice verification against PO", price: "$0.03" },
-      { name: "spraay_sctp_pay", description: "Execute supplier payment (single or batch)", price: "$0.10" },
-    ],
+    version: "4.0.0",
   });
-});
 
-app.get("/", (_req, res) => {
-  res.json({
-    name: "Spraay x402 Gateway", version: "3.7.0",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG, Agent Wallets & Supply Chain (SCTP). x402 + USDC.",
-    docs: "https://github.com/plagtech/spraay-x402-gateway",
-    discovery: `${BASE_URL}/.well-known/x402.json`,
-    endpoints: {
-      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models", "POST /api/v1/robots/register": "Register Robot (RTP)", "POST /api/v1/robots/complete": "Report Task Complete (RTP)", "PATCH /api/v1/robots/update": "Update Robot (RTP)", "POST /api/v1/robots/deregister": "Remove Robot (RTP)", "GET /bittensor/v1/health": "Bittensor health" },
-      paid: {
-        // AI
-        "POST /api/v1/chat/completions": "$0.04 - AI chat",
-        "GET /api/v1/models": "$0.001 - AI models",
-        // Payments
-        "POST /api/v1/batch/execute": "$0.02 - Batch payment",
-        "POST /api/v1/batch/estimate": "$0.001 - Batch estimate",
-        // DeFi
-        "GET /api/v1/swap/quote": "$0.008 - Swap quote",
-        "GET /api/v1/swap/tokens": "$0.001 - Swap tokens",
-        "POST /api/v1/swap/execute": "$0.0155 - Execute swap",
-        // Oracle
-        "GET /api/v1/oracle/prices": "$0.008 - Price feed",
-        "GET /api/v1/oracle/gas": "$0.005 - Gas prices",
-        "GET /api/v1/oracle/fx": "$0.008 - Stablecoin FX",
-        // Bridge
-        "GET /api/v1/bridge/quote": "$0.05 - Bridge quote",
-        "GET /api/v1/bridge/chains": "$0.002 - Bridge chains",
-        // Payroll
-        "POST /api/v1/payroll/execute": "$0.10 - Payroll",
-        "POST /api/v1/payroll/estimate": "$0.003 - Payroll estimate",
-        "GET /api/v1/payroll/tokens": "$0.002 - Payroll tokens",
-        // Invoice
-        "POST /api/v1/invoice/create": "$0.05 - Create invoice",
-        "GET /api/v1/invoice/list": "$0.01 - List invoices",
-        "GET /api/v1/invoice/:id": "$0.01 - Invoice lookup",
-        // Analytics
-        "GET /api/v1/analytics/wallet": "$0.01 - Wallet profile",
-        "GET /api/v1/analytics/txhistory": "$0.008 - Tx history",
-        // Escrow
-        "POST /api/v1/escrow/create": "$0.10 - Create escrow",
-        "GET /api/v1/escrow/list": "$0.02 - List escrows",
-        "GET /api/v1/escrow/:id": "$0.005 - Escrow status",
-        "POST /api/v1/escrow/fund": "$0.02 - Fund escrow",
-        "POST /api/v1/escrow/release": "$0.08 - Release escrow",
-        "POST /api/v1/escrow/cancel": "$0.02 - Cancel escrow",
-        // Inference
-        "POST /api/v1/inference/classify-address": "$0.03 - Classify wallet",
-        "POST /api/v1/inference/classify-tx": "$0.03 - Classify transaction",
-        "POST /api/v1/inference/explain-contract": "$0.03 - Explain contract",
-        "POST /api/v1/inference/summarize": "$0.03 - Intelligence briefing",
-        // Communication
-        "POST /api/v1/notify/email": "$0.01 - Send email",
-        "POST /api/v1/notify/sms": "$0.02 - Send SMS",
-        "GET /api/v1/notify/status": "$0.002 - Notification status",
-        "POST /api/v1/webhook/register": "$0.01 - Register webhook",
-        "POST /api/v1/webhook/test": "$0.005 - Test webhook",
-        "GET /api/v1/webhook/list": "$0.002 - List webhooks",
-        "POST /api/v1/webhook/delete": "$0.002 - Delete webhook",
-        "POST /api/v1/xmtp/send": "$0.01 - Send XMTP message",
-        "GET /api/v1/xmtp/inbox": "$0.01 - XMTP inbox",
-        // Infrastructure
-        "POST /api/v1/rpc/call": "$0.001 - RPC call",
-        "GET /api/v1/rpc/chains": "$0.001 - RPC chains",
-        "POST /api/v1/storage/pin": "$0.01 - Pin to IPFS/Arweave",
-        "GET /api/v1/storage/get": "$0.005 - Get pinned content",
-        "GET /api/v1/storage/status": "$0.002 - Pin status",
-        "POST /api/v1/cron/create": "$0.01 - Create scheduled job",
-        "GET /api/v1/cron/list": "$0.002 - List jobs",
-        "POST /api/v1/cron/cancel": "$0.002 - Cancel job",
-        "POST /api/v1/logs/ingest": "$0.002 - Ingest logs",
-        "GET /api/v1/logs/query": "$0.005 - Query logs",
-        // Identity & Access
-        "POST /api/v1/kyc/verify": "$0.02 - KYC verification",
-        "GET /api/v1/kyc/status": "$0.01 - KYC status",
-        "POST /api/v1/auth/session": "$0.01 - Create session",
-        "GET /api/v1/auth/verify": "$0.005 - Verify token",
-        // Compliance
-        "POST /api/v1/audit/log": "$0.005 - Audit log entry",
-        "GET /api/v1/audit/query": "$0.03 - Query audit trail",
-        "POST /api/v1/tax/calculate": "$0.08 - Tax calculation",
-        "GET /api/v1/tax/report": "$0.05 - Tax report",
-        // GPU/Compute
-        "POST /api/v1/gpu/run": "$0.06 - GPU inference via Replicate",
-        "GET /api/v1/gpu/status/:id": "$0.005 - GPU prediction status",
-        "GET /api/v1/gpu/models": "FREE - GPU model shortcuts",
-        // Search/RAG
-        "POST /api/v1/search/web": "$0.02 - Web search (Tavily)",
-        "POST /api/v1/search/extract": "$0.02 - Extract content from URLs",
-        "POST /api/v1/search/qna": "$0.03 - Question answering",
-        // Robotics / RTP
-        "POST /api/v1/robots/task": "$0.05 - Dispatch robot task (RTP)",
-        "GET /api/v1/robots/list": "$0.005 - Discover robots",
-        "GET /api/v1/robots/status": "$0.002 - Poll task status",
-        "GET /api/v1/robots/profile": "$0.002 - Robot profile",
-        // Agent Wallet (Category 17)
-        "POST /api/v1/agent-wallet/provision": "$0.05 - Provision agent wallet",
-        "POST /api/v1/agent-wallet/session-key": "$0.02 - Add session key",
-        "GET /api/v1/agent-wallet/info": "$0.005 - Agent wallet info",
-        "POST /api/v1/agent-wallet/revoke-key": "$0.02 - Revoke session key",
-        "GET /api/v1/agent-wallet/predict": "$0.001 - Predict wallet address",
-        // Data
-        "GET /api/v1/prices": "$0.005 - Token prices",
-        "GET /api/v1/balances": "$0.005 - Balances",
-        "GET /api/v1/resolve": "$0.002 - ENS resolution",
-        // Supply Chain / SCTP (Category 18)
-        "POST /api/v1/sctp/supplier": "$0.02 - Register supplier",
-        "GET /api/v1/sctp/supplier/:id": "$0.005 - Get supplier",
-        "POST /api/v1/sctp/po": "$0.02 - Create purchase order",
-        "GET /api/v1/sctp/po/:id": "$0.005 - Get purchase order",
-        "POST /api/v1/sctp/invoice": "$0.02 - Submit invoice",
-        "GET /api/v1/sctp/invoice/:id": "$0.005 - Get invoice",
-        "POST /api/v1/sctp/invoice/verify": "$0.03 - Verify invoice (AI)",
-        "POST /api/v1/sctp/pay": "$0.10 - Execute supplier payment",
-        // Bittensor Drop-in API (Category 19)
-        "GET /bittensor/v1/models": "$0.001 - Bittensor models",
-        "POST /bittensor/v1/chat/completions": "$0.03 - Bittensor inference",
-        "POST /bittensor/v1/images/generations": "$0.05 - Bittensor image gen",
-        "POST /bittensor/v1/embeddings": "$0.005 - Bittensor embeddings",
-        // Compute Services
-      "POST /api/v1/compute/text-inference": "$0.003-$0.10 - LLM text inference (11 models)",
-      "POST /api/v1/compute/image-generation": "$0.02-$0.08 - AI image generation (FLUX, SDXL)",
-      "POST /api/v1/compute/video-generation": "$0.40-$0.50 - AI video generation",
-      "POST /api/v1/compute/text-to-speech": "$0.03-$0.05 - Text to speech (TTS)",
-      "POST /api/v1/compute/speech-to-text": "$0.02 - Speech to text (STT)",
-      "POST /api/v1/compute/embeddings": "$0.005 - Text embeddings (RAG)",
-      "POST /api/v1/compute/batch": "$0.05 - Batch compute (up to 50 jobs, 10% discount)",
-      "GET /api/v1/compute/status/:jobId": "$0.001 - Poll job status",
-      // Solana
-      "GET /api/v1/solana/jupiter/quote": "$0.005 - Jupiter swap quote",
-      "POST /api/v1/solana/jupiter/swap-tx": "$0.01 - Jupiter swap transaction",
-      "GET /api/v1/solana/helius/assets-by-owner": "$0.003 - Helius DAS assets",
-      "GET /api/v1/solana/helius/asset": "$0.002 - Helius DAS single asset",
-      "GET /api/v1/solana/pyth/price": "$0.005 - Pyth price feed",
-      "GET /api/v1/solana/pyth/prices": "$0.008 - Pyth batch prices",
-      // Portfolio & Contract
-      "GET /api/v1/portfolio/tokens": "$0.005 - Portfolio tokens",
-      "GET /api/v1/portfolio/nfts": "$0.005 - Portfolio NFTs",
-      "POST /api/v1/contract/read": "$0.002 - Read contract",
-      "POST /api/v1/contract/write": "$0.01 - Write contract",
-      "GET /api/v1/defi/positions": "$0.008 - DeFi positions",
-      // XRP & Stellar
-      "POST /api/v1/xrp/batch": "$0.02 - XRP batch payments",
-      "POST /api/v1/xrp/estimate": "$0.001 - XRP batch estimate",
-      "GET /api/v1/xrp/info": "$0.001 - XRP Ledger info",
-      "POST /api/v1/stellar/batch": "$0.02 - Stellar batch payments",
-      "POST /api/v1/stellar/estimate": "$0.001 - Stellar batch estimate",
-      },
-    },
-    contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
-    network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 109,
-    protocols: {
-      x402: {
-        status: "active",
-        network: CAIP2_NETWORK,
-        facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
-        token: "USDC",
-      },
-      mpp: {
-        status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
-        methods: ["tempo", "stripe-spt"],
-        currency: "pathUSD",
-        network: "tempo",
-        spec: "https://mpp.dev",
-      },
-    },
-  });
-});
-
-app.get("/api/v1/tokens", (_req, res) => {
-  res.json({
-    description: "Spraay supports any ERC-20 token and native ETH on Base",
-    contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC", fee: "0.3%", feeBps: 30, maxRecipients: 200,
-    popularTokens: {
-      ETH: { native: true, decimals: 18 }, USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
-      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }, DAI: { address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals: 18 },
-      EURC: { address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6 }, WETH: { address: "0x4200000000000000000000000000000000000006", decimals: 18 },
-    },
-    chains: { base: { chainId: 8453, contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC", status: "live" }, unichain: { chainId: 130, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" } },
-  });
-});
-
-// Stripe subscription auth
-app.post("/v1/auth/register", registerHandler);
-app.get("/v1/auth/success", successHandler);
-app.get("/v1/auth/cancel", cancelHandler);
-app.get("/v1/auth/usage", usageHandler);
-app.post("/v1/auth/rotate", rotateHandler);
-app.post("/v1/auth/portal", portalHandler);
-app.get("/health", healthHandler);
-app.get("/stats", statsHandler);
-
-// ============================================
-// DISCOVERY ROUTES — kill the 404 bleed
-// ============================================
-// Path aliases for discovery endpoints agents probe but that would otherwise 404.
-// Redirect to the full .json versions above where possible; inline new formats.
-
-// x402 manifest — redirect bare paths to the existing .json version
-app.get("/.well-known/x402", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
-app.get("/.well-known/x402-resources", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
-app.get("/x402-resources", (_req, res) => res.redirect(308, "/.well-known/x402.json"));
-
-// MPP discovery
-app.get("/.well-known/mpp.json", (_req, res) => {
-  res.json({
-    mppVersion: "1.0",
-    name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 109+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
-    homepage: BASE_URL,
-    status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
-    paymentMethods: {
-      tempo: {
-        currency: "0x20c0000000000000000000000000000000000000",
-        currencyName: "pathUSD",
-        recipient: PAY_TO,
-        network: "tempo",
-      },
-    },
-    endpoints: {
-      total: 109,
-      docs: `${BASE_URL}/.well-known/x402.json`,
-      openapi: `${BASE_URL}/openapi.json`,
-      mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
-    },
-    protocols: ["x402", "mpp"],
-    spec: "https://mpp.dev",
-    sdk: "npm install mppx",
-    example: `npx mppx ${BASE_URL}/api/v1/oracle/gas`,
-  });
-});
-app.get("/.well-known/mpp", (_req, res) => res.redirect(308, "/.well-known/mpp.json"));
-
-// MCP discovery — redirect bare paths to the existing server-card.json
-app.get("/.well-known/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
-app.get("/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
-app.post("/mcp", (_req, res) => res.redirect(308, "/.well-known/mcp/server-card.json"));
-
-// A2A protocol agent card — new format, three path aliases
-const agentCardResponse = (_req: express.Request, res: express.Response) => {
-  res.json({
-    schemaVersion: "0.2.0",
-    name: "Spraay Universal Agent Payment Gateway",
-    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 93+ paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
-    url: BASE_URL,
-    provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
-    version: "3.8.0",
-    documentationUrl: "https://docs.spraay.app",
-    capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
-    authentication: {
-      schemes: ["x402", "mpp"],
-      credentials: [
-        { protocol: "x402", network: CAIP2_NETWORK, acceptedAssets: ["USDC"], payTo: PAY_TO },
-        { protocol: "mpp", methods: ["tempo"], currency: "pathUSD", payTo: PAY_TO, spec: "https://mpp.dev" },
-      ],
-    },
-    defaultInputModes: ["application/json"],
-    defaultOutputModes: ["application/json"],
-    skills: [
-      { id: "chat_completions", name: "POST /api/v1/chat/completions", description: "OpenAI-compatible chat via 200+ models", tags: ["ai"], examples: [`POST ${BASE_URL}/api/v1/chat/completions`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "bittensor_chat", name: "POST /bittensor/v1/chat/completions", description: "Bittensor SN64 inference (Chutes AI)", tags: ["ai"], examples: [`POST ${BASE_URL}/bittensor/v1/chat/completions`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "batch_execute", name: "POST /api/v1/batch/execute", description: "Batch USDC payments via Spraay on Base", tags: ["payments"], examples: [`POST ${BASE_URL}/api/v1/batch/execute`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "oracle_prices", name: "GET /api/v1/oracle/prices", description: "Multi-source oracle price feed", tags: ["oracle"], examples: [`GET ${BASE_URL}/api/v1/oracle/prices`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "swap_quote", name: "GET /api/v1/swap/quote", description: "Uniswap V3 / Aerodrome swap quote", tags: ["defi"], examples: [`GET ${BASE_URL}/api/v1/swap/quote`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "escrow_create", name: "POST /api/v1/escrow/create", description: "Create on-chain escrow contract", tags: ["escrow"], examples: [`POST ${BASE_URL}/api/v1/escrow/create`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "payroll_execute", name: "POST /api/v1/payroll/execute", description: "Crypto payroll run via StablePay + Spraay", tags: ["payroll"], examples: [`POST ${BASE_URL}/api/v1/payroll/execute`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "gpu_run", name: "POST /api/v1/gpu/run", description: "GPU workload execution", tags: ["compute"], examples: [`POST ${BASE_URL}/api/v1/gpu/run`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "search_qna", name: "POST /api/v1/search/qna", description: "Structured Q&A search for agents", tags: ["search"], examples: [`POST ${BASE_URL}/api/v1/search/qna`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "robots_task", name: "POST /api/v1/robots/task", description: "Dispatch physical robot task via RTP", tags: ["rtp"], examples: [`POST ${BASE_URL}/api/v1/robots/task`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "agent_wallet_provision", name: "POST /api/v1/agent-wallet/provision", description: "Provision agent smart wallet on Base", tags: ["agent-wallet"], examples: [`POST ${BASE_URL}/api/v1/agent-wallet/provision`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "sctp_pay", name: "POST /api/v1/sctp/pay", description: "Execute supplier payment via SCTP", tags: ["supply-chain"], examples: [`POST ${BASE_URL}/api/v1/sctp/pay`], inputModes: ["application/json"], outputModes: ["application/json"] },
-    ],
-    links: {
-      fullManifest: `${BASE_URL}/.well-known/x402.json`,
-      mppManifest: `${BASE_URL}/.well-known/mpp.json`,
-      openapi: `${BASE_URL}/openapi.json`,
-      mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
-    },
-    _gateway: { provider: "spraay-x402", version: "3.8.0" },
-  });
-};
-app.get("/.well-known/agent.json", agentCardResponse);
-app.get("/.well-known/agent-card.json", agentCardResponse);
-app.get("/.well-known/spraay-agent-card.json", agentCardResponse);
-
-// Agent registration metadata
-app.get("/.well-known/agent-registration.json", (_req, res) => {
-  res.json({
-    schemaVersion: "1.0",
-    agentId: "spraay-x402-gateway",
-    displayName: "Spraay",
-    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 93+ endpoints across AI, DeFi, payments, compute, search, and robotics.",
-    endpoints: {
-      base: BASE_URL,
-      agentCard: `${BASE_URL}/.well-known/agent.json`,
-      x402Manifest: `${BASE_URL}/.well-known/x402.json`,
-mppManifest: `${BASE_URL}/.well-known/mpp.json`,
-      openapi: `${BASE_URL}/openapi.json`,
-      mcp: "https://smithery.ai/server/@plagtech/spraay-x402-mcp",
-      repository: "https://github.com/plagtech/spraay-x402-gateway",
-    },
-    categories: ["ai", "payments", "defi", "oracle", "bridge", "payroll", "invoicing", "escrow", "compute", "search", "rtp", "agent-wallet", "supply-chain", "bittensor"],
-    network: CAIP2_NETWORK,
-    paymentAddress: PAY_TO,
-solanaPayment: {
-  chain: "solana",
-  cluster: "mainnet-beta",
-  receiveAddress: process.env.SOLANA_RECEIVE_ADDRESS || "",
-  usdcMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  txHeader: "X-Solana-Tx",
-  discovery: `${BASE_URL}/.well-known/solana.json`,
-},
-_gateway: { provider: "spraay", version: "3.8.0", protocols: ["x402", "mpp", "solana-usdc"] },
-  });
-});
-
-// LLM crawler standard — plain text summary
-app.get("/llms.txt", (_req, res) => {
-  const body = `# Spraay x402 Gateway
-
-Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
-
-## What this is
-Spraay provides 88+ paid API endpoints that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
-
-## Payment details
-- Protocol: x402 (https://x402.org)
-- Network: Base mainnet (EVM, chainId 8453)
-- Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
-- Pay to: ${PAY_TO}
-- Facilitator: Coinbase CDP
-
-## Categories
-ai, payments, defi, oracle, bridge, payroll, invoicing, escrow, compute, search, rtp, agent-wallet, supply-chain, bittensor
-
-## Getting started
-1. Fund an agent wallet with USDC on Base
-2. Send a request to any endpoint below
-3. Receive 402 Payment Required with x402 payment terms
-4. Retry with the x402 payment header
-5. Receive 200 with your data
-
-## Example endpoints
-POST ${BASE_URL}/api/v1/chat/completions — $0.04 — OpenAI-compatible chat via 200+ models
-POST ${BASE_URL}/bittensor/v1/chat/completions — $0.03 — Bittensor SN64 inference
-POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments on Base
-GET ${BASE_URL}/api/v1/oracle/prices — $0.008 — Multi-source price feed
-GET ${BASE_URL}/api/v1/swap/quote — $0.008 — Uniswap V3 / Aerodrome quote
-POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain escrow
-POST ${BASE_URL}/api/v1/payroll/execute — $0.10 — Crypto payroll run
-POST ${BASE_URL}/api/v1/gpu/run — $0.06 — GPU workload execution
-POST ${BASE_URL}/api/v1/search/qna — $0.03 — Structured Q&A search
-POST ${BASE_URL}/api/v1/robots/task — $0.05 — Dispatch robot task (RTP)
-
-## Resources
-- Full x402 manifest: ${BASE_URL}/.well-known/x402.json
-- Agent card (A2A): ${BASE_URL}/.well-known/agent.json
-- OpenAPI 3.1 spec: ${BASE_URL}/openapi.json
-- MCP server card: ${BASE_URL}/.well-known/mcp/server-card.json
-- Docs: https://docs.spraay.app
-- GitHub: https://github.com/plagtech/spraay-x402-gateway
-- MCP on Smithery: https://smithery.ai/server/@plagtech/spraay-x402-mcp
-
-## Contact
-Twitter: @Spraay_app
-Email: hello@spraay.app
-`;
-  res.type("text/plain; charset=utf-8").send(body);
-});
- 
-// OpenAPI 3.1 spec — x402 + MPP discovery compatible (full schemas)
-app.get("/openapi.json", (_req, res) => {
-  const endpoints = [
-    // ---- AI ----
-    { method: "post", path: "/api/v1/chat/completions", price: "$0.04", priceNum: "0.040000", tag: "ai", desc: "OpenAI-compatible chat via 200+ models",
-      inputProps: { model: { type: "string", description: "Model ID" }, messages: { type: "array", description: "Chat messages" }, max_tokens: { type: "number" }, temperature: { type: "number" } }, required: ["model", "messages"],
-      outputProps: { choices: { type: "array" }, usage: { type: "object" } } },
-    { method: "get", path: "/api/v1/models", price: "$0.001", priceNum: "0.001000", tag: "ai", desc: "List AI models",
-      queryParams: [],
-      outputProps: { models: { type: "array" }, count: { type: "number" } } },
-    // ---- PAYMENTS ----
-    { method: "post", path: "/api/v1/batch/execute", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch USDC payments on Base",
-      inputProps: { token: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, sender: { type: "string" } }, required: ["token", "recipients", "amounts", "sender"],
-      outputProps: { transactions: { type: "array" } } },
-    { method: "post", path: "/api/v1/batch/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate batch gas",
-      inputProps: { recipientCount: { type: "number" } }, required: ["recipientCount"],
-      outputProps: { estimatedGas: { type: "string" } } },
-    { method: "post", path: "/api/v1/stellar/batch", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch XLM payments on Stellar",
-      inputProps: { sourceSecret: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" } }, required: ["sourceSecret", "recipients", "amounts"],
-      outputProps: { hash: { type: "string" }, status: { type: "string" } } },
-    { method: "post", path: "/api/v1/stellar/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate Stellar batch cost",
-      inputProps: { recipientCount: { type: "number" } }, required: ["recipientCount"],
-      outputProps: { estimatedFee: { type: "string" } } },
-    { method: "post", path: "/api/v1/xrp/batch", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch XRP payments on XRP Ledger",
-      inputProps: { senderSecret: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" } }, required: ["senderSecret", "recipients", "amounts"],
-      outputProps: { hash: { type: "string" }, status: { type: "string" } } },
-    { method: "post", path: "/api/v1/xrp/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate XRP batch cost",
-      inputProps: { recipientCount: { type: "number" } }, required: ["recipientCount"],
-      outputProps: { estimatedFee: { type: "string" } } },
-    { method: "get", path: "/api/v1/xrp/info", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "XRP Ledger fee and reserve info",
-      queryParams: [],
-      outputProps: { baseFee: { type: "string" }, reserveBase: { type: "string" } } },
-    // ---- DEFI / SWAP ----
-    { method: "get", path: "/api/v1/swap/quote", price: "$0.008", priceNum: "0.008000", tag: "defi", desc: "Uniswap V3 / Aerodrome quote",
-      queryParams: [{ name: "tokenIn", type: "string", required: true }, { name: "tokenOut", type: "string", required: true }, { name: "amountIn", type: "string", required: true }],
-      outputProps: { amountOut: { type: "string" }, route: { type: "string" } } },
-    { method: "get", path: "/api/v1/swap/tokens", price: "$0.001", priceNum: "0.001000", tag: "defi", desc: "Supported swap tokens",
-      queryParams: [],
-      outputProps: { tokens: { type: "array" } } },
-    { method: "post", path: "/api/v1/swap/execute", price: "$0.015", priceNum: "0.015000", tag: "defi", desc: "Execute swap via Uniswap V3",
-      inputProps: { tokenIn: { type: "string" }, tokenOut: { type: "string" }, amountIn: { type: "string" }, recipient: { type: "string" } }, required: ["tokenIn", "tokenOut", "amountIn", "recipient"],
-      outputProps: { status: { type: "string" }, txHash: { type: "string" } } },
-    { method: "get", path: "/api/v1/defi/positions", price: "$0.02", priceNum: "0.020000", tag: "defi", desc: "DeFi positions across Aave V3, Compound V3, Aerodrome",
-      queryParams: [{ name: "address", type: "string", required: true }, { name: "chain", type: "string", required: false }],
-      outputProps: { address: { type: "string" }, total_positions: { type: "number" }, positions: { type: "array" } } },
-    // ---- SOLANA JUPITER ----
-    { method: "get", path: "/api/v1/solana/jupiter/quote", price: "$0.005", priceNum: "0.005000", tag: "solana", desc: "Jupiter v6 swap quote on Solana",
-      queryParams: [{ name: "inputMint", type: "string", required: true }, { name: "outputMint", type: "string", required: true }, { name: "amount", type: "string", required: true }, { name: "slippageBps", type: "string", required: false }],
-      outputProps: { inAmount: { type: "string" }, outAmount: { type: "string" }, priceImpactPct: { type: "string" } } },
-    { method: "post", path: "/api/v1/solana/jupiter/swap-tx", price: "$0.01", priceNum: "0.010000", tag: "solana", desc: "Build unsigned Jupiter swap transaction",
-      inputProps: { quoteResponse: { type: "object" }, userPublicKey: { type: "string" } }, required: ["quoteResponse", "userPublicKey"],
-      outputProps: { swapTransaction: { type: "string" }, lastValidBlockHeight: { type: "number" } } },
-    // ---- SOLANA HELIUS DAS ----
-    { method: "get", path: "/api/v1/solana/helius/assets-by-owner", price: "$0.003", priceNum: "0.003000", tag: "solana", desc: "Helius DAS: list assets by Solana wallet",
-      queryParams: [{ name: "owner", type: "string", required: true }, { name: "page", type: "string", required: false }, { name: "limit", type: "string", required: false }],
-      outputProps: { owner: { type: "string" }, total: { type: "number" }, items: { type: "array" } } },
-    { method: "get", path: "/api/v1/solana/helius/asset", price: "$0.002", priceNum: "0.002000", tag: "solana", desc: "Helius DAS: full metadata for a Solana asset",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { id: { type: "string" }, asset: { type: "object" } } },
-    // ---- SOLANA PYTH ----
-    { method: "get", path: "/api/v1/solana/pyth/price", price: "$0.005", priceNum: "0.005000", tag: "solana", desc: "Pyth latest price for one feed",
-      queryParams: [{ name: "feedId", type: "string", required: true }],
-      outputProps: { symbol: { type: "string" }, price: { type: "number" }, confidence: { type: "number" } } },
-    { method: "get", path: "/api/v1/solana/pyth/prices", price: "$0.008", priceNum: "0.008000", tag: "solana", desc: "Pyth batch prices (up to 50 feeds)",
-      queryParams: [{ name: "feedIds", type: "string", required: true }],
-      outputProps: { count: { type: "number" }, prices: { type: "object" } } },
-    // ---- ORACLE ----
-    { method: "get", path: "/api/v1/oracle/prices", price: "$0.008", priceNum: "0.008000", tag: "oracle", desc: "Multi-token price feed",
-      queryParams: [{ name: "tokens", type: "string", required: false }],
-      outputProps: { prices: { type: "object" } } },
-    { method: "get", path: "/api/v1/oracle/gas", price: "$0.005", priceNum: "0.005000", tag: "oracle", desc: "Gas prices on Base",
-      queryParams: [],
-      outputProps: { gas: { type: "object" } } },
-    { method: "get", path: "/api/v1/oracle/fx", price: "$0.008", priceNum: "0.008000", tag: "oracle", desc: "Stablecoin FX rates",
-      queryParams: [{ name: "base", type: "string", required: false }],
-      outputProps: { rates: { type: "object" } } },
-    // ---- BRIDGE ----
-    { method: "get", path: "/api/v1/bridge/quote", price: "$0.05", priceNum: "0.050000", tag: "bridge", desc: "Cross-chain bridge quote",
-      queryParams: [{ name: "fromChain", type: "string", required: true }, { name: "toChain", type: "string", required: true }, { name: "token", type: "string", required: true }, { name: "amount", type: "string", required: true }, { name: "fromAddress", type: "string", required: true }],
-      outputProps: { status: { type: "string" }, quote: { type: "object" } } },
-    { method: "get", path: "/api/v1/bridge/chains", price: "$0.002", priceNum: "0.002000", tag: "bridge", desc: "Supported bridge chains",
-      queryParams: [],
-      outputProps: { chains: { type: "array" } } },
-    // ---- PAYROLL ----
-    { method: "post", path: "/api/v1/payroll/execute", price: "$0.10", priceNum: "0.100000", tag: "payroll", desc: "Crypto payroll run",
-      inputProps: { token: { type: "string" }, sender: { type: "string" }, employees: { type: "array" } }, required: ["token", "sender", "employees"],
-      outputProps: { status: { type: "string" }, txHash: { type: "string" } } },
-    { method: "post", path: "/api/v1/payroll/estimate", price: "$0.003", priceNum: "0.003000", tag: "payroll", desc: "Estimate payroll costs",
-      inputProps: { employeeCount: { type: "number" } }, required: ["employeeCount"],
-      outputProps: { estimate: { type: "object" } } },
-    { method: "get", path: "/api/v1/payroll/tokens", price: "$0.002", priceNum: "0.002000", tag: "payroll", desc: "Payroll stablecoins",
-      queryParams: [],
-      outputProps: { tokens: { type: "array" } } },
-    // ---- INVOICING ----
-    { method: "post", path: "/api/v1/invoice/create", price: "$0.05", priceNum: "0.050000", tag: "invoicing", desc: "Create invoice with payment tx",
-      inputProps: { creator: { type: "string" }, token: { type: "string" }, amount: { type: "string" } }, required: ["creator", "token", "amount"],
-      outputProps: { status: { type: "string" }, invoice: { type: "object" } } },
-    { method: "get", path: "/api/v1/invoice/list", price: "$0.01", priceNum: "0.010000", tag: "invoicing", desc: "List invoices by address",
-      queryParams: [{ name: "address", type: "string", required: true }],
-      outputProps: { invoices: { type: "array" }, count: { type: "number" } } },
-    { method: "get", path: "/api/v1/invoice/:id", price: "$0.01", priceNum: "0.010000", tag: "invoicing", desc: "Invoice lookup",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { invoice: { type: "object" } } },
-    // ---- ANALYTICS ----
-    { method: "get", path: "/api/v1/analytics/wallet", price: "$0.01", priceNum: "0.010000", tag: "analytics", desc: "Wallet profile",
-      queryParams: [{ name: "address", type: "string", required: true }],
-      outputProps: { classification: { type: "object" } } },
-    { method: "get", path: "/api/v1/analytics/txhistory", price: "$0.008", priceNum: "0.008000", tag: "analytics", desc: "Transaction history",
-      queryParams: [{ name: "address", type: "string", required: true }, { name: "limit", type: "string", required: false }],
-      outputProps: { transactions: { type: "array" } } },
-    // ---- ESCROW ----
-    { method: "post", path: "/api/v1/escrow/create", price: "$0.10", priceNum: "0.100000", tag: "escrow", desc: "Create conditional escrow",
-      inputProps: { depositor: { type: "string" }, beneficiary: { type: "string" }, token: { type: "string" }, amount: { type: "string" } }, required: ["depositor", "beneficiary", "token", "amount"],
-      outputProps: { status: { type: "string" }, escrow: { type: "object" } } },
-    { method: "get", path: "/api/v1/escrow/list", price: "$0.02", priceNum: "0.020000", tag: "escrow", desc: "List escrows by address",
-      queryParams: [{ name: "address", type: "string", required: true }],
-      outputProps: { escrows: { type: "array" }, count: { type: "number" } } },
-    { method: "get", path: "/api/v1/escrow/:id", price: "$0.005", priceNum: "0.005000", tag: "escrow", desc: "Escrow status",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { escrow: { type: "object" } } },
-    { method: "post", path: "/api/v1/escrow/fund", price: "$0.02", priceNum: "0.020000", tag: "escrow", desc: "Mark escrow as funded",
-      inputProps: { escrowId: { type: "string" } }, required: ["escrowId"],
-      outputProps: { status: { type: "string" } } },
-    { method: "post", path: "/api/v1/escrow/release", price: "$0.08", priceNum: "0.080000", tag: "escrow", desc: "Release escrow funds",
-      inputProps: { escrowId: { type: "string" }, caller: { type: "string" } }, required: ["escrowId", "caller"],
-      outputProps: { status: { type: "string" }, transaction: { type: "object" } } },
-    { method: "post", path: "/api/v1/escrow/cancel", price: "$0.02", priceNum: "0.020000", tag: "escrow", desc: "Cancel escrow",
-      inputProps: { escrowId: { type: "string" }, caller: { type: "string" } }, required: ["escrowId", "caller"],
-      outputProps: { status: { type: "string" } } },
-    // ---- INFERENCE ----
-    { method: "post", path: "/api/v1/inference/classify-address", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI wallet classification with risk scoring",
-      inputProps: { address: { type: "string" } }, required: ["address"],
-      outputProps: { classification: { type: "object" } } },
-    { method: "post", path: "/api/v1/inference/classify-tx", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI transaction classification",
-      inputProps: { hash: { type: "string" } }, required: ["hash"],
-      outputProps: { classification: { type: "object" } } },
-    { method: "post", path: "/api/v1/inference/explain-contract", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI smart contract analysis",
-      inputProps: { address: { type: "string" } }, required: ["address"],
-      outputProps: { analysis: { type: "object" } } },
-    { method: "post", path: "/api/v1/inference/summarize", price: "$0.03", priceNum: "0.030000", tag: "inference", desc: "AI intelligence briefing for address or tx",
-      inputProps: { target: { type: "string" }, context: { type: "string" } }, required: ["target"],
-      outputProps: { briefing: { type: "object" } } },
-    // ---- COMMUNICATION ----
-    { method: "post", path: "/api/v1/notify/email", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Send email notification",
-      inputProps: { to: { type: "string" }, subject: { type: "string" }, body: { type: "string" } }, required: ["to", "body"],
-      outputProps: { id: { type: "string" }, status: { type: "string" } } },
-    { method: "post", path: "/api/v1/notify/sms", price: "$0.02", priceNum: "0.020000", tag: "communication", desc: "Send SMS notification",
-      inputProps: { to: { type: "string" }, body: { type: "string" } }, required: ["to", "body"],
-      outputProps: { id: { type: "string" }, status: { type: "string" } } },
-    { method: "get", path: "/api/v1/notify/status", price: "$0.002", priceNum: "0.002000", tag: "communication", desc: "Check notification delivery status",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { id: { type: "string" }, status: { type: "string" } } },
-    { method: "post", path: "/api/v1/webhook/register", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Register webhook for events",
-      inputProps: { url: { type: "string" }, events: { type: "array" } }, required: ["url", "events"],
-      outputProps: { id: { type: "string" }, secret: { type: "string" }, status: { type: "string" } } },
-    { method: "post", path: "/api/v1/webhook/test", price: "$0.005", priceNum: "0.005000", tag: "communication", desc: "Send test event to webhook",
-      inputProps: { webhookId: { type: "string" } }, required: ["webhookId"],
-      outputProps: { delivered: { type: "boolean" } } },
-    { method: "get", path: "/api/v1/webhook/list", price: "$0.002", priceNum: "0.002000", tag: "communication", desc: "List registered webhooks",
-      queryParams: [],
-      outputProps: { webhooks: { type: "array" }, total: { type: "number" } } },
-    { method: "post", path: "/api/v1/webhook/delete", price: "$0.002", priceNum: "0.002000", tag: "communication", desc: "Delete a webhook",
-      inputProps: { webhookId: { type: "string" } }, required: ["webhookId"],
-      outputProps: { deleted: { type: "boolean" } } },
-    { method: "post", path: "/api/v1/xmtp/send", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Send encrypted XMTP message",
-      inputProps: { to: { type: "string" }, content: { type: "string" } }, required: ["to", "content"],
-      outputProps: { id: { type: "string" }, status: { type: "string" } } },
-    { method: "get", path: "/api/v1/xmtp/inbox", price: "$0.01", priceNum: "0.010000", tag: "communication", desc: "Read XMTP inbox",
-      queryParams: [{ name: "address", type: "string", required: true }, { name: "limit", type: "string", required: false }],
-      outputProps: { messages: { type: "array" }, total: { type: "number" } } },
-    // ---- INFRASTRUCTURE ----
-    { method: "post", path: "/api/v1/rpc/call", price: "$0.001", priceNum: "0.001000", tag: "infrastructure", desc: "Premium multi-chain RPC call",
-      inputProps: { chain: { type: "string" }, method: { type: "string" }, params: { type: "array" } }, required: ["chain", "method"],
-      outputProps: { jsonrpc: { type: "string" }, result: { type: "string" } } },
-    { method: "get", path: "/api/v1/rpc/chains", price: "$0.001", priceNum: "0.001000", tag: "infrastructure", desc: "List supported RPC chains",
-      queryParams: [],
-      outputProps: { chains: { type: "array" }, allowedMethods: { type: "array" } } },
-    { method: "post", path: "/api/v1/storage/pin", price: "$0.01", priceNum: "0.010000", tag: "infrastructure", desc: "Pin content to IPFS or Arweave",
-      inputProps: { data: { type: "string" }, contentType: { type: "string" }, provider: { type: "string" } }, required: ["data"],
-      outputProps: { cid: { type: "string" }, status: { type: "string" } } },
-    { method: "get", path: "/api/v1/storage/get", price: "$0.005", priceNum: "0.005000", tag: "infrastructure", desc: "Retrieve pinned content by CID",
-      queryParams: [{ name: "cid", type: "string", required: true }],
-      outputProps: { cid: { type: "string" }, status: { type: "string" } } },
-    { method: "get", path: "/api/v1/storage/status", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Check pin status",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { status: { type: "string" } } },
-    { method: "post", path: "/api/v1/cron/create", price: "$0.01", priceNum: "0.010000", tag: "infrastructure", desc: "Create scheduled job",
-      inputProps: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" } }, required: ["action", "schedule", "payload"],
-      outputProps: { id: { type: "string" }, status: { type: "string" } } },
-    { method: "get", path: "/api/v1/cron/list", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "List scheduled jobs",
-      queryParams: [],
-      outputProps: { jobs: { type: "array" }, total: { type: "number" } } },
-    { method: "post", path: "/api/v1/cron/cancel", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Cancel a scheduled job",
-      inputProps: { jobId: { type: "string" } }, required: ["jobId"],
-      outputProps: { status: { type: "string" } } },
-    { method: "post", path: "/api/v1/logs/ingest", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Ingest structured logs",
-      inputProps: { entries: { type: "array" } }, required: ["entries"],
-      outputProps: { ingested: { type: "number" }, ids: { type: "array" } } },
-    { method: "get", path: "/api/v1/logs/query", price: "$0.005", priceNum: "0.005000", tag: "infrastructure", desc: "Query structured logs",
-      queryParams: [{ name: "service", type: "string", required: false }, { name: "level", type: "string", required: false }, { name: "since", type: "string", required: false }],
-      outputProps: { logs: { type: "array" }, total: { type: "number" } } },
-    // ---- IDENTITY & ACCESS ----
-    { method: "post", path: "/api/v1/kyc/verify", price: "$0.02", priceNum: "0.020000", tag: "identity", desc: "OFAC sanctions screening",
-      inputProps: { address: { type: "string" }, type: { type: "string" }, chain: { type: "string" } }, required: ["address"],
-      outputProps: { id: { type: "string" }, status: { type: "string" }, result: { type: "object" } } },
-    { method: "get", path: "/api/v1/kyc/status", price: "$0.01", priceNum: "0.010000", tag: "identity", desc: "Check KYC verification status",
-      queryParams: [{ name: "id", type: "string", required: false }, { name: "address", type: "string", required: false }],
-      outputProps: { status: { type: "string" }, checks: { type: "object" } } },
-    { method: "post", path: "/api/v1/auth/session", price: "$0.01", priceNum: "0.010000", tag: "identity", desc: "Create authenticated session",
-      inputProps: { address: { type: "string" }, permissions: { type: "array" }, ttlSeconds: { type: "number" } }, required: ["address"],
-      outputProps: { token: { type: "string" }, expiresAt: { type: "string" } } },
-    { method: "get", path: "/api/v1/auth/verify", price: "$0.005", priceNum: "0.005000", tag: "identity", desc: "Verify session token",
-      queryParams: [{ name: "token", type: "string", required: true }],
-      outputProps: { valid: { type: "boolean" }, permissions: { type: "array" } } },
-    // ---- COMPLIANCE ----
-    { method: "post", path: "/api/v1/audit/log", price: "$0.005", priceNum: "0.005000", tag: "compliance", desc: "Record audit trail entry",
-      inputProps: { action: { type: "string" }, actor: { type: "string" }, resource: { type: "string" }, details: { type: "object" } }, required: ["action", "actor", "resource"],
-      outputProps: { id: { type: "string" }, recorded: { type: "boolean" } } },
-    { method: "get", path: "/api/v1/audit/query", price: "$0.03", priceNum: "0.030000", tag: "compliance", desc: "Query audit trail",
-      queryParams: [{ name: "actor", type: "string", required: false }, { name: "action", type: "string", required: false }, { name: "since", type: "string", required: false }],
-      outputProps: { entries: { type: "array" }, total: { type: "number" } } },
-    { method: "post", path: "/api/v1/tax/calculate", price: "$0.08", priceNum: "0.080000", tag: "compliance", desc: "Calculate crypto tax gain/loss (FIFO)",
-      inputProps: { transactions: { type: "array" } }, required: ["transactions"],
-      outputProps: { summary: { type: "object" } } },
-    { method: "get", path: "/api/v1/tax/report", price: "$0.05", priceNum: "0.050000", tag: "compliance", desc: "Tax report with IRS 8949-compatible data",
-      queryParams: [{ name: "reportId", type: "string", required: true }],
-      outputProps: { events: { type: "array" }, total: { type: "number" } } },
-    // ---- GPU / COMPUTE ----
-    { method: "post", path: "/api/v1/gpu/run", price: "$0.06", priceNum: "0.060000", tag: "compute", desc: "GPU workload execution via Replicate",
-      inputProps: { model: { type: "string" }, input: { type: "object" } }, required: ["model", "input"],
-      outputProps: { id: { type: "string" }, status: { type: "string" }, output: { type: "array" } } },
-    { method: "get", path: "/api/v1/gpu/status/:id", price: "$0.005", priceNum: "0.005000", tag: "compute", desc: "Check GPU prediction status",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { id: { type: "string" }, status: { type: "string" }, output: { type: "array" } } },
-    // ---- SEARCH / RAG ----
-    { method: "post", path: "/api/v1/search/web", price: "$0.02", priceNum: "0.020000", tag: "search", desc: "Web search with LLM-ready results",
-      inputProps: { query: { type: "string" }, search_depth: { type: "string" }, max_results: { type: "number" } }, required: ["query"],
-      outputProps: { query: { type: "string" }, answer: { type: "string" }, results: { type: "array" } } },
-    { method: "post", path: "/api/v1/search/extract", price: "$0.02", priceNum: "0.020000", tag: "search", desc: "Extract clean content from URLs for RAG",
-      inputProps: { urls: { type: "array" } }, required: ["urls"],
-      outputProps: { results: { type: "array" }, failed: { type: "array" } } },
-    { method: "post", path: "/api/v1/search/qna", price: "$0.03", priceNum: "0.030000", tag: "search", desc: "Direct Q&A with web sources",
-      inputProps: { query: { type: "string" }, topic: { type: "string" } }, required: ["query"],
-      outputProps: { query: { type: "string" }, answer: { type: "string" }, sources: { type: "array" } } },
-    // ---- DATA ----
-    { method: "get", path: "/api/v1/prices", price: "$0.005", priceNum: "0.005000", tag: "data", desc: "Live token prices",
-      queryParams: [{ name: "token", type: "string", required: false }],
-      outputProps: { prices: { type: "object" } } },
-    { method: "get", path: "/api/v1/balances", price: "$0.005", priceNum: "0.005000", tag: "data", desc: "Token balances",
-      queryParams: [{ name: "address", type: "string", required: true }],
-      outputProps: { balances: { type: "array" } } },
-    { method: "get", path: "/api/v1/resolve", price: "$0.002", priceNum: "0.002000", tag: "data", desc: "ENS/Basename resolution",
-      queryParams: [{ name: "name", type: "string", required: true }],
-      outputProps: { address: { type: "string" } } },
-    // ---- WALLET PROVISIONING ----
-    { method: "get", path: "/api/v1/wallet/list", price: "$0.002", priceNum: "0.002000", tag: "wallet", desc: "List agent wallets",
-      queryParams: [],
-      outputProps: { wallets: { type: "array" }, pagination: { type: "object" } } },
-    { method: "get", path: "/api/v1/wallet/:walletId", price: "$0.001", priceNum: "0.001000", tag: "wallet", desc: "Get agent wallet details",
-      queryParams: [{ name: "walletId", type: "string", required: true }],
-      outputProps: { walletId: { type: "string" }, addresses: { type: "object" } } },
-    { method: "get", path: "/api/v1/wallet/:walletId/addresses", price: "$0.001", priceNum: "0.001000", tag: "wallet", desc: "Get chain-specific addresses",
-      queryParams: [{ name: "walletId", type: "string", required: true }],
-      outputProps: { addresses: { type: "object" } } },
-    { method: "post", path: "/api/v1/wallet/sign-message", price: "$0.005", priceNum: "0.005000", tag: "wallet", desc: "Sign message with agent wallet",
-      inputProps: { walletId: { type: "string" }, message: { type: "string" } }, required: ["walletId", "message"],
-      outputProps: { signature: { type: "string" } } },
-    { method: "post", path: "/api/v1/wallet/send-transaction", price: "$0.02", priceNum: "0.020000", tag: "wallet", desc: "Sign and broadcast transaction",
-      inputProps: { walletId: { type: "string" }, transaction: { type: "object" }, networkId: { type: "string" } }, required: ["walletId", "transaction", "networkId"],
-      outputProps: { signature: { type: "string" } } },
-    // ---- ROBOTICS / RTP ----
-    { method: "post", path: "/api/v1/robots/task", price: "$0.05", priceNum: "0.050000", tag: "rtp", desc: "Dispatch robot task via RTP",
-      inputProps: { robot_id: { type: "string" }, task: { type: "string" }, parameters: { type: "object" } }, required: ["robot_id", "task"],
-      outputProps: { status: { type: "string" }, task_id: { type: "string" }, escrow_id: { type: "string" } } },
-    { method: "get", path: "/api/v1/robots/list", price: "$0.005", priceNum: "0.005000", tag: "rtp", desc: "Discover RTP robots",
-      queryParams: [{ name: "capability", type: "string", required: false }, { name: "max_price", type: "string", required: false }],
-      outputProps: { robots: { type: "array" }, total: { type: "number" } } },
-    { method: "get", path: "/api/v1/robots/status", price: "$0.002", priceNum: "0.002000", tag: "rtp", desc: "Poll RTP task status",
-      queryParams: [{ name: "task_id", type: "string", required: true }],
-      outputProps: { task_id: { type: "string" }, status: { type: "string" }, result: { type: "object" } } },
-    { method: "get", path: "/api/v1/robots/profile", price: "$0.002", priceNum: "0.002000", tag: "rtp", desc: "Full RTP robot profile",
-      queryParams: [{ name: "robot_id", type: "string", required: true }],
-      outputProps: { robot_id: { type: "string" }, capabilities: { type: "array" } } },
-    // ---- AGENT WALLET ----
-    { method: "post", path: "/api/v1/agent-wallet/provision", price: "$0.05", priceNum: "0.050000", tag: "agent-wallet", desc: "Provision agent wallet on Base",
-      inputProps: { agentId: { type: "string" }, agentType: { type: "string" }, mode: { type: "string" } }, required: ["agentId"],
-      outputProps: { status: { type: "string" }, wallet: { type: "object" } } },
-    { method: "post", path: "/api/v1/agent-wallet/session-key", price: "$0.02", priceNum: "0.020000", tag: "agent-wallet", desc: "Add session key with spending limits",
-      inputProps: { walletAddress: { type: "string" }, sessionKeyAddress: { type: "string" }, spendLimitEth: { type: "string" }, durationHours: { type: "number" } }, required: ["walletAddress", "sessionKeyAddress", "spendLimitEth", "durationHours"],
-      outputProps: { status: { type: "string" }, session: { type: "object" } } },
-    { method: "get", path: "/api/v1/agent-wallet/info", price: "$0.005", priceNum: "0.005000", tag: "agent-wallet", desc: "Get agent wallet info",
-      queryParams: [{ name: "address", type: "string", required: true }],
-      outputProps: { wallet: { type: "object" } } },
-    { method: "post", path: "/api/v1/agent-wallet/revoke-key", price: "$0.02", priceNum: "0.020000", tag: "agent-wallet", desc: "Revoke a session key",
-      inputProps: { walletAddress: { type: "string" }, sessionKeyAddress: { type: "string" } }, required: ["walletAddress", "sessionKeyAddress"],
-      outputProps: { status: { type: "string" }, txHash: { type: "string" } } },
-    { method: "get", path: "/api/v1/agent-wallet/predict", price: "$0.001", priceNum: "0.001000", tag: "agent-wallet", desc: "Predict agent wallet address",
-      queryParams: [{ name: "ownerAddress", type: "string", required: true }, { name: "agentId", type: "string", required: true }],
-      outputProps: { predictedAddress: { type: "string" } } },
-    // ---- BITTENSOR DROP-IN ----
-    { method: "get", path: "/bittensor/v1/models", price: "$0.001", priceNum: "0.001000", tag: "bittensor", desc: "List Bittensor AI models",
-      queryParams: [],
-      outputProps: { object: { type: "string" }, data: { type: "array" } } },
-    { method: "post", path: "/bittensor/v1/chat/completions", price: "$0.03", priceNum: "0.030000", tag: "bittensor", desc: "Bittensor decentralized AI chat",
-      inputProps: { model: { type: "string" }, messages: { type: "array" }, max_tokens: { type: "number" }, temperature: { type: "number" } }, required: ["model", "messages"],
-      outputProps: { choices: { type: "array" }, usage: { type: "object" } } },
-    { method: "post", path: "/bittensor/v1/images/generations", price: "$0.05", priceNum: "0.050000", tag: "bittensor", desc: "Bittensor image generation",
-      inputProps: { prompt: { type: "string" }, model: { type: "string" }, n: { type: "number" }, size: { type: "string" } }, required: ["prompt"],
-      outputProps: { data: { type: "array" } } },
-    { method: "post", path: "/bittensor/v1/embeddings", price: "$0.005", priceNum: "0.005000", tag: "bittensor", desc: "Bittensor text embeddings",
-      inputProps: { model: { type: "string" }, input: { type: "string" } }, required: ["model", "input"],
-      outputProps: { object: { type: "string" }, data: { type: "array" } } },
-    // ---- SCTP / SUPPLY CHAIN ----
-    { method: "post", path: "/api/v1/sctp/supplier", price: "$0.02", priceNum: "0.020000", tag: "supply-chain", desc: "Register supplier in SCTP",
-      inputProps: { name: { type: "string" }, wallet: { type: "string" }, paymentPrefs: { type: "object" } }, required: ["name", "wallet"],
-      outputProps: { status: { type: "string" }, supplier: { type: "object" } } },
-    { method: "get", path: "/api/v1/sctp/supplier/:id", price: "$0.005", priceNum: "0.005000", tag: "supply-chain", desc: "Get supplier details",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { supplier: { type: "object" } } },
-    { method: "post", path: "/api/v1/sctp/po", price: "$0.02", priceNum: "0.020000", tag: "supply-chain", desc: "Create purchase order",
-      inputProps: { supplierId: { type: "string" }, lineItems: { type: "array" }, currency: { type: "string" } }, required: ["supplierId", "lineItems"],
-      outputProps: { status: { type: "string" }, po: { type: "object" } } },
-    { method: "get", path: "/api/v1/sctp/po/:id", price: "$0.005", priceNum: "0.005000", tag: "supply-chain", desc: "Get purchase order details",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { po: { type: "object" } } },
-    { method: "post", path: "/api/v1/sctp/invoice", price: "$0.02", priceNum: "0.020000", tag: "supply-chain", desc: "Submit invoice for purchase order",
-      inputProps: { poId: { type: "string" }, supplierId: { type: "string" }, amount: { type: "string" }, currency: { type: "string" } }, required: ["poId", "supplierId", "amount"],
-      outputProps: { status: { type: "string" }, invoice: { type: "object" } } },
-    { method: "get", path: "/api/v1/sctp/invoice/:id", price: "$0.005", priceNum: "0.005000", tag: "supply-chain", desc: "Get invoice details",
-      queryParams: [{ name: "id", type: "string", required: true }],
-      outputProps: { invoice: { type: "object" } } },
-    { method: "post", path: "/api/v1/sctp/invoice/verify", price: "$0.03", priceNum: "0.030000", tag: "supply-chain", desc: "AI-verify invoice against purchase order",
-      inputProps: { invoiceId: { type: "string" } }, required: ["invoiceId"],
-      outputProps: { verification: { type: "object" } } },
-    { method: "post", path: "/api/v1/sctp/pay", price: "$0.10", priceNum: "0.100000", tag: "supply-chain", desc: "Execute supplier payment",
-      inputProps: { invoiceId: { type: "string" }, batch: { type: "boolean" } }, required: ["invoiceId"],
-      outputProps: { status: { type: "string" }, txHash: { type: "string" }, amount: { type: "string" } } },
-    // ---- PORTFOLIO ----
-    { method: "get", path: "/api/v1/portfolio/tokens", price: "$0.008", priceNum: "0.008000", tag: "portfolio", desc: "Multi-chain token portfolio with USD values",
-      queryParams: [{ name: "address", type: "string", required: true }, { name: "networks", type: "string", required: false }],
-      outputProps: { address: { type: "string" }, token_count: { type: "number" }, total_usd_value: { type: "number" }, tokens: { type: "array" } } },
-    { method: "get", path: "/api/v1/portfolio/nfts", price: "$0.01", priceNum: "0.010000", tag: "portfolio", desc: "Multi-chain NFT holdings with metadata",
-      queryParams: [{ name: "address", type: "string", required: true }, { name: "networks", type: "string", required: false }],
-      outputProps: { address: { type: "string" }, total_count: { type: "number" }, nfts: { type: "array" } } },
-    // ---- CONTRACT ----
-    { method: "post", path: "/api/v1/contract/read", price: "$0.002", priceNum: "0.002000", tag: "contract", desc: "Call any view/pure function on any EVM contract",
-      inputProps: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" } }, required: ["address", "method"],
-      outputProps: { chain: { type: "string" }, result: { type: "string" } } },
-    { method: "post", path: "/api/v1/contract/write", price: "$0.015", priceNum: "0.015000", tag: "contract", desc: "Encode and broadcast transaction via agent wallet",
-      inputProps: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" }, walletId: { type: "string" } }, required: ["address", "method"],
-      outputProps: { tx_hash: { type: "string" }, from: { type: "string" }, explorer: { type: "string" } } },
-  ];
-
-  const paths: Record<string, any> = {};
-  for (const e of endpoints) {
-    if (!paths[e.path]) paths[e.path] = {};
-    const op: any = {
-      operationId: e.path.replace(/^\/api\/v1\//, "").replace(/^\//, "").replace(/\//g, "-").replace(/:/g, ""),
-      summary: `${e.desc} — ${e.price}`,
-      tags: [e.tag],
-      description: `Paid endpoint — ${e.price} per call via x402/MPP. See ${BASE_URL}/.well-known/x402.json for full payment details.`,
-      "x-payment-info": {
-        price: { mode: "fixed" as const, amount: e.priceNum, currency: "USD" },
-        protocols: [{ mpp: {} }, { x402: {} }],
-      },
-      responses: {
-        "200": {
-          description: "Success",
-          content: { "application/json": { schema: { type: "object", properties: (e as any).outputProps || {} } } },
-        },
-        "402": { description: "Payment Required" },
-      },
-    };
-    // POST endpoints: requestBody with real properties
-    if (e.method === "post" && (e as any).inputProps) {
-      op.requestBody = {
-        required: true,
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: (e as any).inputProps,
-              ...((e as any).required ? { required: (e as any).required } : {}),
-            },
-          },
-        },
-      };
+  // If we have a real key, create a payment-enabled client
+  // Otherwise, use a mock client (for Smithery scanning)
+  let api: any;
+  if (evmKey) {
+    try {
+      const client = new x402Client();
+      const account = privateKeyToAccount(evmKey as `0x${string}`);
+      const walletClient = createWalletClient({ account, chain: base, transport: http() });
+      const publicClient = createPublicClient({ chain: base, transport: http() });
+      const signer = { ...walletClient, readContract: publicClient.readContract } as any;
+      registerExactEvmScheme(client, { signer });
+      api = wrapAxiosWithPayment(axios.create({ baseURL: gw }), client);
+    } catch {
+      api = axios.create({ baseURL: gw });
     }
-    // GET endpoints: query parameters
-    if (e.method === "get" && (e as any).queryParams) {
-      op.parameters = ((e as any).queryParams as any[]).map((p: any) => ({
-        name: p.name,
-        in: "query" as const,
-        required: p.required || false,
-        schema: { type: p.type || "string" },
-      }));
-    }
-    paths[e.path][e.method] = op;
+  } else {
+    api = axios.create({ baseURL: gw });
   }
 
-  res.json({
-    openapi: "3.1.0",
-    info: {
-      title: "Spraay x402 Gateway",
-      version: "3.8.0",
-      description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
-      contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
-      license: { name: "MIT" },
-      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 99+ paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
-    },
-    servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
-    "x-discovery": {
-      ownershipProofs: [],
-    },
-    paths,
-    components: {
-      securitySchemes: {
-        x402: { type: "http", scheme: "x402", description: `Pay per-call with USDC on Base to ${PAY_TO}` },
-      },
-    },
-    security: [{ x402: [] }],
-    externalDocs: { description: "Full docs", url: "https://docs.spraay.app" },
+  registerTools(server, api);
+  return server.server;
+}
+
+// Direct execution: stdio or http mode
+if (process.env.EVM_PRIVATE_KEY) {
+  main().catch((error) => {
+    console.error("Spraay MCP server error:", error);
+    process.exit(1);
   });
-});
- 
-// robots.txt — explicit allow for AI crawlers
-app.get("/robots.txt", (_req, res) => {
-  const body = `# Spraay x402 Gateway — robots.txt
-# AI crawlers and agent frameworks explicitly welcome.
- 
-User-agent: *
-Allow: /
- 
-User-agent: GPTBot
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: Claude-Web
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: CCBot
-Allow: /
-
-User-agent: cohere-ai
-Allow: /
-
-Sitemap: ${BASE_URL}/openapi.json
-`;
-  res.type("text/plain; charset=utf-8").send(body);
-});
-app.get("/favicon.ico", (_req, res) => res.redirect(301, "https://spraay.app/spraay-logo-200x200.jpg"));
-
-// ============================================
-// PHANTOM ENDPOINT FIXES
-// ============================================
-// Bare paths agents probe that map to real (or coming-soon) endpoints.
-
-// /api/v1/ai/chat → redirect to /api/v1/chat/completions
-app.post("/api/v1/ai/chat", (_req, res) => res.redirect(308, "/api/v1/chat/completions"));
-
-// /api/v1/analytics (bare) → public overview pointing to paid /wallet and /txhistory
-app.get("/api/v1/analytics", (_req, res) => {
-  res.json({
-    gateway: "spraay-x402",
-    version: "3.8.0",
-    network: CAIP2_NETWORK,
-    status: "operational",
-    paidEndpoints: {
-      "GET /api/v1/analytics/wallet": "$0.01 - Wallet profile and activity",
-      "GET /api/v1/analytics/txhistory": "$0.008 - Transaction history with classification",
-    },
-    links: {
-      fullManifest: `${BASE_URL}/.well-known/x402.json`,
-      openapi: `${BASE_URL}/openapi.json`,
-    },
-    note: "This is a public overview. For per-wallet analytics, use the paid endpoints above.",
-    _gateway: { provider: "spraay-x402", version: "3.8.0" },
-    timestamp: new Date().toISOString(),
+} else if (TRANSPORT === "http") {
+  const mockApi = axios.create({ baseURL: gatewayURL });
+  startHttpServer(mockApi).catch((error) => {
+    console.error("Spraay MCP server error:", error);
+    process.exit(1);
   });
-});
-
-// /api/v1/notify/send → point agents at /notify/email (and /notify/sms)
-app.post("/api/v1/notify/send", (_req, res) => {
-  res.status(308)
-    .location("/api/v1/notify/email")
-    .json({
-      error: "endpoint_moved",
-      message: "Use /api/v1/notify/email for email or /api/v1/notify/sms for SMS.",
-      alternatives: [
-        { method: "POST", path: "/api/v1/notify/email", price: "$0.01", description: "Send transactional email" },
-        { method: "POST", path: "/api/v1/notify/sms", price: "$0.02", description: "Send SMS" },
-      ],
-      _gateway: { provider: "spraay-x402", version: "3.8.0" },
-    });
-});
-
-// /api/v1/rpc (bare) → point agents at /rpc/call
-app.post("/api/v1/rpc", (_req, res) => {
-  res.status(308)
-    .location("/api/v1/rpc/call")
-    .json({
-      error: "endpoint_moved",
-      message: "Use /api/v1/rpc/call for JSON-RPC calls, or /api/v1/rpc/chains to list supported chains.",
-      alternatives: [
-        { method: "POST", path: "/api/v1/rpc/call", price: "$0.001", description: "JSON-RPC call to any supported chain" },
-        { method: "GET", path: "/api/v1/rpc/chains", price: "$0.001", description: "List supported RPC chains" },
-      ],
-      _gateway: { provider: "spraay-x402", version: "3.8.0" },
-    });
-});
-
-// /api/v1/bridge/transfer → 503 coming-soon (execution not live, /bridge/quote is)
-app.post("/api/v1/bridge/transfer", (_req, res) => {
-  res.status(503).json({
-    error: "endpoint_coming_soon",
-    endpoint: "/api/v1/bridge/transfer",
-    message: "Bridge transfer execution coming soon. Use /api/v1/bridge/quote for quotes.",
-    alternatives: [
-      { method: "GET", path: "/api/v1/bridge/quote", price: "$0.05", description: "Get bridge quote across 10+ chains" },
-      { method: "GET", path: "/api/v1/bridge/chains", price: "$0.002", description: "List supported bridge chains" },
-    ],
-    manifest: `${BASE_URL}/.well-known/x402.json`,
-    _gateway: { provider: "spraay-x402", version: "3.8.0" },
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// PAID ROUTE HANDLERS
-// AI
-app.post("/api/v1/chat/completions", aiChatHandler);
-app.get("/api/v1/models", aiModelsHandler);
-// Payments
-app.post("/api/v1/batch/execute", batchPaymentHandler);
-app.post("/api/v1/batch/estimate", batchEstimateHandler);
-// Stellar (Chain #14)
-app.post("/api/v1/stellar/batch", stellarBatchHandler);
-app.post("/api/v1/stellar/estimate", stellarEstimateHandler);
-// XRP Ledger (Chain #15)
-app.post("/api/v1/xrp/batch", xrpBatchHandler);
-app.post("/api/v1/xrp/estimate", xrpEstimateHandler);
-app.get("/api/v1/xrp/info", xrpInfoHandler);
-// DeFi
-app.get("/api/v1/swap/quote", swapQuoteHandler);
-app.get("/api/v1/swap/tokens", swapTokensHandler);
-app.post("/api/v1/swap/execute", swapExecuteHandler);
-// Oracle
-app.get("/api/v1/oracle/prices", oraclePricesHandler);
-app.get("/api/v1/oracle/gas", oracleGasHandler);
-app.get("/api/v1/oracle/fx", oracleFxHandler);
-// Bridge
-app.get("/api/v1/bridge/quote", bridgeQuoteHandler);
-app.get("/api/v1/bridge/chains", bridgeChainsHandler);
-// Payroll
-app.post("/api/v1/payroll/execute", payrollExecuteHandler);
-app.post("/api/v1/payroll/estimate", payrollEstimateHandler);
-app.get("/api/v1/payroll/tokens", payrollTokensHandler);
-// Invoice
-app.post("/api/v1/invoice/create", invoiceCreateHandler);
-app.get("/api/v1/invoice/list", invoiceListHandler);
-app.get("/api/v1/invoice/:id", invoiceGetHandler);
-// Analytics
-app.get("/api/v1/analytics/wallet", analyticsWalletHandler);
-app.get("/api/v1/analytics/txhistory", analyticsTxHistoryHandler);
-// Escrow
-app.post("/api/v1/escrow/create", escrowCreateHandler);
-app.get("/api/v1/escrow/list", escrowListHandler);
-app.post("/api/v1/escrow/fund", escrowFundHandler);
-app.post("/api/v1/escrow/release", escrowReleaseHandler);
-app.post("/api/v1/escrow/cancel", escrowCancelHandler);
-app.get("/api/v1/escrow/:id", escrowGetHandler);
-// Inference
-app.post("/api/v1/inference/classify-address", classifyAddressHandler);
-app.post("/api/v1/inference/classify-tx", classifyTxHandler);
-app.post("/api/v1/inference/explain-contract", explainContractHandler);
-app.post("/api/v1/inference/summarize", summarizeHandler);
-// Communication
-app.post("/api/v1/notify/email", notifyEmailHandler);
-app.post("/api/v1/notify/sms", notifySmsHandler);
-app.get("/api/v1/notify/status", notifyStatusHandler);
-app.post("/api/v1/webhook/register", webhookRegisterHandler);
-app.post("/api/v1/webhook/test", webhookTestHandler);
-app.get("/api/v1/webhook/list", webhookListHandler);
-app.post("/api/v1/webhook/delete", webhookDeleteHandler);
-app.post("/api/v1/xmtp/send", xmtpSendHandler);
-app.get("/api/v1/xmtp/inbox", xmtpInboxHandler);
-// Infrastructure
-app.post("/api/v1/rpc/call", rpcCallHandler);
-app.get("/api/v1/rpc/chains", rpcChainsHandler);
-app.post("/api/v1/storage/pin", storagePinHandler);
-app.get("/api/v1/storage/get", storageGetHandler);
-app.get("/api/v1/storage/status", storageStatusHandler);
-app.post("/api/v1/cron/create", cronCreateHandler);
-app.get("/api/v1/cron/list", cronListHandler);
-app.post("/api/v1/cron/cancel", cronCancelHandler);
-app.post("/api/v1/logs/ingest", logsIngestHandler);
-app.get("/api/v1/logs/query", logsQueryHandler);
-// Identity & Access
-app.post("/api/v1/kyc/verify", kycVerifyHandler);
-app.get("/api/v1/kyc/status", kycStatusHandler);
-app.post("/api/v1/auth/session", authSessionHandler);
-app.get("/api/v1/auth/verify", authVerifyHandler);
-// Compliance
-app.post("/api/v1/audit/log", auditLogHandler);
-app.get("/api/v1/audit/query", auditQueryHandler);
-app.post("/api/v1/tax/calculate", taxCalculateHandler);
-app.get("/api/v1/tax/report", taxReportHandler);
-// GPU/Compute
-app.post("/api/v1/gpu/run", gpuRunHandler);
-app.get("/api/v1/gpu/status/:id", gpuStatusHandler);
-app.get("/api/v1/gpu/models", gpuModelsHandler);
-// Search/RAG
-app.post("/api/v1/search/web", searchWebHandler);
-app.post("/api/v1/search/extract", searchExtractHandler);
-app.post("/api/v1/search/qna", searchQnaHandler);
-// Robotics / RTP (Category 15)
-app.post("/api/v1/robots/register", robotRegisterHandler);
-app.post("/api/v1/robots/task", robotTaskHandler);
-app.post("/api/v1/robots/complete", robotCompleteHandler);
-app.get("/api/v1/robots/list", robotListHandler);
-app.get("/api/v1/robots/status", robotTaskStatusHandler);
-app.get("/api/v1/robots/profile", robotProfileHandler);
-app.patch("/api/v1/robots/update", robotUpdateHandler);
-app.post("/api/v1/robots/deregister", robotDeregisterHandler);
-// Wallet Provisioning (Category 14)
-app.post("/api/v1/wallet/create", walletCreateHandler);
-app.get("/api/v1/wallet/list", walletListHandler);
-app.post("/api/v1/wallet/sign-message", walletSignMessageHandler);
-app.post("/api/v1/wallet/send-transaction", walletSendTxHandler);
-app.get("/api/v1/wallet/:walletId/addresses", walletAddressesHandler);
-app.get("/api/v1/wallet/:walletId", walletGetHandler);
-// Agent Wallet (Category 17)
-app.post("/api/v1/agent-wallet/provision", agentWalletProvisionHandler);
-app.post("/api/v1/agent-wallet/session-key", agentWalletSessionKeyHandler);
-app.get("/api/v1/agent-wallet/info", agentWalletInfoHandler);
-app.post("/api/v1/agent-wallet/revoke-key", agentWalletRevokeKeyHandler);
-app.get("/api/v1/agent-wallet/predict", agentWalletPredictHandler);
-// Data
-app.get("/api/v1/prices", pricesHandler);
-app.get("/api/v1/balances", balancesHandler);
-app.get("/api/v1/resolve", resolveHandler);
-// Supply Chain / SCTP (Category 18)
-app.post("/api/v1/sctp/supplier", sctpSupplierCreateHandler);
-app.get("/api/v1/sctp/supplier/:id", sctpSupplierGetHandler);
-app.post("/api/v1/sctp/po", sctpPoCreateHandler);
-app.get("/api/v1/sctp/po/:id", sctpPoGetHandler);
-app.post("/api/v1/sctp/invoice", sctpInvoiceSubmitHandler);
-app.get("/api/v1/sctp/invoice/:id", sctpInvoiceGetHandler);
-app.post("/api/v1/sctp/invoice/verify", sctpInvoiceVerifyHandler);
-app.post("/api/v1/sctp/pay", sctpPayExecuteHandler);
-// Portfolio (Category 20)
-app.get("/api/v1/portfolio/tokens", portfolioTokensHandler);
-app.get("/api/v1/portfolio/nfts", portfolioNftsHandler);
-// Contract (Category 21)
-app.post("/api/v1/contract/read", contractReadHandler);
-app.post("/api/v1/contract/write", contractWriteHandler);
-// DeFi Positions (extends DeFi category)
-app.get("/api/v1/defi/positions", defiPositionsHandler);
-// Solana Jupiter (Category 22)
-app.get("/api/v1/solana/jupiter/quote", jupiterQuoteHandler);
-app.post("/api/v1/solana/jupiter/swap-tx", jupiterSwapTxHandler);
-// Solana Helius DAS
-app.get("/api/v1/solana/helius/assets-by-owner", heliusAssetsByOwnerHandler);
-app.get("/api/v1/solana/helius/asset", heliusAssetHandler);
-// Solana Pyth price feeds
-app.get("/api/v1/solana/pyth/price", pythPriceHandler);
-app.get("/api/v1/solana/pyth/prices", pythPricesHandler);
-// Bittensor Drop-in API (Category 19) — OpenAI-compatible
-app.get("/bittensor/v1/models", dropinModelsHandler);
-app.post("/bittensor/v1/chat/completions", dropinChatHandler);
-app.post("/bittensor/v1/images/generations", dropinImageHandler);
-app.post("/bittensor/v1/embeddings", dropinEmbeddingsHandler);
-app.get("/bittensor/v1/health", dropinHealthHandler);
-// Compute Services
-app.post("/api/v1/compute/text-inference", textInferenceHandler);
-app.post("/api/v1/compute/image-generation", imageGenerationHandler);
-app.post("/api/v1/compute/video-generation", videoGenerationHandler);
-app.post("/api/v1/compute/text-to-speech", textToSpeechHandler);
-app.post("/api/v1/compute/speech-to-text", speechToTextHandler);
-app.post("/api/v1/compute/embeddings", embeddingsHandler);
-app.post("/api/v1/compute/batch", computeBatchHandler);
-app.get("/api/v1/compute/status/:jobId", computeStatusHandler);
-app.get("/api/v1/compute/models", computeModelsHandler);
-app.post("/api/v1/compute/estimate", computeEstimateHandler);
-
-app.listen(PORT, async () => {
-  await initMpp();
-  console.log(`\n💧 Spraay x402 Gateway v3.7.0 running on port ${PORT}`);
-  console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
-  console.log(`💰 Payments to: ${PAY_TO}`);
-  console.log(`🤖 RTP Robot Task Protocol endpoints active`);
-  console.log(`👛 Agent Wallet provisioning active (Category 17)`);
-  console.log(`📦 SCTP Supply Chain endpoints active (Category 18)`);
-  console.log(`τ  Bittensor Drop-in API active (Category 19) — SN64 Chutes AI`);
-  console.log(`⚡ Compute Services active — text-inference, image-gen, video-gen, TTS, STT, embeddings, batch`);
-  console.log(`🔍 Discovery endpoints active — .well-known suite, OpenAPI, llms.txt, agent cards`);
-  console.log(`💼 Portfolio + Contract + DeFi Positions endpoints active (Categories 20, 21)`);
-  console.log(`💳 MPP: ${process.env.MPP_ENABLED === "true" ? "ACTIVE" : "disabled"}`);
-  console.log(`☀️  Solana SVM: ${SOLANA_PAY_TO ? "ACTIVE (x402 + custom)" : "disabled"}`);
-  console.log(`☀️  Solana Jupiter endpoints active — quote + swap-tx${process.env.JUPITER_API_KEY ? " (paid tier)" : " (public tier)"}`);
-  console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
-  console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
-  console.log(`\n🌐 109 paid endpoints live across 32 categories\n`);
-});
-
-export default app;
+}
