@@ -78,6 +78,7 @@ import { computeFuturesDepositHandler, computeFuturesBalanceHandler, computeFutu
 import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
 import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
+import { bazaarIdentityMiddleware } from "./middleware/bazaarIdentityMiddleware.js";
 import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
 import { protocolDetectorMiddleware } from "./middleware/protocolDetector.js";
 import { mppMiddleware, initMpp } from "./middleware/mppMiddleware.js";
@@ -118,7 +119,8 @@ const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK,
 server.register(SOLANA_NETWORK, new ExactSvmScheme());
 server.registerExtension(bazaarResourceServerExtension);
 app.use(enrich402Middleware);
-app.use(solanaEnrich402Middleware);    
+app.use(solanaEnrich402Middleware);
+app.use(bazaarIdentityMiddleware);    
 app.use(protocolDetectorMiddleware);
 app.use(solanaPaymentMiddleware);     
 app.use(mppMiddleware);
