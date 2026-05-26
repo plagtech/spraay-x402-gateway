@@ -75,6 +75,7 @@ import {
 } from "./routes/compute.js";
 // NEW: Compute Futures (Category 22)
 import { computeFuturesDepositHandler, computeFuturesBalanceHandler, computeFuturesExecuteHandler, computeFuturesHistoryHandler, computeFuturesRefundHandler, computeFuturesPricingHandler } from "./routes/compute-futures.js";
+import pluginRouter from "./routes/plugin-router.js";
 import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
 import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
@@ -2245,6 +2246,8 @@ app.post("/api/v1/compute-futures/execute", computeFuturesExecuteHandler);
 app.get("/api/v1/compute-futures/history", computeFuturesHistoryHandler);
 app.post("/api/v1/compute-futures/refund", computeFuturesRefundHandler);
 app.get("/api/v1/compute-futures/pricing", computeFuturesPricingHandler);
+// Base MCP Plugin (free — not in paymentMiddleware config)
+app.use("/api/v1/plugin", pluginRouter);
 
 app.listen(PORT, async () => {
   await initMpp();
