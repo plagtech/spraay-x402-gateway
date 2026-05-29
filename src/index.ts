@@ -100,6 +100,19 @@ app.use(cors({
 }));
 app.post("/v1/webhooks/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
 app.use(express.json());
+
+// Catch malformed JSON bodies → return structured JSON, not HTML.
+// Without this, body-parser throws and agents get an unparseable HTML 400.
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err && (err.type === "entity.parse.failed" || err instanceof SyntaxError)) {
+    return res.status(400).json({
+      error: "invalid_json",
+      message: "Request body is not valid JSON. Send a well-formed JSON object with Content-Type: application/json.",
+      detail: err.message,
+    });
+  }
+  return next(err);
+});
 app.use(gatewayEventsMiddleware);
 
 const PAY_TO = process.env.PAY_TO_ADDRESS!;
@@ -2248,6 +2261,16 @@ app.post("/api/v1/compute-futures/refund", computeFuturesRefundHandler);
 app.get("/api/v1/compute-futures/pricing", computeFuturesPricingHandler);
 // Base MCP Plugin (free — not in paymentMiddleware config)
 app.use("/api/v1/plugin", pluginRouter);
+
+// Final error handler — any uncaught error returns JSON, never HTML.
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(`[error] ${req.method} ${req.path}:`, err?.message || err);
+  if (res.headersSent) return next(err);
+  res.status(err?.status || 500).json({
+    error: "internal_error",
+    message: err?.message || "An unexpected error occurred.",
+  });
+});
 
 app.listen(PORT, async () => {
   await initMpp();
