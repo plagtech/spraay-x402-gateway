@@ -3,7 +3,37 @@ import { supabase } from "./supabase.js";
 
 type EventType = "scan" | "intent" | "payment";
 
-function classifyEvent(req: Request, res: Response): EventType | null {
+// x402 v2 settlement receipt. v2 (Dec 2025) renamed the headers and dropped the
+// X- prefix: X-PAYMENT → PAYMENT-SIGNATURE (request), X-PAYMENT-RESPONSE →
+// PAYMENT-RESPONSE (response). The receipt is base64-encoded JSON and is present
+// on a successful 200 AND on some failed 402s — always check `.success`.
+type Settlement = {
+  success?: boolean;
+  transaction?: string | null;
+  network?: string;
+  payer?: string;
+  errorReason?: string;
+};
+
+// Reads the v2 receipt header, falling back to the v1 name for any legacy clients.
+function decodeSettlement(res: Response): Settlement | null {
+  const h = res.getHeader("payment-response") ?? res.getHeader("x-payment-response");
+  const raw = Array.isArray(h) ? h[0] : h;
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    return JSON.parse(Buffer.from(raw, "base64").toString("utf-8")) as Settlement;
+  } catch {
+    return null; // not valid base64 JSON — treat as no receipt
+  }
+}
+
+// True if the request carried an EVM payment proof — v2 `payment-signature`,
+// with v1 `x-payment` kept for backwards compatibility.
+function hasEvmPaymentHeader(req: Request): boolean {
+  return Boolean(req.headers["payment-signature"]) || Boolean(req.headers["x-payment"]);
+}
+
+function classifyEvent(req: Request, res: Response, settlement: Settlement | null): EventType | null {
   const path = req.path;
 
   if (
@@ -15,13 +45,17 @@ function classifyEvent(req: Request, res: Response): EventType | null {
     return "scan";
   }
 
-  if (res.statusCode === 402) {
-    return "intent";
-  }
+  // Authoritative: a settlement receipt confirming success = a real payment.
+  if (settlement?.success === true) return "payment";
 
-  const hasPaymentHeader = Boolean(req.headers["x-payment"]);
-  const hasSolanaPayment = Boolean(req.headers["x-solana-tx"]);
-  if ((hasPaymentHeader || hasSolanaPayment) && res.statusCode >= 200 && res.statusCode < 300) {
+  // A 402 (including a failed receipt) is an unconverted intent.
+  if (res.statusCode === 402) return "intent";
+
+  // Fallback for any path that doesn't surface a receipt header: EVM payment
+  // header + 2xx. NOTE: we deliberately do NOT count `x-solana-tx` here —
+  // solanaPaymentMiddleware already logs Solana payments, so counting them here
+  // too would double-count every Solana settlement.
+  if (hasEvmPaymentHeader(req) && res.statusCode >= 200 && res.statusCode < 300 && settlement?.success !== false) {
     return "payment";
   }
 
@@ -30,6 +64,7 @@ function classifyEvent(req: Request, res: Response): EventType | null {
 
 function inferCategory(path: string): string | null {
   const p = path.toLowerCase();
+  if (p.includes("/compute")) return "compute";
   if (p.includes("/chat/") || p.includes("/inference")) return "ai_inference";
   if (p.includes("/oracle") || p.includes("/prices") || p.includes("/gas") || p.includes("/fx")) return "oracle";
   if (p.includes("/escrow")) return "escrow";
@@ -59,6 +94,10 @@ function inferCategory(path: string): string | null {
   if (p.includes("/analytics")) return "analytics";
   if (p.includes("/balance")) return "balances";
   if (p.includes("/resolve")) return "resolve";
+  if (p.includes("/portfolio")) return "portfolio";
+  if (p.includes("/contract")) return "contract";
+  if (p.includes("/defi")) return "defi";
+  if (p.includes("/jupiter") || p.includes("/helius") || p.includes("/pyth")) return "solana_data";
   return null;
 }
 
@@ -83,22 +122,34 @@ function inferScanner(userAgent: string | undefined): string | null {
 }
 
 function extractChain(req: Request): string | null {
+  // 1. Strongest signal: explicit header / body / query
   if (req.headers["x-solana-tx"]) return "solana";
   const body = req.body as Record<string, unknown> | undefined;
   const query = req.query as Record<string, unknown>;
-  const chain = (body?.chain || body?.network || query?.chain || query?.network) as string | undefined;
-  if (!chain) return null;
-  const c = chain.toLowerCase();
-  if (c.includes("base")) return "base";
-  if (c.includes("solana")) return "solana";
-  if (c.includes("xrp")) return "xrp";
-  if (c.includes("stellar")) return "stellar";
-  if (c.includes("bitcoin") || c === "btc") return "bitcoin";
-  if (c.includes("stacks")) return "stacks";
-  if (c.includes("polygon")) return "polygon";
-  if (c.includes("arbitrum")) return "arbitrum";
-  if (c.includes("optimism")) return "optimism";
-  return c;
+  const explicit = (body?.chain || body?.network || query?.chain || query?.network) as string | undefined;
+  if (explicit) {
+    const c = explicit.toLowerCase();
+    if (c.includes("base")) return "base";
+    if (c.includes("solana")) return "solana";
+    if (c.includes("xrp")) return "xrp";
+    if (c.includes("stellar") || c.includes("xlm")) return "stellar";
+    if (c.includes("bitcoin") || c === "btc") return "bitcoin";
+    if (c.includes("stacks")) return "stacks";
+    if (c.includes("polygon")) return "polygon";
+    if (c.includes("arbitrum")) return "arbitrum";
+    if (c.includes("optimism")) return "optimism";
+    return c;
+  }
+  // 2. Fallback: the path. Native batch endpoints are chain-specific, so they
+  //    don't need a chain field in the body.
+  const p = req.path.toLowerCase();
+  if (p.includes("/xrp")) return "xrp";
+  if (p.includes("/stellar") || p.includes("/xlm")) return "stellar";
+  if (p.includes("/bitcoin") || p.includes("/btc")) return "bitcoin";
+  if (p.includes("/stacks")) return "stacks";
+  if (p.includes("/tao") || p.includes("/bittensor")) return "bittensor";
+  if (p.includes("/solana") || p.includes("/jupiter") || p.includes("/helius") || p.includes("/pyth")) return "solana";
+  return null; // generic EVM batch etc. → null, which the globe renders at Base by default
 }
 
 function extractBatchSize(req: Request): number | null {
@@ -113,10 +164,13 @@ function extractBatchSize(req: Request): number | null {
   return null;
 }
 
+// Best-effort EVM payer from the request. In v2 the proof lives in a base64
+// PAYMENT-SIGNATURE payload, so this usually returns null on the request side —
+// the authoritative payer comes from the settlement receipt (see row below).
 function extractPayerAddress(req: Request): string | null {
-  const paymentHeader = req.headers["x-payment"];
-  if (typeof paymentHeader === "string") {
-    const match = paymentHeader.match(/0x[a-fA-F0-9]{40}/);
+  const sig = req.headers["payment-signature"] ?? req.headers["x-payment"];
+  if (typeof sig === "string") {
+    const match = sig.match(/0x[a-fA-F0-9]{40}/);
     if (match) return match[0];
   }
   const body = req.body as Record<string, unknown> | undefined;
@@ -148,11 +202,14 @@ export function gatewayEventsMiddleware(req: Request, res: Response, next: NextF
 
   const client = supabase;
   const startTime = Date.now();
-  const paymentAttempted = Boolean(req.headers["x-payment"]) || Boolean(req.headers["x-solana-tx"]);
+  // v2 `payment-signature` (or v1 `x-payment`) or the Solana rail header.
+  const paymentAttempted =
+    hasEvmPaymentHeader(req) || Boolean(req.headers["x-solana-tx"]);
 
   res.on("finish", () => {
     try {
-      const eventType = classifyEvent(req, res);
+      const settlement = decodeSettlement(res);
+      const eventType = classifyEvent(req, res, settlement);
       if (!eventType) return;
 
       const userAgent = req.headers["user-agent"];
@@ -162,11 +219,17 @@ export function gatewayEventsMiddleware(req: Request, res: Response, next: NextF
         method: req.method,
         http_status: res.statusCode,
         category: inferCategory(req.path),
-        chain: extractChain(req),
+        chain: extractChain(req) ?? settlement?.network ?? null,
         endpoint_name: inferEndpointName(req.path),
-        payer_address: extractPayerAddress(req),
+        // Prefer the verified payer from the settlement receipt when present.
+        payer_address: extractPayerAddress(req) ?? settlement?.payer ?? null,
         batch_size: extractBatchSize(req),
-        tx_hash: ((res.locals as Record<string, unknown>)?.txHash as string | null) ?? null,
+        // tx_hash now comes from the v2 PAYMENT-RESPONSE receipt — the only place
+        // EVM settlement hashes are actually surfaced.
+        tx_hash:
+          settlement?.transaction ??
+          ((res.locals as Record<string, unknown>)?.txHash as string | null) ??
+          null,
         scanner_source: inferScanner(typeof userAgent === "string" ? userAgent : undefined),
         user_agent: typeof userAgent === "string" ? userAgent.slice(0, 200) : null,
         duration_ms: Date.now() - startTime,
