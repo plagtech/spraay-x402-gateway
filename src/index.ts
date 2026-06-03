@@ -1517,7 +1517,7 @@ app.get("/llms.txt", (_req, res) => {
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 88+ paid API endpoints that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides 114 paid API endpoints (127 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
@@ -1525,9 +1525,10 @@ Spraay provides 88+ paid API endpoints that agents call with USDC micropayments 
 - Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
 - Pay to: ${PAY_TO}
 - Facilitator: Coinbase CDP
+- Solana rail: USDC payments also accepted on Solana — see ${BASE_URL}/.well-known/solana.json
 
 ## Categories
-ai, payments, defi, oracle, bridge, payroll, invoicing, escrow, compute, search, rtp, agent-wallet, supply-chain, bittensor
+ai, payments, defi, oracle, bridge, payroll, invoice, analytics, escrow, inference, communication, infrastructure, identity, compliance, gpu, search, compute, compute-futures, rtp, agent-wallet, supply-chain, bittensor
 
 ## Getting started
 1. Fund an agent wallet with USDC on Base
@@ -1538,24 +1539,26 @@ ai, payments, defi, oracle, bridge, payroll, invoicing, escrow, compute, search,
 
 ## Example endpoints
 POST ${BASE_URL}/api/v1/chat/completions — $0.04 — OpenAI-compatible chat via 200+ models
-POST ${BASE_URL}/bittensor/v1/chat/completions — $0.03 — Bittensor SN64 inference
-POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments on Base
+POST ${BASE_URL}/bittensor/v1/chat/completions — $0.03 — Bittensor SN64 decentralized inference
+POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments to up to 200 recipients
 GET ${BASE_URL}/api/v1/oracle/prices — $0.008 — Multi-source price feed
 GET ${BASE_URL}/api/v1/swap/quote — $0.008 — Uniswap V3 / Aerodrome quote
-POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain escrow
+POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain trustless escrow
 POST ${BASE_URL}/api/v1/payroll/execute — $0.10 — Crypto payroll run
+POST ${BASE_URL}/api/v1/compute-futures/deposit — $0.01 — Prepaid compute credits with tier discounts
 POST ${BASE_URL}/api/v1/gpu/run — $0.06 — GPU workload execution
-POST ${BASE_URL}/api/v1/search/qna — $0.03 — Structured Q&A search
-POST ${BASE_URL}/api/v1/robots/task — $0.05 — Dispatch robot task (RTP)
+POST ${BASE_URL}/api/v1/search/qna — $0.03 — Structured Q&A search with sources
+POST ${BASE_URL}/api/v1/robots/task — $0.05 — Dispatch paid robot task (RTP)
 
 ## Resources
 - Full x402 manifest: ${BASE_URL}/.well-known/x402.json
+- Solana discovery: ${BASE_URL}/.well-known/solana.json
 - Agent card (A2A): ${BASE_URL}/.well-known/agent.json
 - OpenAPI 3.1 spec: ${BASE_URL}/openapi.json
 - MCP server card: ${BASE_URL}/.well-known/mcp/server-card.json
 - Docs: https://docs.spraay.app
 - GitHub: https://github.com/plagtech/spraay-x402-gateway
-- MCP on Smithery: https://smithery.ai/server/@plagtech/spraay-x402-mcp
+- MCP on Smithery: https://smithery.ai/servers/Plagtech/Spraay-x402-mcp
 
 ## Contact
 Twitter: @Spraay_app
