@@ -154,7 +154,7 @@ app.use(
       },
       "POST /api/v1/batch/execute": {
         accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Batch payments via Spraay. Implements Batch Payments for Agents (BPA) 1.0 — atomic, non-custodial, up to 200 recipients. Spec: https://docs.spraay.app/bpa/1.0/", mimeType: "application/json",
+        description: "Batch payments via Spraay. Implements Batch Payments for Agents (BPA) 1.0 - atomic, non-custodial, up to 200 recipients. Spec: https://docs.spraay.app/bpa/1.0/", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", recipients: ["0x..."], amounts: ["1000000"], sender: "0x..." }, inputSchema: { properties: { token: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, sender: { type: "string" } }, required: ["token", "recipients", "amounts", "sender"] }, bodyType: "json", output: { example: { transactions: [] }, schema: { properties: { transactions: { type: "array" } } } } }) },
       },
       "POST /api/v1/batch/estimate": {
