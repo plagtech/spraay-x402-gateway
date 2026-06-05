@@ -88,6 +88,17 @@ import { solanaPaymentMiddleware } from "./middleware/solanaPaymentMiddleware.js
 import { solanaEnrich402Middleware } from "./middleware/solanaEnrich402.js";
 import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
 import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
+// NEW: Research & Reference
+import {
+  researchDictDefineHandler, researchDictSynonymsHandler, researchDictPhoneticsHandler,
+  researchPapersSearchHandler, researchPapersByDoiHandler, researchPapersByAuthorHandler,
+  researchPapersCitationsHandler, researchPapersTrendingHandler,
+  researchPreprintsSearchHandler, researchPreprintsByIdHandler, researchPreprintsRecentHandler,
+  researchScholarlyByDoiHandler, researchScholarlySearchHandler, researchScholarlyCitationsHandler, researchScholarlyJournalHandler,
+  researchChemCompoundHandler, researchChemSimilarityHandler, researchChemBioactivityHandler,
+  researchBiomedSearchHandler, researchBiomedByPmidHandler, researchBiomedRelatedHandler,
+  researchCensusHandler, researchDatasetsHandler,
+} from "./routes/research.js";
 
 dotenv.config();
 const app = express();
@@ -753,6 +764,123 @@ app.use(
         description: "Predict agent wallet address before deployment.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { ownerAddress: "0x...", agentId: "bot-001" }, inputSchema: { properties: { ownerAddress: { type: "string" }, agentId: { type: "string" } }, required: ["ownerAddress", "agentId"] }, output: { example: { predictedAddress: "0x..." }, schema: { properties: { predictedAddress: { type: "string" } } } } }) },
       },
+      
+      // ---- RESEARCH & REFERENCE ----
+      "GET /api/v1/research/dictionary/define": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Dictionary definition with phonetics, parts of speech, and examples.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/dictionary/synonyms": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Synonyms and antonyms for a word.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/dictionary/phonetics": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Phonetic transcription and audio pronunciation URL.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/papers/search": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Search 250M+ academic papers via OpenAlex (CC0). Filter by field, year, author.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/papers/by-doi": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Get paper metadata by DOI via OpenAlex.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/papers/by-author": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "List papers by author name or ORCID via OpenAlex.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/papers/citations": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Citation graph for a paper — cited-by count and referenced works.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/papers/trending": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Trending papers by topic in last 7/30/90 days via OpenAlex.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/preprints/search": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Search arXiv preprints by keyword and category (CC0 metadata).",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/preprints/by-id": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Get arXiv preprint metadata by ID.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/preprints/recent": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Latest arXiv preprints by category (cs.AI, math, physics, etc.).",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/scholarly/by-doi": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Full Crossref metadata for any DOI (journal, book, conference).",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/scholarly/search": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Search 150M+ works by keyword via Crossref (CC0 metadata).",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/scholarly/citations-count": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Citation count and reference list for a DOI via Crossref.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/scholarly/journal-info": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Journal metadata by ISSN: publisher, subject, open-access status.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/chemistry/compound": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "PubChem compound lookup by name, formula, or CID. Properties, structure, safety data.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/chemistry/similarity": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Find structurally similar compounds in PubChem by CID.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/chemistry/bioactivity": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Biological assay results for a PubChem compound.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/biomedical/search": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Search 36M+ biomedical papers in PubMed by keyword or MeSH term.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/biomedical/by-pmid": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Paper metadata by PubMed ID.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/biomedical/related": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Related articles for a given PubMed ID.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/demographics/census": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "US Census data by state, county, zip — population, income, housing.",
+        mimeType: "application/json",
+      },
+      "GET /api/v1/research/demographics/datasets": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Search Data.gov datasets by keyword and category.",
+        mimeType: "application/json",
+      },
 
       // ---- CATEGORY 19: BITTENSOR DROP-IN API (OpenAI-compatible) ----
       "GET /bittensor/v1/models": {
@@ -1191,6 +1319,30 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_sctp_invoice_get", description: "Get invoice + verification result", price: "$0.005" },
       { name: "spraay_sctp_invoice_verify", description: "AI-powered invoice verification against PO", price: "$0.03" },
       { name: "spraay_sctp_pay", description: "Execute supplier payment (single or batch)", price: "$0.10" },
+      // Research & Reference
+      { name: "spraay_research_dict_define", description: "Dictionary definition, phonetics, examples", price: "$0.001" },
+      { name: "spraay_research_dict_synonyms", description: "Synonyms and antonyms", price: "$0.001" },
+      { name: "spraay_research_dict_phonetics", description: "Phonetic transcription + audio", price: "$0.001" },
+      { name: "spraay_research_papers_search", description: "Search 250M+ academic papers (OpenAlex)", price: "$0.002" },
+      { name: "spraay_research_papers_by_doi", description: "Paper metadata by DOI", price: "$0.001" },
+      { name: "spraay_research_papers_by_author", description: "Papers by author or ORCID", price: "$0.002" },
+      { name: "spraay_research_papers_citations", description: "Citation graph for a paper", price: "$0.002" },
+      { name: "spraay_research_papers_trending", description: "Trending papers by field", price: "$0.002" },
+      { name: "spraay_research_preprints_search", description: "Search arXiv preprints", price: "$0.002" },
+      { name: "spraay_research_preprints_by_id", description: "arXiv preprint by ID", price: "$0.001" },
+      { name: "spraay_research_preprints_recent", description: "Latest arXiv by category", price: "$0.002" },
+      { name: "spraay_research_scholarly_by_doi", description: "Crossref metadata by DOI", price: "$0.001" },
+      { name: "spraay_research_scholarly_search", description: "Search 150M+ works (Crossref)", price: "$0.002" },
+      { name: "spraay_research_scholarly_citations", description: "Citation count for DOI", price: "$0.001" },
+      { name: "spraay_research_scholarly_journal", description: "Journal info by ISSN", price: "$0.001" },
+      { name: "spraay_research_chem_compound", description: "PubChem compound lookup", price: "$0.002" },
+      { name: "spraay_research_chem_similarity", description: "Similar compounds (PubChem)", price: "$0.002" },
+      { name: "spraay_research_chem_bioactivity", description: "Bioassay results (PubChem)", price: "$0.002" },
+      { name: "spraay_research_biomed_search", description: "Search PubMed (36M+ papers)", price: "$0.002" },
+      { name: "spraay_research_biomed_by_pmid", description: "Paper by PubMed ID", price: "$0.001" },
+      { name: "spraay_research_biomed_related", description: "Related PubMed articles", price: "$0.002" },
+      { name: "spraay_research_census", description: "US Census demographics", price: "$0.001" },
+      { name: "spraay_research_datasets", description: "Search Data.gov datasets", price: "$0.001" },
     ],
   });
 });
@@ -1911,6 +2063,76 @@ app.get("/openapi.json", (_req, res) => {
     { method: "get", path: "/api/v1/portfolio/nfts", price: "$0.01", priceNum: "0.010000", tag: "portfolio", desc: "Multi-chain NFT holdings with metadata",
       queryParams: [{ name: "address", type: "string", required: true }, { name: "networks", type: "string", required: false }],
       outputProps: { address: { type: "string" }, total_count: { type: "number" }, nfts: { type: "array" } } },
+    // ---- RESEARCH & REFERENCE ----
+    { method: "get", path: "/api/v1/research/dictionary/define", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Dictionary definition with phonetics and examples",
+      queryParams: [{ name: "word", type: "string", required: true }, { name: "lang", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, source: { type: "string" } } },
+    { method: "get", path: "/api/v1/research/dictionary/synonyms", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Synonyms and antonyms for a word",
+      queryParams: [{ name: "word", type: "string", required: true }],
+      outputProps: { synonyms: { type: "array" }, antonyms: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/dictionary/phonetics", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Phonetic transcription and audio URL",
+      queryParams: [{ name: "word", type: "string", required: true }],
+      outputProps: { phonetics: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/papers/search", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Search 250M+ academic papers (OpenAlex CC0)",
+      queryParams: [{ name: "q", type: "string", required: true }, { name: "filter", type: "string", required: false }, { name: "page", type: "string", required: false }, { name: "per_page", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, total_results: { type: "number" } } },
+    { method: "get", path: "/api/v1/research/papers/by-doi", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Paper metadata by DOI (OpenAlex)",
+      queryParams: [{ name: "doi", type: "string", required: true }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/papers/by-author", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Papers by author name or ORCID (OpenAlex)",
+      queryParams: [{ name: "author", type: "string", required: false }, { name: "orcid", type: "string", required: false }, { name: "page", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, total_results: { type: "number" } } },
+    { method: "get", path: "/api/v1/research/papers/citations", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Citation graph — cited-by count and references",
+      queryParams: [{ name: "doi", type: "string", required: false }, { name: "id", type: "string", required: false }],
+      outputProps: { cited_by_count: { type: "number" }, referenced_works: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/papers/trending", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Trending papers by topic in last N days",
+      queryParams: [{ name: "topic", type: "string", required: false }, { name: "days", type: "string", required: false }, { name: "per_page", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, total_results: { type: "number" } } },
+    { method: "get", path: "/api/v1/research/preprints/search", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Search arXiv preprints by keyword and category",
+      queryParams: [{ name: "q", type: "string", required: false }, { name: "category", type: "string", required: false }, { name: "max_results", type: "string", required: false }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/preprints/by-id", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "arXiv preprint metadata by ID",
+      queryParams: [{ name: "id", type: "string", required: true }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/preprints/recent", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Latest arXiv preprints by category",
+      queryParams: [{ name: "category", type: "string", required: false }, { name: "max_results", type: "string", required: false }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/scholarly/by-doi", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Full Crossref metadata for any DOI",
+      queryParams: [{ name: "doi", type: "string", required: true }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/scholarly/search", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Search 150M+ works via Crossref (CC0)",
+      queryParams: [{ name: "q", type: "string", required: true }, { name: "rows", type: "string", required: false }, { name: "offset", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, total_results: { type: "number" } } },
+    { method: "get", path: "/api/v1/research/scholarly/citations-count", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Citation count and references for a DOI",
+      queryParams: [{ name: "doi", type: "string", required: true }],
+      outputProps: { citations_count: { type: "number" }, references: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/scholarly/journal-info", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Journal metadata by ISSN",
+      queryParams: [{ name: "issn", type: "string", required: true }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/chemistry/compound", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "PubChem compound by name, formula, or CID",
+      queryParams: [{ name: "name", type: "string", required: false }, { name: "formula", type: "string", required: false }, { name: "cid", type: "string", required: false }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/chemistry/similarity", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Find structurally similar compounds in PubChem",
+      queryParams: [{ name: "cid", type: "string", required: true }, { name: "threshold", type: "string", required: false }, { name: "max_records", type: "string", required: false }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/chemistry/bioactivity", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Biological assay results for a PubChem compound",
+      queryParams: [{ name: "cid", type: "string", required: true }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/biomedical/search", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Search 36M+ biomedical papers in PubMed",
+      queryParams: [{ name: "q", type: "string", required: true }, { name: "max_results", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, total_results: { type: "number" } } },
+    { method: "get", path: "/api/v1/research/biomedical/by-pmid", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Paper metadata by PubMed ID",
+      queryParams: [{ name: "pmid", type: "string", required: true }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/biomedical/related", price: "$0.002", priceNum: "0.002000", tag: "research", desc: "Related articles for a PubMed ID",
+      queryParams: [{ name: "pmid", type: "string", required: true }, { name: "max_results", type: "string", required: false }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/demographics/census", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "US Census data by state, county, zip",
+      queryParams: [{ name: "dataset", type: "string", required: false }, { name: "year", type: "string", required: false }, { name: "variables", type: "string", required: false }, { name: "geo", type: "string", required: false }],
+      outputProps: { results: { type: "array" } } },
+    { method: "get", path: "/api/v1/research/demographics/datasets", price: "$0.001", priceNum: "0.001000", tag: "research", desc: "Search Data.gov datasets by keyword",
+      queryParams: [{ name: "q", type: "string", required: true }, { name: "rows", type: "string", required: false }],
+      outputProps: { results: { type: "array" }, total_results: { type: "number" } } },
     // ---- CONTRACT ----
     { method: "post", path: "/api/v1/contract/read", price: "$0.002", priceNum: "0.002000", tag: "contract", desc: "Call any view/pure function on any EVM contract",
       inputProps: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" } }, required: ["address", "method"],
@@ -2271,6 +2493,30 @@ app.post("/api/v1/compute-futures/refund", computeFuturesRefundHandler);
 app.get("/api/v1/compute-futures/pricing", computeFuturesPricingHandler);
 // Base MCP Plugin (free — not in paymentMiddleware config)
 app.use("/api/v1/plugin", pluginRouter);
+// Research & Reference
+app.get("/api/v1/research/dictionary/define", researchDictDefineHandler);
+app.get("/api/v1/research/dictionary/synonyms", researchDictSynonymsHandler);
+app.get("/api/v1/research/dictionary/phonetics", researchDictPhoneticsHandler);
+app.get("/api/v1/research/papers/search", researchPapersSearchHandler);
+app.get("/api/v1/research/papers/by-doi", researchPapersByDoiHandler);
+app.get("/api/v1/research/papers/by-author", researchPapersByAuthorHandler);
+app.get("/api/v1/research/papers/citations", researchPapersCitationsHandler);
+app.get("/api/v1/research/papers/trending", researchPapersTrendingHandler);
+app.get("/api/v1/research/preprints/search", researchPreprintsSearchHandler);
+app.get("/api/v1/research/preprints/by-id", researchPreprintsByIdHandler);
+app.get("/api/v1/research/preprints/recent", researchPreprintsRecentHandler);
+app.get("/api/v1/research/scholarly/by-doi", researchScholarlyByDoiHandler);
+app.get("/api/v1/research/scholarly/search", researchScholarlySearchHandler);
+app.get("/api/v1/research/scholarly/citations-count", researchScholarlyCitationsHandler);
+app.get("/api/v1/research/scholarly/journal-info", researchScholarlyJournalHandler);
+app.get("/api/v1/research/chemistry/compound", researchChemCompoundHandler);
+app.get("/api/v1/research/chemistry/similarity", researchChemSimilarityHandler);
+app.get("/api/v1/research/chemistry/bioactivity", researchChemBioactivityHandler);
+app.get("/api/v1/research/biomedical/search", researchBiomedSearchHandler);
+app.get("/api/v1/research/biomedical/by-pmid", researchBiomedByPmidHandler);
+app.get("/api/v1/research/biomedical/related", researchBiomedRelatedHandler);
+app.get("/api/v1/research/demographics/census", researchCensusHandler);
+app.get("/api/v1/research/demographics/datasets", researchDatasetsHandler);
 
 // Final error handler — any uncaught error returns JSON, never HTML.
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -2300,7 +2546,8 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Jupiter endpoints active — quote + swap-tx${process.env.JUPITER_API_KEY ? " (paid tier)" : " (public tier)"}`);
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
-  console.log(`\n🌐 115 paid endpoints live across 33 categories\n`);
+  console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
+  console.log(`\n🌐 138 paid endpoints live across 34 categories\n`);
 });
 
 export default app;
