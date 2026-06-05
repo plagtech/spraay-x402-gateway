@@ -1266,6 +1266,43 @@ app.get("/.well-known/x402.json", (_req, res) => {
       // Stellar (Chain #14)
       { resource: `${BASE_URL}/api/v1/stellar/batch`, method: "POST", price: "$0.02", category: "payments", chain: "stellar" },
       { resource: `${BASE_URL}/api/v1/stellar/estimate`, method: "POST", price: "$0.001", category: "payments", chain: "stellar" },
+      // Research & Reference (Category 24)
+      { resource: `${BASE_URL}/api/v1/research/dictionary/define`, method: "GET", price: "$0.001", category: "research", description: "Dictionary definition with phonetics and examples.", searchTerms: ["dictionary", "definition", "define word", "meaning"] },
+      { resource: `${BASE_URL}/api/v1/research/dictionary/synonyms`, method: "GET", price: "$0.001", category: "research", description: "Synonyms and antonyms for a word.", searchTerms: ["synonyms", "antonyms", "thesaurus"] },
+      { resource: `${BASE_URL}/api/v1/research/dictionary/phonetics`, method: "GET", price: "$0.001", category: "research", description: "Phonetic transcription and audio URL.", searchTerms: ["phonetics", "pronunciation", "IPA"] },
+      { resource: `${BASE_URL}/api/v1/research/papers/search`, method: "GET", price: "$0.002", category: "research", description: "Search 250M+ academic papers (OpenAlex CC0).", searchTerms: ["academic papers", "research search", "OpenAlex", "scholarly"] },
+      { resource: `${BASE_URL}/api/v1/research/papers/by-doi`, method: "GET", price: "$0.001", category: "research", description: "Paper metadata by DOI (OpenAlex).", searchTerms: ["paper by DOI", "DOI lookup", "citation metadata"] },
+      { resource: `${BASE_URL}/api/v1/research/papers/by-author`, method: "GET", price: "$0.002", category: "research", description: "Papers by author name or ORCID (OpenAlex).", searchTerms: ["papers by author", "ORCID", "author search"] },
+      { resource: `${BASE_URL}/api/v1/research/papers/citations`, method: "GET", price: "$0.002", category: "research", description: "Citation graph - cited-by count and references.", searchTerms: ["citations", "cited by", "citation graph"] },
+      { resource: `${BASE_URL}/api/v1/research/papers/trending`, method: "GET", price: "$0.002", category: "research", description: "Trending papers by topic in the last N days.", searchTerms: ["trending papers", "hot papers", "popular research"] },
+      { resource: `${BASE_URL}/api/v1/research/preprints/search`, method: "GET", price: "$0.002", category: "research", description: "Search arXiv preprints by keyword and category.", searchTerms: ["arXiv", "preprints", "preprint search"] },
+      { resource: `${BASE_URL}/api/v1/research/preprints/by-id`, method: "GET", price: "$0.001", category: "research", description: "arXiv preprint metadata by ID.", searchTerms: ["arXiv id", "preprint lookup"] },
+      { resource: `${BASE_URL}/api/v1/research/preprints/recent`, method: "GET", price: "$0.002", category: "research", description: "Latest arXiv preprints by category.", searchTerms: ["recent preprints", "new arXiv", "latest research"] },
+      { resource: `${BASE_URL}/api/v1/research/scholarly/by-doi`, method: "GET", price: "$0.001", category: "research", description: "Full Crossref metadata for any DOI.", searchTerms: ["Crossref", "DOI metadata", "scholarly record"] },
+      { resource: `${BASE_URL}/api/v1/research/scholarly/search`, method: "GET", price: "$0.002", category: "research", description: "Search 150M+ works via Crossref (CC0).", searchTerms: ["Crossref search", "scholarly works", "literature search"] },
+      { resource: `${BASE_URL}/api/v1/research/scholarly/citations-count`, method: "GET", price: "$0.001", category: "research", description: "Citation count and references for a DOI.", searchTerms: ["citation count", "reference count", "impact"] },
+      { resource: `${BASE_URL}/api/v1/research/scholarly/journal-info`, method: "GET", price: "$0.001", category: "research", description: "Journal metadata by ISSN.", searchTerms: ["journal", "ISSN", "journal metadata"] },
+      { resource: `${BASE_URL}/api/v1/research/chemistry/compound`, method: "GET", price: "$0.002", category: "research", description: "PubChem compound by name, formula, or CID.", searchTerms: ["PubChem", "chemical compound", "molecule", "CID"] },
+      { resource: `${BASE_URL}/api/v1/research/chemistry/similarity`, method: "GET", price: "$0.002", category: "research", description: "Find structurally similar compounds in PubChem.", searchTerms: ["compound similarity", "structure search", "cheminformatics"] },
+      { resource: `${BASE_URL}/api/v1/research/chemistry/bioactivity`, method: "GET", price: "$0.002", category: "research", description: "Biological assay results for a PubChem compound.", searchTerms: ["bioactivity", "assay", "drug screening"] },
+      { resource: `${BASE_URL}/api/v1/research/biomedical/search`, method: "GET", price: "$0.002", category: "research", description: "Search 36M+ biomedical papers in PubMed.", searchTerms: ["PubMed", "biomedical search", "medical literature"] },
+      { resource: `${BASE_URL}/api/v1/research/biomedical/by-pmid`, method: "GET", price: "$0.001", category: "research", description: "Paper metadata by PubMed ID.", searchTerms: ["PMID", "PubMed lookup", "medical paper"] },
+      { resource: `${BASE_URL}/api/v1/research/biomedical/related`, method: "GET", price: "$0.002", category: "research", description: "Related articles for a PubMed ID.", searchTerms: ["related articles", "similar papers", "PubMed related"] },
+      { resource: `${BASE_URL}/api/v1/research/demographics/census`, method: "GET", price: "$0.001", category: "research", description: "US Census data by state, county, or zip.", searchTerms: ["census", "demographics", "population data"] },
+      { resource: `${BASE_URL}/api/v1/research/demographics/datasets`, method: "GET", price: "$0.001", category: "research", description: "Search Data.gov datasets by keyword.", searchTerms: ["Data.gov", "open data", "government datasets"] },
+      // Geospatial (Category 23)
+      { resource: `${BASE_URL}/api/v1/geo/geocode`, method: "POST", price: "$0.005", category: "geo", description: "Geocode an address or place to lat/lng coordinates (OpenStreetMap).", searchTerms: ["geocode", "address to coordinates", "lat lng", "OpenStreetMap"] },
+      { resource: `${BASE_URL}/api/v1/geo/reverse-geocode`, method: "POST", price: "$0.005", category: "geo", description: "Reverse geocode lat/lng to an address (OpenStreetMap).", searchTerms: ["reverse geocode", "coordinates to address", "what is at"] },
+      { resource: `${BASE_URL}/api/v1/geo/route`, method: "POST", price: "$0.01", category: "geo", description: "Turn-by-turn directions between waypoints with distance and duration.", searchTerms: ["directions", "route", "navigation", "turn by turn"] },
+      { resource: `${BASE_URL}/api/v1/geo/isochrone`, method: "POST", price: "$0.02", category: "geo", description: "Reachability polygon - area reachable within N seconds from a point.", searchTerms: ["isochrone", "reachability", "delivery zone", "coverage area"] },
+      { resource: `${BASE_URL}/api/v1/geo/elevation`, method: "POST", price: "$0.003", category: "geo", description: "Terrain elevation at one or more coordinates (SRTM 30m).", searchTerms: ["elevation", "altitude", "terrain", "SRTM"] },
+      { resource: `${BASE_URL}/api/v1/geo/weather`, method: "POST", price: "$0.01", category: "geo", description: "Current weather and 24h forecast at coordinates.", searchTerms: ["weather", "forecast", "temperature", "conditions"] },
+      { resource: `${BASE_URL}/api/v1/geo/weather-alerts`, method: "POST", price: "$0.01", category: "geo", description: "Severe weather alerts at coordinates - storms, floods, heat, wind.", searchTerms: ["weather alerts", "severe weather", "storm warning", "advisory"] },
+      { resource: `${BASE_URL}/api/v1/geo/flight-status`, method: "POST", price: "$0.05", category: "geo", description: "Real-time flight status, times, gates, aircraft, delays (AeroDataBox).", searchTerms: ["flight status", "flight tracker", "departure arrival", "delays"] },
+      { resource: `${BASE_URL}/api/v1/geo/airport-info`, method: "POST", price: "$0.03", category: "geo", description: "Airport details - location, timezone, elevation, IATA/ICAO codes (AeroDataBox).", searchTerms: ["airport info", "IATA", "ICAO", "airport details"] },
+      { resource: `${BASE_URL}/api/v1/geo/distance-matrix`, method: "POST", price: "$0.02", category: "geo", description: "Distance and duration matrix between multiple origin-destination pairs.", searchTerms: ["distance matrix", "travel time", "fleet dispatch", "nearest"] },
+      { resource: `${BASE_URL}/api/v1/geo/nearby`, method: "POST", price: "$0.005", category: "geo", description: "Find points of interest near coordinates - gas, hospitals, helipads, etc.", searchTerms: ["nearby", "points of interest", "POI search", "find places"] },
+      { resource: `${BASE_URL}/api/v1/geo/timezone`, method: "POST", price: "$0.003", category: "geo", description: "Country and timezone info at coordinates.", searchTerms: ["timezone", "country lookup", "UTC offset"] },
     ],
     solanaPayment: {
       enabled: true,
@@ -1286,8 +1323,8 @@ app.get("/.well-known/solana.json", solanaDiscoveryHandler);
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 76 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).",
-    version: "3.7.0",
+    description: "Full-stack DeFi infrastructure for AI agents on Base. 126 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).",
+    version: "3.8.1",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
     repository: "https://github.com/plagtech/spraay-x402-mcp",
@@ -1412,13 +1449,33 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_research_biomed_related", description: "Related PubMed articles", price: "$0.002" },
       { name: "spraay_research_census", description: "US Census demographics", price: "$0.001" },
       { name: "spraay_research_datasets", description: "Search Data.gov datasets", price: "$0.001" },
+      // Compute Futures
+      { name: "spraay_compute_futures_deposit", description: "Deposit USDC to open a prepaid compute credit account", price: "$0.01" },
+      { name: "spraay_compute_futures_balance", description: "Check remaining compute credit balance, tier, discount, and ", price: "$0.001" },
+      { name: "spraay_compute_futures_execute", description: "Run a compute job and deduct cost from the prepaid balance", price: "$0.001" },
+      { name: "spraay_compute_futures_history", description: "Full usage ledger", price: "$0.002" },
+      { name: "spraay_compute_futures_refund", description: "Refund unused compute credit balance to the original deposit", price: "$0.01" },
+      { name: "spraay_compute_futures_pricing", description: "Compute futures pricing", price: "$0.001" },
+      // Geospatial
+      { name: "spraay_geo_geocode", description: "Geocode an address to lat/lng coordinates", price: "$0.005" },
+      { name: "spraay_geo_reverse_geocode", description: "Reverse geocode lat/lng to an address (OpenStreetMap).", price: "$0.005" },
+      { name: "spraay_geo_route", description: "Turn-by-turn directions between waypoints with distance and ", price: "$0.01" },
+      { name: "spraay_geo_isochrone", description: "Reachability polygon", price: "$0.02" },
+      { name: "spraay_geo_elevation", description: "Terrain elevation at one or more coordinates (SRTM 30m).", price: "$0.003" },
+      { name: "spraay_geo_weather", description: "Current weather and 24h forecast at coordinates.", price: "$0.01" },
+      { name: "spraay_geo_weather_alerts", description: "Severe weather alerts at coordinates", price: "$0.01" },
+      { name: "spraay_geo_flight_status", description: "Real-time flight status, times, gates, delays", price: "$0.05" },
+      { name: "spraay_geo_airport_info", description: "Airport details", price: "$0.03" },
+      { name: "spraay_geo_distance_matrix", description: "Distance and duration matrix between multiple origin-destina", price: "$0.02" },
+      { name: "spraay_geo_nearby", description: "Find points of interest near coordinates", price: "$0.005" },
+      { name: "spraay_geo_timezone", description: "Country and timezone info at coordinates.", price: "$0.003" },
     ],
   });
 });
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "3.7.0",
+    name: "Spraay x402 Gateway", version: "3.8.1",
     description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG, Agent Wallets & Supply Chain (SCTP). x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
@@ -1561,11 +1618,55 @@ app.get("/", (_req, res) => {
       "GET /api/v1/xrp/info": "$0.001 - XRP Ledger info",
       "POST /api/v1/stellar/batch": "$0.02 - Stellar batch payments",
       "POST /api/v1/stellar/estimate": "$0.001 - Stellar batch estimate",
+        // Compute Futures
+        "POST /api/v1/compute-futures/deposit": "$0.01 - Deposit USDC to open a prepaid compute credit account",
+        "GET /api/v1/compute-futures/balance": "$0.001 - Check remaining compute credit balance, tier, discount, and usage stats.",
+        "POST /api/v1/compute-futures/execute": "$0.001 - Run a compute job and deduct cost from the prepaid balance",
+        "GET /api/v1/compute-futures/history": "$0.002 - Full usage ledger",
+        "POST /api/v1/compute-futures/refund": "$0.01 - Refund unused compute credit balance to the original depositor",
+        "GET /api/v1/compute-futures/pricing": "$0.001 - Compute futures pricing",
+        // Research & Reference (Category 24)
+        "GET /api/v1/research/dictionary/define": "$0.001 - Dictionary definition with phonetics and examples",
+        "GET /api/v1/research/dictionary/synonyms": "$0.001 - Synonyms and antonyms for a word",
+        "GET /api/v1/research/dictionary/phonetics": "$0.001 - Phonetic transcription and audio URL",
+        "GET /api/v1/research/papers/search": "$0.002 - Search 250M+ academic papers (OpenAlex CC0)",
+        "GET /api/v1/research/papers/by-doi": "$0.001 - Paper metadata by DOI (OpenAlex)",
+        "GET /api/v1/research/papers/by-author": "$0.002 - Papers by author name or ORCID (OpenAlex)",
+        "GET /api/v1/research/papers/citations": "$0.002 - Citation graph - cited-by count and references",
+        "GET /api/v1/research/papers/trending": "$0.002 - Trending papers by topic in the last N days",
+        "GET /api/v1/research/preprints/search": "$0.002 - Search arXiv preprints by keyword and category",
+        "GET /api/v1/research/preprints/by-id": "$0.001 - arXiv preprint metadata by ID",
+        "GET /api/v1/research/preprints/recent": "$0.002 - Latest arXiv preprints by category",
+        "GET /api/v1/research/scholarly/by-doi": "$0.001 - Full Crossref metadata for any DOI",
+        "GET /api/v1/research/scholarly/search": "$0.002 - Search 150M+ works via Crossref (CC0)",
+        "GET /api/v1/research/scholarly/citations-count": "$0.001 - Citation count and references for a DOI",
+        "GET /api/v1/research/scholarly/journal-info": "$0.001 - Journal metadata by ISSN",
+        "GET /api/v1/research/chemistry/compound": "$0.002 - PubChem compound by name, formula, or CID",
+        "GET /api/v1/research/chemistry/similarity": "$0.002 - Find structurally similar compounds in PubChem",
+        "GET /api/v1/research/chemistry/bioactivity": "$0.002 - Biological assay results for a PubChem compound",
+        "GET /api/v1/research/biomedical/search": "$0.002 - Search 36M+ biomedical papers in PubMed",
+        "GET /api/v1/research/biomedical/by-pmid": "$0.001 - Paper metadata by PubMed ID",
+        "GET /api/v1/research/biomedical/related": "$0.002 - Related articles for a PubMed ID",
+        "GET /api/v1/research/demographics/census": "$0.001 - US Census data by state, county, or zip",
+        "GET /api/v1/research/demographics/datasets": "$0.001 - Search Data.gov datasets by keyword",
+        // Geospatial (Category 23)
+        "POST /api/v1/geo/geocode": "$0.005 - Geocode an address or place to lat/lng coordinates (OpenStreetMap).",
+        "POST /api/v1/geo/reverse-geocode": "$0.005 - Reverse geocode lat/lng to an address (OpenStreetMap).",
+        "POST /api/v1/geo/route": "$0.01 - Turn-by-turn directions between waypoints with distance and duration.",
+        "POST /api/v1/geo/isochrone": "$0.02 - Reachability polygon",
+        "POST /api/v1/geo/elevation": "$0.003 - Terrain elevation at one or more coordinates (SRTM 30m).",
+        "POST /api/v1/geo/weather": "$0.01 - Current weather and 24h forecast at coordinates.",
+        "POST /api/v1/geo/weather-alerts": "$0.01 - Severe weather alerts at coordinates",
+        "POST /api/v1/geo/flight-status": "$0.05 - Real-time flight status, times, gates, aircraft, delays (AeroDataBox).",
+        "POST /api/v1/geo/airport-info": "$0.03 - Airport details",
+        "POST /api/v1/geo/distance-matrix": "$0.02 - Distance and duration matrix between multiple origin-destination pairs.",
+        "POST /api/v1/geo/nearby": "$0.005 - Find points of interest near coordinates",
+        "POST /api/v1/geo/timezone": "$0.003 - Country and timezone info at coordinates.",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 109,
+    totalEndpoints: 151,
     protocols: {
       x402: {
         status: "active",
@@ -1623,7 +1724,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
   res.json({
     mppVersion: "1.0",
     name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 109+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    description: "Universal agent payment gateway — 151+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
     homepage: BASE_URL,
     status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
     paymentMethods: {
@@ -1635,7 +1736,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
       },
     },
     endpoints: {
-      total: 109,
+      total: 151,
       docs: `${BASE_URL}/.well-known/x402.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
@@ -1658,10 +1759,10 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
   res.json({
     schemaVersion: "0.2.0",
     name: "Spraay Universal Agent Payment Gateway",
-    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 93+ paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
+    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 151 paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
-    version: "3.8.0",
+    version: "3.8.1",
     documentationUrl: "https://docs.spraay.app",
     capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
     authentication: {
@@ -1686,6 +1787,9 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
       { id: "robots_task", name: "POST /api/v1/robots/task", description: "Dispatch physical robot task via RTP", tags: ["rtp"], examples: [`POST ${BASE_URL}/api/v1/robots/task`], inputModes: ["application/json"], outputModes: ["application/json"] },
       { id: "agent_wallet_provision", name: "POST /api/v1/agent-wallet/provision", description: "Provision agent smart wallet on Base", tags: ["agent-wallet"], examples: [`POST ${BASE_URL}/api/v1/agent-wallet/provision`], inputModes: ["application/json"], outputModes: ["application/json"] },
       { id: "sctp_pay", name: "POST /api/v1/sctp/pay", description: "Execute supplier payment via SCTP", tags: ["supply-chain"], examples: [`POST ${BASE_URL}/api/v1/sctp/pay`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "compute_futures_deposit", name: "POST /api/v1/compute-futures/deposit", description: "Open a prepaid compute credit account with tier discounts", tags: ["compute-futures"], examples: [`POST ${BASE_URL}/api/v1/compute-futures/deposit`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "research_papers_search", name: "GET /api/v1/research/papers/search", description: "Search 250M+ academic papers (OpenAlex)", tags: ["research"], examples: [`GET ${BASE_URL}/api/v1/research/papers/search`], inputModes: ["application/json"], outputModes: ["application/json"] },
+      { id: "geo_geocode", name: "POST /api/v1/geo/geocode", description: "Geocode an address to coordinates", tags: ["geo"], examples: [`POST ${BASE_URL}/api/v1/geo/geocode`], inputModes: ["application/json"], outputModes: ["application/json"] },
     ],
     links: {
       fullManifest: `${BASE_URL}/.well-known/x402.json`,
@@ -1693,7 +1797,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
     },
-    _gateway: { provider: "spraay-x402", version: "3.8.0" },
+    _gateway: { provider: "spraay-x402", version: "3.8.1" },
   });
 };
 app.get("/.well-known/agent.json", agentCardResponse);
@@ -1706,7 +1810,7 @@ app.get("/.well-known/agent-registration.json", (_req, res) => {
     schemaVersion: "1.0",
     agentId: "spraay-x402-gateway",
     displayName: "Spraay",
-    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 93+ endpoints across AI, DeFi, payments, compute, search, and robotics.",
+    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 151 endpoints across AI, DeFi, payments, compute, search, and robotics.",
     endpoints: {
       base: BASE_URL,
       agentCard: `${BASE_URL}/.well-known/agent.json`,
@@ -1727,7 +1831,7 @@ solanaPayment: {
   txHeader: "X-Solana-Tx",
   discovery: `${BASE_URL}/.well-known/solana.json`,
 },
-_gateway: { provider: "spraay", version: "3.8.0", protocols: ["x402", "mpp", "solana-usdc"] },
+_gateway: { provider: "spraay", version: "3.8.1", protocols: ["x402", "mpp", "solana-usdc"] },
   });
 });
 
@@ -1738,7 +1842,7 @@ app.get("/llms.txt", (_req, res) => {
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 114 paid API endpoints (127 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides 151 paid API endpoints (157 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
@@ -1746,7 +1850,7 @@ Spraay provides 114 paid API endpoints (127 total) that agents call with USDC mi
 - Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
 - Pay to: ${PAY_TO}
 - Facilitator: Coinbase CDP
-- Solana rail: USDC payments also accepted on Solana — see ${BASE_URL}/.well-known/solana.json
+- Solana rail: USDC payments also accepted on Solana — see ${BASE_URL}/.well-known/solana.json, research, geospatial
 
 ## Categories
 ai, payments, defi, oracle, bridge, payroll, invoice, analytics, escrow, inference, communication, infrastructure, identity, compliance, gpu, search, compute, compute-futures, rtp, agent-wallet, supply-chain, bittensor
@@ -1764,6 +1868,8 @@ POST ${BASE_URL}/bittensor/v1/chat/completions — $0.03 — Bittensor SN64 dece
 POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments to up to 200 recipients
 GET ${BASE_URL}/api/v1/oracle/prices — $0.008 — Multi-source price feed
 GET ${BASE_URL}/api/v1/swap/quote — $0.008 — Uniswap V3 / Aerodrome quote
+GET ${BASE_URL}/api/v1/research/papers/search — $0.002 — Search 250M+ academic papers (OpenAlex)
+POST ${BASE_URL}/api/v1/geo/geocode — $0.005 — Geocode an address to lat/lng coordinates
 POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain trustless escrow
 POST ${BASE_URL}/api/v1/payroll/execute — $0.10 — Crypto payroll run
 POST ${BASE_URL}/api/v1/compute-futures/deposit — $0.01 — Prepaid compute credits with tier discounts
@@ -2209,6 +2315,62 @@ app.get("/openapi.json", (_req, res) => {
     { method: "post", path: "/api/v1/contract/write", price: "$0.015", priceNum: "0.015000", tag: "contract", desc: "Encode and broadcast transaction via agent wallet",
       inputProps: { chain: { type: "string" }, address: { type: "string" }, method: { type: "string" }, args: { type: "array" }, walletId: { type: "string" } }, required: ["address", "method"],
       outputProps: { tx_hash: { type: "string" }, from: { type: "string" }, explorer: { type: "string" } } },
+    // ---- COMPUTE FUTURES ----
+    { method: "post", path: "/api/v1/compute-futures/deposit", price: "$0.01", priceNum: "0.010000", tag: "compute-futures", desc: "Deposit USDC to open a prepaid compute credit account. Tier discounts: $10+ (5%), $50+ (10%), $200+ (15%).",
+      inputProps: { depositor: { type: "string" }, amount: { type: "string" }, expiresInDays: { type: "number" } }, required: ["depositor", "amount"],
+      outputProps: { status: { type: "string" } } },
+    { method: "get", path: "/api/v1/compute-futures/balance", price: "$0.001", priceNum: "0.001000", tag: "compute-futures", desc: "Check remaining compute credit balance, tier, discount, and usage stats.",
+      queryParams: [{ name: "id", type: "string", required: true }],
+      outputProps: { status: { type: "string" } } },
+    { method: "post", path: "/api/v1/compute-futures/execute", price: "$0.001", priceNum: "0.001000", tag: "compute-futures", desc: "Run a compute job and deduct cost from the prepaid balance. No per-call x402 - uses credit balance.",
+      inputProps: { futuresId: { type: "string" }, type: { type: "string" }, model: { type: "string" }, messages: { type: "array" }, prompt: { type: "string" } }, required: ["futuresId", "type"],
+      outputProps: { status: { type: "string" } } },
+    { method: "get", path: "/api/v1/compute-futures/history", price: "$0.002", priceNum: "0.002000", tag: "compute-futures", desc: "Full usage ledger - every job, model, price, and balance change.",
+      queryParams: [{ name: "id", type: "string", required: true }, { name: "limit", type: "number", required: false }],
+      outputProps: { status: { type: "string" } } },
+    { method: "post", path: "/api/v1/compute-futures/refund", price: "$0.01", priceNum: "0.010000", tag: "compute-futures", desc: "Refund unused compute credit balance to the original depositor. Depositor only.",
+      inputProps: { futuresId: { type: "string" }, caller: { type: "string" } }, required: ["futuresId", "caller"],
+      outputProps: { status: { type: "string" } } },
+    { method: "get", path: "/api/v1/compute-futures/pricing", price: "$0.001", priceNum: "0.001000", tag: "compute-futures", desc: "Compute futures pricing - tier discounts, per-model costs, bulk discount info.",
+      queryParams: [],
+      outputProps: { status: { type: "string" } } },
+    // ---- GEOSPATIAL ----
+    { method: "post", path: "/api/v1/geo/geocode", price: "$0.005", priceNum: "0.005000", tag: "geo", desc: "Geocode an address or place to lat/lng coordinates (OpenStreetMap).",
+      inputProps: { query: { type: "string" }, limit: { type: "number" }, countrycodes: { type: "string" } }, required: ["query"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/reverse-geocode", price: "$0.005", priceNum: "0.005000", tag: "geo", desc: "Reverse geocode lat/lng to an address (OpenStreetMap).",
+      inputProps: { lat: { type: "number" }, lng: { type: "number" }, zoom: { type: "number" } }, required: ["lat", "lng"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/route", price: "$0.01", priceNum: "0.010000", tag: "geo", desc: "Turn-by-turn directions between waypoints with distance and duration.",
+      inputProps: { waypoints: { type: "array" }, profile: { type: "string" } }, required: ["waypoints"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/isochrone", price: "$0.02", priceNum: "0.020000", tag: "geo", desc: "Reachability polygon - area reachable within N seconds from a point.",
+      inputProps: { lat: { type: "number" }, lng: { type: "number" }, range_seconds: { type: "number" }, profile: { type: "string" } }, required: ["lat", "lng"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/elevation", price: "$0.003", priceNum: "0.003000", tag: "geo", desc: "Terrain elevation at one or more coordinates (SRTM 30m).",
+      inputProps: { locations: { type: "array" }, dataset: { type: "string" } }, required: ["locations"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/weather", price: "$0.01", priceNum: "0.010000", tag: "geo", desc: "Current weather and 24h forecast at coordinates.",
+      inputProps: { lat: { type: "number" }, lng: { type: "number" }, units: { type: "string" } }, required: ["lat", "lng"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/weather-alerts", price: "$0.01", priceNum: "0.010000", tag: "geo", desc: "Severe weather alerts at coordinates - storms, floods, heat, wind.",
+      inputProps: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/flight-status", price: "$0.05", priceNum: "0.050000", tag: "geo", desc: "Real-time flight status, times, gates, aircraft, delays (AeroDataBox).",
+      inputProps: { flight_number: { type: "string" }, date: { type: "string" } }, required: ["flight_number"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/airport-info", price: "$0.03", priceNum: "0.030000", tag: "geo", desc: "Airport details - location, timezone, elevation, IATA/ICAO codes (AeroDataBox).",
+      inputProps: { iata_code: { type: "string" } }, required: ["iata_code"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/distance-matrix", price: "$0.02", priceNum: "0.020000", tag: "geo", desc: "Distance and duration matrix between multiple origin-destination pairs.",
+      inputProps: { origins: { type: "array" }, destinations: { type: "array" }, profile: { type: "string" } }, required: ["origins", "destinations"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/nearby", price: "$0.005", priceNum: "0.005000", tag: "geo", desc: "Find points of interest near coordinates - gas, hospitals, helipads, etc.",
+      inputProps: { lat: { type: "number" }, lng: { type: "number" }, query: { type: "string" }, limit: { type: "number" } }, required: ["lat", "lng", "query"],
+      outputProps: { results: { type: "array" } } },
+    { method: "post", path: "/api/v1/geo/timezone", price: "$0.003", priceNum: "0.003000", tag: "geo", desc: "Country and timezone info at coordinates.",
+      inputProps: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"],
+      outputProps: { results: { type: "array" } } },
   ];
 
   const paths: Record<string, any> = {};
@@ -2262,11 +2424,11 @@ app.get("/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "Spraay x402 Gateway",
-      version: "3.8.0",
+      version: "3.8.1",
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
-      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 99+ paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
+      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 151 paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
     },
     servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
     "x-discovery": {
@@ -2333,7 +2495,7 @@ app.post("/api/v1/ai/chat", (_req, res) => res.redirect(308, "/api/v1/chat/compl
 app.get("/api/v1/analytics", (_req, res) => {
   res.json({
     gateway: "spraay-x402",
-    version: "3.8.0",
+    version: "3.8.1",
     network: CAIP2_NETWORK,
     status: "operational",
     paidEndpoints: {
@@ -2345,7 +2507,7 @@ app.get("/api/v1/analytics", (_req, res) => {
       openapi: `${BASE_URL}/openapi.json`,
     },
     note: "This is a public overview. For per-wallet analytics, use the paid endpoints above.",
-    _gateway: { provider: "spraay-x402", version: "3.8.0" },
+    _gateway: { provider: "spraay-x402", version: "3.8.1" },
     timestamp: new Date().toISOString(),
   });
 });
@@ -2361,7 +2523,7 @@ app.post("/api/v1/notify/send", (_req, res) => {
         { method: "POST", path: "/api/v1/notify/email", price: "$0.01", description: "Send transactional email" },
         { method: "POST", path: "/api/v1/notify/sms", price: "$0.02", description: "Send SMS" },
       ],
-      _gateway: { provider: "spraay-x402", version: "3.8.0" },
+      _gateway: { provider: "spraay-x402", version: "3.8.1" },
     });
 });
 
@@ -2376,7 +2538,7 @@ app.post("/api/v1/rpc", (_req, res) => {
         { method: "POST", path: "/api/v1/rpc/call", price: "$0.001", description: "JSON-RPC call to any supported chain" },
         { method: "GET", path: "/api/v1/rpc/chains", price: "$0.001", description: "List supported RPC chains" },
       ],
-      _gateway: { provider: "spraay-x402", version: "3.8.0" },
+      _gateway: { provider: "spraay-x402", version: "3.8.1" },
     });
 });
 
@@ -2391,7 +2553,7 @@ app.post("/api/v1/bridge/transfer", (_req, res) => {
       { method: "GET", path: "/api/v1/bridge/chains", price: "$0.002", description: "List supported bridge chains" },
     ],
     manifest: `${BASE_URL}/.well-known/x402.json`,
-    _gateway: { provider: "spraay-x402", version: "3.8.0" },
+    _gateway: { provider: "spraay-x402", version: "3.8.1" },
     timestamp: new Date().toISOString(),
   });
 });
@@ -2631,7 +2793,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
   console.log('🌍 Geospatial endpoints active — geocode, route, weather, flights, elevation');
-  console.log(`\n🌐 150 paid endpoints live across 35 categories\n`);
+  console.log(`\n🌐 151 paid endpoints live across 37 categories\n`);
 });
 
 export default app;
