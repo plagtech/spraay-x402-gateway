@@ -99,6 +99,13 @@ import {
   researchBiomedSearchHandler, researchBiomedByPmidHandler, researchBiomedRelatedHandler,
   researchCensusHandler, researchDatasetsHandler,
 } from "./routes/research.js";
+// NEW: Geospatial (Category 23)
+import {
+  geocodeHandler, reverseGeocodeHandler, routeHandler,
+  isochroneHandler, elevationHandler, weatherHandler,
+  weatherAlertsHandler, flightStatusHandler, airportInfoHandler,
+  distanceMatrixHandler, nearbyHandler, timezoneHandler,
+} from "./routes/geospatial.js";
 
 dotenv.config();
 const app = express();
@@ -882,6 +889,68 @@ app.use(
         mimeType: "application/json",
       },
 
+      // ---- GEOSPATIAL (Category 23) ----
+      "POST /api/v1/geo/geocode": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Geocode address/place to lat/lng coordinates. Powered by OpenStreetMap.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { query: "1600 Pennsylvania Avenue, Washington DC" }, inputSchema: { properties: { query: { type: "string" }, limit: { type: "number" }, countrycodes: { type: "string" } }, required: ["query"] }, bodyType: "json", output: { example: { results: [{ lat: 38.897, lng: -77.036, display_name: "White House" }] }, schema: { properties: { results: { type: "array" }, count: { type: "number" } } } } }) },
+      },
+      "POST /api/v1/geo/reverse-geocode": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Reverse geocode lat/lng to address. Powered by OpenStreetMap.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, zoom: { type: "number" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { display_name: "Anaheim, CA", address: {} }, schema: { properties: { display_name: { type: "string" }, address: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/geo/route": {
+        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Turn-by-turn directions between waypoints with distance and duration. Driving, cycling, walking.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { waypoints: [[-117.918, 33.812], [-118.243, 34.052]], profile: "driving" }, inputSchema: { properties: { waypoints: { type: "array" }, profile: { type: "string" } }, required: ["waypoints"] }, bodyType: "json", output: { example: { distance_m: 45200, duration_s: 2400, geometry: {} }, schema: { properties: { distance_m: { type: "number" }, duration_s: { type: "number" }, geometry: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/geo/isochrone": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Reachability polygon — area reachable within N seconds from a point. Delivery zones, coverage areas.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918, range_seconds: 900, profile: "driving-car" }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, range_seconds: { type: "number" }, profile: { type: "string" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { isochrone: { type: "Polygon", coordinates: [] } }, schema: { properties: { isochrone: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/geo/elevation": {
+        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Terrain elevation at one or more coordinates. SRTM 30m resolution.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { locations: [[33.812, -117.918]], dataset: "srtm30m" }, inputSchema: { properties: { locations: { type: "array" }, dataset: { type: "string" } }, required: ["locations"] }, bodyType: "json", output: { example: { results: [{ lat: 33.812, lng: -117.918, elevation_m: 47 }] }, schema: { properties: { results: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/geo/weather": {
+        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Current weather and 24h forecast at coordinates. Temperature, wind, humidity, precipitation.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918, units: "imperial" }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, units: { type: "string" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { current: { temp: 72, description: "clear sky" }, forecast: [] }, schema: { properties: { current: { type: "object" }, forecast: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/geo/weather-alerts": {
+        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Severe weather alerts at coordinates — storms, floods, heat, wind advisories.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { alerts: [], has_alerts: false }, schema: { properties: { alerts: { type: "array" }, has_alerts: { type: "boolean" } } } } }) },
+      },
+      "POST /api/v1/geo/flight-status": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Real-time flight status, departure/arrival times, gates, aircraft, delays. AeroDataBox.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { flight_number: "AA100", date: "2026-06-04" }, inputSchema: { properties: { flight_number: { type: "string" }, date: { type: "string" } }, required: ["flight_number"] }, bodyType: "json", output: { example: { flights: [{ status: "Expected", departure: { airport: "JFK", iata: "JFK" }, arrival: { airport: "LAX", iata: "LAX" } }] }, schema: { properties: { flights: { type: "array" }, count: { type: "number" } } } } }) },
+      },
+      "POST /api/v1/geo/airport-info": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Airport details — location, timezone, elevation, IATA/ICAO codes, country. AeroDataBox.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { iata_code: "LAX" }, inputSchema: { properties: { iata_code: { type: "string" } }, required: ["iata_code"] }, bodyType: "json", output: { example: { airport: { name: "Los Angeles International", iata: "LAX", lat: 33.942, lng: -118.408, timezone: "America/Los_Angeles" } }, schema: { properties: { airport: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/geo/distance-matrix": {
+        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Distance and duration matrix between multiple origin-destination pairs. Fleet dispatch, nearest facility.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { origins: [[-117.918, 33.812]], destinations: [[-118.243, 34.052], [-117.161, 32.715]], profile: "driving-car" }, inputSchema: { properties: { origins: { type: "array" }, destinations: { type: "array" }, profile: { type: "string" } }, required: ["origins", "destinations"] }, bodyType: "json", output: { example: { durations_s: [[2400, 4800]], distances_m: [[45200, 92100]] }, schema: { properties: { durations_s: { type: "array" }, distances_m: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/geo/nearby": {
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Find points of interest near coordinates — gas stations, hospitals, helipads, etc.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918, query: "helipad", limit: 5 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, query: { type: "string" }, limit: { type: "number" } }, required: ["lat", "lng", "query"] }, bodyType: "json", output: { example: { results: [{ name: "Disneyland Helipad", lat: 33.815, lng: -117.922 }] }, schema: { properties: { results: { type: "array" }, count: { type: "number" } } } } }) },
+      },
+      "POST /api/v1/geo/timezone": {
+        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Country and timezone info at coordinates.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { country_code: "us", country: "United States" }, schema: { properties: { country_code: { type: "string" }, country: { type: "string" } } } } }) },
+      },
+ 
       // ---- CATEGORY 19: BITTENSOR DROP-IN API (OpenAI-compatible) ----
       "GET /bittensor/v1/models": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -2517,6 +2586,20 @@ app.get("/api/v1/research/biomedical/by-pmid", researchBiomedByPmidHandler);
 app.get("/api/v1/research/biomedical/related", researchBiomedRelatedHandler);
 app.get("/api/v1/research/demographics/census", researchCensusHandler);
 app.get("/api/v1/research/demographics/datasets", researchDatasetsHandler);
+// Geospatial (Category 23)
+app.post("/api/v1/geo/geocode", geocodeHandler);
+app.post("/api/v1/geo/reverse-geocode", reverseGeocodeHandler);
+app.post("/api/v1/geo/route", routeHandler);
+app.post("/api/v1/geo/isochrone", isochroneHandler);
+app.post("/api/v1/geo/elevation", elevationHandler);
+app.post("/api/v1/geo/weather", weatherHandler);
+app.post("/api/v1/geo/weather-alerts", weatherAlertsHandler);
+app.post("/api/v1/geo/flight-status", flightStatusHandler);
+app.post("/api/v1/geo/airport-info", airportInfoHandler);
+app.post("/api/v1/geo/distance-matrix", distanceMatrixHandler);
+app.post("/api/v1/geo/nearby", nearbyHandler);
+app.post("/api/v1/geo/timezone", timezoneHandler);
+
 
 // Final error handler — any uncaught error returns JSON, never HTML.
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -2547,7 +2630,8 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
-  console.log(`\n🌐 138 paid endpoints live across 34 categories\n`);
+  console.log('🌍 Geospatial endpoints active — geocode, route, weather, flights, elevation');
+  console.log(`\n🌐 150 paid endpoints live across 35 categories\n`);
 });
 
 export default app;
