@@ -6,181 +6,31 @@
  * Individual handler functions matching the gateway pattern.
  * Each handler is exported and registered via app.post() in index.ts.
  *
- * Providers (all free tier at launch):
- *   Nominatim (OSM)       — geocoding, reverse, nearby, timezone
- *   OSRM                  — routing/directions
- *   OpenRouteService      — isochrone, distance matrix
- *   Open Topo Data        — elevation
- *   OpenWeatherMap        — weather, alerts
+ * Providers:
+ *   Open Topo Data         — elevation
+ *   OpenWeatherMap         — weather, alerts
  *   AeroDataBox (RapidAPI) — flight status, airport info ($0.99/mo)
  *
+ * NOTE: OSM-backed handlers (geocode, reverse-geocode, route, isochrone,
+ * distance-matrix, nearby, timezone) were removed to comply with the
+ * OSM/Nominatim and OpenRouteService usage policies, which prohibit
+ * reselling their public services. Do not re-add them on OSM public
+ * infrastructure — self-host the engines or use a reseller-licensed
+ * provider before reintroducing those endpoints.
+ *
  * Env vars:
- *   NOMINATIM_URL, OSRM_URL, OPEN_TOPO_URL
- *   ORS_API_KEY, OPENWEATHER_API_KEY, AERODATABOX_RAPIDAPI_KEY
+ *   OPEN_TOPO_URL, OPENWEATHER_API_KEY, AERODATABOX_RAPIDAPI_KEY
  */
 
 import { Request, Response } from "express";
 
 // ─── Provider URLs (swap to self-hosted when volume demands it) ───
-const NOMINATIM = process.env.NOMINATIM_URL || "https://nominatim.openstreetmap.org";
-const OSRM = process.env.OSRM_URL || "https://router.project-osrm.org";
-const ORS = "https://api.openrouteservice.org";
-const ORS_KEY = process.env.ORS_API_KEY || "";
 const OWM = "https://api.openweathermap.org/data/2.5";
 const OWM_KEY = process.env.OPENWEATHER_API_KEY || "";
 const AERO_BASE = "https://aerodatabox.p.rapidapi.com";
 const AERO_KEY = process.env.AERODATABOX_RAPIDAPI_KEY || "";
 const AERO_HOST = "aerodatabox.p.rapidapi.com";
 const TOPO = process.env.OPEN_TOPO_URL || "https://api.opentopodata.org/v1";
-
-// Nominatim requires User-Agent per their usage policy
-const UA = "SpraayGateway/1.0 (https://gateway.spraay.app; x402)";
-
-// ═══════════════════════════════════════════════════════════════
-// 1. geocodeHandler — address/place → lat/lng
-// ═══════════════════════════════════════════════════════════════
-export async function geocodeHandler(req: Request, res: Response) {
-  try {
-    const { query, limit = 5, countrycodes, language } = req.body;
-    if (!query) return res.status(400).json({ error: "query is required" });
-
-    const params = new URLSearchParams({
-      q: query, format: "jsonv2", limit: String(limit), addressdetails: "1",
-    });
-    if (countrycodes) params.set("countrycodes", countrycodes);
-    if (language) params.set("accept-language", language);
-
-    const resp = await fetch(`${NOMINATIM}/search?${params}`, {
-      headers: { "User-Agent": UA },
-    });
-    const data: any = await resp.json();
-
-    res.json({
-      provider: "nominatim",
-      count: data.length,
-      results: data.map((r: any) => ({
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lon),
-        display_name: r.display_name,
-        type: r.type,
-        importance: r.importance,
-        address: r.address || {},
-        boundingbox: r.boundingbox,
-      })),
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Geocoding failed", detail: err.message });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 2. reverseGeocodeHandler — lat/lng → address
-// ═══════════════════════════════════════════════════════════════
-export async function reverseGeocodeHandler(req: Request, res: Response) {
-  try {
-    const { lat, lng, language, zoom = 18 } = req.body;
-    if (lat == null || lng == null)
-      return res.status(400).json({ error: "lat and lng are required" });
-
-    const params = new URLSearchParams({
-      lat: String(lat), lon: String(lng), format: "jsonv2",
-      addressdetails: "1", zoom: String(zoom),
-    });
-    if (language) params.set("accept-language", language);
-
-    const resp = await fetch(`${NOMINATIM}/reverse?${params}`, {
-      headers: { "User-Agent": UA },
-    });
-    const data: any = await resp.json();
-
-    res.json({
-      provider: "nominatim",
-      lat: parseFloat(data.lat),
-      lng: parseFloat(data.lon),
-      display_name: data.display_name,
-      address: data.address || {},
-      type: data.type,
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Reverse geocoding failed", detail: err.message });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 3. routeHandler — turn-by-turn directions
-// ═══════════════════════════════════════════════════════════════
-export async function routeHandler(req: Request, res: Response) {
-  try {
-    const { waypoints, profile = "driving" } = req.body;
-    if (!waypoints || !Array.isArray(waypoints) || waypoints.length < 2)
-      return res.status(400).json({ error: "waypoints array (min 2) with [lng, lat] pairs required" });
-
-    const profileMap: Record<string, string> = {
-      driving: "car", car: "car", cycling: "bike", bike: "bike", walking: "foot", foot: "foot",
-    };
-    const osrmProfile = profileMap[profile] || "car";
-    const coords = waypoints.map((w: number[]) => `${w[0]},${w[1]}`).join(";");
-
-    const resp = await fetch(
-      `${OSRM}/route/v1/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=true`
-    );
-    const data: any = await resp.json();
-
-    if (data.code !== "Ok")
-      return res.status(422).json({ error: "Routing failed", osrm_code: data.code });
-
-    const route = data.routes[0];
-    res.json({
-      provider: "osrm",
-      distance_m: route.distance,
-      duration_s: route.duration,
-      geometry: route.geometry,
-      legs: route.legs.map((leg: any) => ({
-        distance_m: leg.distance,
-        duration_s: leg.duration,
-        steps: leg.steps.map((s: any) => ({
-          instruction: s.maneuver?.type + (s.maneuver?.modifier ? ` ${s.maneuver.modifier}` : ""),
-          distance_m: s.distance,
-          duration_s: s.duration,
-          name: s.name,
-        })),
-      })),
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Routing failed", detail: err.message });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 4. isochroneHandler — reachability polygon
-// ═══════════════════════════════════════════════════════════════
-export async function isochroneHandler(req: Request, res: Response) {
-  try {
-    const { lat, lng, range_seconds = 600, profile = "driving-car" } = req.body;
-    if (lat == null || lng == null)
-      return res.status(400).json({ error: "lat and lng are required" });
-    if (!ORS_KEY)
-      return res.status(503).json({ error: "Isochrone service not configured (ORS_API_KEY missing)" });
-
-    const resp = await fetch(`${ORS}/v2/isochrones/${profile}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: ORS_KEY },
-      body: JSON.stringify({ locations: [[lng, lat]], range: [range_seconds], range_type: "time" }),
-    });
-    const data: any = await resp.json();
-
-    res.json({
-      provider: "openrouteservice",
-      profile,
-      range_seconds,
-      center: { lat, lng },
-      isochrone: data.features?.[0]?.geometry || null,
-      properties: data.features?.[0]?.properties || {},
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Isochrone failed", detail: err.message });
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════
 // 5. elevationHandler — terrain height at coordinates
@@ -439,108 +289,5 @@ export async function airportInfoHandler(req: Request, res: Response) {
     });
   } catch (err: any) {
     res.status(502).json({ error: "Airport lookup failed", detail: err.message });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 10. distanceMatrixHandler — multi-point distances
-// ═══════════════════════════════════════════════════════════════
-export async function distanceMatrixHandler(req: Request, res: Response) {
-  try {
-    const { origins, destinations, profile = "driving-car" } = req.body;
-    if (!origins || !destinations)
-      return res.status(400).json({ error: "origins and destinations arrays required" });
-    if (!ORS_KEY)
-      return res.status(503).json({ error: "Distance matrix not configured (ORS_API_KEY missing)" });
-
-    const locations = [...origins, ...destinations];
-    const sources = origins.map((_: any, i: number) => i);
-    const dests = destinations.map((_: any, i: number) => origins.length + i);
-
-    const resp = await fetch(`${ORS}/v2/matrix/${profile}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: ORS_KEY },
-      body: JSON.stringify({ locations, sources, destinations: dests, metrics: ["distance", "duration"] }),
-    });
-    const data: any = await resp.json();
-
-    res.json({
-      provider: "openrouteservice",
-      profile,
-      durations_s: data.durations,
-      distances_m: data.distances,
-      origins: data.sources?.map((s: any) => ({ lat: s.location[1], lng: s.location[0] })),
-      destinations: data.destinations?.map((d: any) => ({ lat: d.location[1], lng: d.location[0] })),
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Distance matrix failed", detail: err.message });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 11. nearbyHandler — POI search near coordinates
-// ═══════════════════════════════════════════════════════════════
-export async function nearbyHandler(req: Request, res: Response) {
-  try {
-    const { lat, lng, query, limit = 10 } = req.body;
-    if (lat == null || lng == null)
-      return res.status(400).json({ error: "lat and lng are required" });
-    if (!query)
-      return res.status(400).json({ error: "query is required (e.g. 'gas station', 'hospital', 'helipad')" });
-
-    const params = new URLSearchParams({
-      q: query, format: "jsonv2", limit: String(limit), addressdetails: "1",
-      viewbox: `${lng - 0.05},${lat + 0.05},${lng + 0.05},${lat - 0.05}`,
-      bounded: "1",
-    });
-
-    const resp = await fetch(`${NOMINATIM}/search?${params}`, {
-      headers: { "User-Agent": UA },
-    });
-    const data: any = await resp.json();
-
-    res.json({
-      provider: "nominatim",
-      count: data.length,
-      center: { lat, lng },
-      results: data.map((r: any) => ({
-        name: r.display_name?.split(",")[0],
-        display_name: r.display_name,
-        lat: parseFloat(r.lat), lng: parseFloat(r.lon),
-        type: r.type, category: r.category,
-        address: r.address || {},
-      })),
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Nearby search failed", detail: err.message });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 12. timezoneHandler — timezone at coordinates
-// ═══════════════════════════════════════════════════════════════
-export async function timezoneHandler(req: Request, res: Response) {
-  try {
-    const { lat, lng } = req.body;
-    if (lat == null || lng == null)
-      return res.status(400).json({ error: "lat and lng are required" });
-
-    const params = new URLSearchParams({
-      lat: String(lat), lon: String(lng), format: "jsonv2", zoom: "3",
-    });
-    const resp = await fetch(`${NOMINATIM}/reverse?${params}`, {
-      headers: { "User-Agent": UA },
-    });
-    const data: any = await resp.json();
-
-    res.json({
-      provider: "nominatim",
-      lat, lng,
-      country_code: data.address?.country_code,
-      country: data.address?.country,
-      display_name: data.display_name,
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: "Timezone lookup failed", detail: err.message });
   }
 }

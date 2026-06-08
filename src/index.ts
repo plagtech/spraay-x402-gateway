@@ -101,10 +101,8 @@ import {
 } from "./routes/research.js";
 // NEW: Geospatial (Category 23)
 import {
-  geocodeHandler, reverseGeocodeHandler, routeHandler,
-  isochroneHandler, elevationHandler, weatherHandler,
-  weatherAlertsHandler, flightStatusHandler, airportInfoHandler,
-  distanceMatrixHandler, nearbyHandler, timezoneHandler,
+  elevationHandler, weatherHandler, weatherAlertsHandler,
+  flightStatusHandler, airportInfoHandler,
 } from "./routes/geospatial.js";
 
 dotenv.config();
@@ -890,26 +888,6 @@ app.use(
       },
 
       // ---- GEOSPATIAL (Category 23) ----
-      "POST /api/v1/geo/geocode": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Geocode address/place to lat/lng coordinates. Powered by OpenStreetMap.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { query: "1600 Pennsylvania Avenue, Washington DC" }, inputSchema: { properties: { query: { type: "string" }, limit: { type: "number" }, countrycodes: { type: "string" } }, required: ["query"] }, bodyType: "json", output: { example: { results: [{ lat: 38.897, lng: -77.036, display_name: "White House" }] }, schema: { properties: { results: { type: "array" }, count: { type: "number" } } } } }) },
-      },
-      "POST /api/v1/geo/reverse-geocode": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Reverse geocode lat/lng to address. Powered by OpenStreetMap.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, zoom: { type: "number" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { display_name: "Anaheim, CA", address: {} }, schema: { properties: { display_name: { type: "string" }, address: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/geo/route": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Turn-by-turn directions between waypoints with distance and duration. Driving, cycling, walking.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { waypoints: [[-117.918, 33.812], [-118.243, 34.052]], profile: "driving" }, inputSchema: { properties: { waypoints: { type: "array" }, profile: { type: "string" } }, required: ["waypoints"] }, bodyType: "json", output: { example: { distance_m: 45200, duration_s: 2400, geometry: {} }, schema: { properties: { distance_m: { type: "number" }, duration_s: { type: "number" }, geometry: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/geo/isochrone": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Reachability polygon — area reachable within N seconds from a point. Delivery zones, coverage areas.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918, range_seconds: 900, profile: "driving-car" }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, range_seconds: { type: "number" }, profile: { type: "string" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { isochrone: { type: "Polygon", coordinates: [] } }, schema: { properties: { isochrone: { type: "object" } } } } }) },
-      },
       "POST /api/v1/geo/elevation": {
         accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Terrain elevation at one or more coordinates. SRTM 30m resolution.", mimeType: "application/json",
@@ -934,21 +912,6 @@ app.use(
         accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Airport details — location, timezone, elevation, IATA/ICAO codes, country. AeroDataBox.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { iata_code: "LAX" }, inputSchema: { properties: { iata_code: { type: "string" } }, required: ["iata_code"] }, bodyType: "json", output: { example: { airport: { name: "Los Angeles International", iata: "LAX", lat: 33.942, lng: -118.408, timezone: "America/Los_Angeles" } }, schema: { properties: { airport: { type: "object" } } } } }) },
-      },
-      "POST /api/v1/geo/distance-matrix": {
-        accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Distance and duration matrix between multiple origin-destination pairs. Fleet dispatch, nearest facility.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { origins: [[-117.918, 33.812]], destinations: [[-118.243, 34.052], [-117.161, 32.715]], profile: "driving-car" }, inputSchema: { properties: { origins: { type: "array" }, destinations: { type: "array" }, profile: { type: "string" } }, required: ["origins", "destinations"] }, bodyType: "json", output: { example: { durations_s: [[2400, 4800]], distances_m: [[45200, 92100]] }, schema: { properties: { durations_s: { type: "array" }, distances_m: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/geo/nearby": {
-        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Find points of interest near coordinates — gas stations, hospitals, helipads, etc.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918, query: "helipad", limit: 5 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, query: { type: "string" }, limit: { type: "number" } }, required: ["lat", "lng", "query"] }, bodyType: "json", output: { example: { results: [{ name: "Disneyland Helipad", lat: 33.815, lng: -117.922 }] }, schema: { properties: { results: { type: "array" }, count: { type: "number" } } } } }) },
-      },
-      "POST /api/v1/geo/timezone": {
-        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Country and timezone info at coordinates.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { country_code: "us", country: "United States" }, schema: { properties: { country_code: { type: "string" }, country: { type: "string" } } } } }) },
       },
  
       // ---- CATEGORY 19: BITTENSOR DROP-IN API (OpenAI-compatible) ----
@@ -1291,18 +1254,11 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/research/demographics/census`, method: "GET", price: "$0.001", category: "research", description: "US Census data by state, county, or zip.", searchTerms: ["census", "demographics", "population data"] },
       { resource: `${BASE_URL}/api/v1/research/demographics/datasets`, method: "GET", price: "$0.001", category: "research", description: "Search Data.gov datasets by keyword.", searchTerms: ["Data.gov", "open data", "government datasets"] },
       // Geospatial (Category 23)
-      { resource: `${BASE_URL}/api/v1/geo/geocode`, method: "POST", price: "$0.005", category: "geo", description: "Geocode an address or place to lat/lng coordinates (OpenStreetMap).", searchTerms: ["geocode", "address to coordinates", "lat lng", "OpenStreetMap"] },
-      { resource: `${BASE_URL}/api/v1/geo/reverse-geocode`, method: "POST", price: "$0.005", category: "geo", description: "Reverse geocode lat/lng to an address (OpenStreetMap).", searchTerms: ["reverse geocode", "coordinates to address", "what is at"] },
-      { resource: `${BASE_URL}/api/v1/geo/route`, method: "POST", price: "$0.01", category: "geo", description: "Turn-by-turn directions between waypoints with distance and duration.", searchTerms: ["directions", "route", "navigation", "turn by turn"] },
-      { resource: `${BASE_URL}/api/v1/geo/isochrone`, method: "POST", price: "$0.02", category: "geo", description: "Reachability polygon - area reachable within N seconds from a point.", searchTerms: ["isochrone", "reachability", "delivery zone", "coverage area"] },
       { resource: `${BASE_URL}/api/v1/geo/elevation`, method: "POST", price: "$0.003", category: "geo", description: "Terrain elevation at one or more coordinates (SRTM 30m).", searchTerms: ["elevation", "altitude", "terrain", "SRTM"] },
       { resource: `${BASE_URL}/api/v1/geo/weather`, method: "POST", price: "$0.01", category: "geo", description: "Current weather and 24h forecast at coordinates.", searchTerms: ["weather", "forecast", "temperature", "conditions"] },
       { resource: `${BASE_URL}/api/v1/geo/weather-alerts`, method: "POST", price: "$0.01", category: "geo", description: "Severe weather alerts at coordinates - storms, floods, heat, wind.", searchTerms: ["weather alerts", "severe weather", "storm warning", "advisory"] },
       { resource: `${BASE_URL}/api/v1/geo/flight-status`, method: "POST", price: "$0.05", category: "geo", description: "Real-time flight status, times, gates, aircraft, delays (AeroDataBox).", searchTerms: ["flight status", "flight tracker", "departure arrival", "delays"] },
       { resource: `${BASE_URL}/api/v1/geo/airport-info`, method: "POST", price: "$0.03", category: "geo", description: "Airport details - location, timezone, elevation, IATA/ICAO codes (AeroDataBox).", searchTerms: ["airport info", "IATA", "ICAO", "airport details"] },
-      { resource: `${BASE_URL}/api/v1/geo/distance-matrix`, method: "POST", price: "$0.02", category: "geo", description: "Distance and duration matrix between multiple origin-destination pairs.", searchTerms: ["distance matrix", "travel time", "fleet dispatch", "nearest"] },
-      { resource: `${BASE_URL}/api/v1/geo/nearby`, method: "POST", price: "$0.005", category: "geo", description: "Find points of interest near coordinates - gas, hospitals, helipads, etc.", searchTerms: ["nearby", "points of interest", "POI search", "find places"] },
-      { resource: `${BASE_URL}/api/v1/geo/timezone`, method: "POST", price: "$0.003", category: "geo", description: "Country and timezone info at coordinates.", searchTerms: ["timezone", "country lookup", "UTC offset"] },
     ],
     solanaPayment: {
       enabled: true,
@@ -1457,18 +1413,11 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_compute_futures_refund", description: "Refund unused compute credit balance to the original depositor", price: "$0.01" },
       { name: "spraay_compute_futures_pricing", description: "Compute futures pricing", price: "$0.001" },
       // Geospatial
-      { name: "spraay_geo_geocode", description: "Geocode an address to lat/lng coordinates", price: "$0.005" },
-      { name: "spraay_geo_reverse_geocode", description: "Reverse geocode lat/lng to an address (OpenStreetMap).", price: "$0.005" },
-      { name: "spraay_geo_route", description: "Turn-by-turn directions between waypoints with distance and duration", price: "$0.01" },
-      { name: "spraay_geo_isochrone", description: "Reachability polygon", price: "$0.02" },
       { name: "spraay_geo_elevation", description: "Terrain elevation at one or more coordinates (SRTM 30m).", price: "$0.003" },
       { name: "spraay_geo_weather", description: "Current weather and 24h forecast at coordinates.", price: "$0.01" },
       { name: "spraay_geo_weather_alerts", description: "Severe weather alerts at coordinates", price: "$0.01" },
       { name: "spraay_geo_flight_status", description: "Real-time flight status, times, gates, delays", price: "$0.05" },
       { name: "spraay_geo_airport_info", description: "Airport details", price: "$0.03" },
-      { name: "spraay_geo_distance_matrix", description: "Distance and duration matrix for origin-destination pairs", price: "$0.02" },
-      { name: "spraay_geo_nearby", description: "Find points of interest near coordinates", price: "$0.005" },
-      { name: "spraay_geo_timezone", description: "Country and timezone info at coordinates.", price: "$0.003" },
     ],
   });
 });
@@ -1650,23 +1599,16 @@ app.get("/", (_req, res) => {
         "GET /api/v1/research/demographics/census": "$0.001 - US Census data by state, county, or zip",
         "GET /api/v1/research/demographics/datasets": "$0.001 - Search Data.gov datasets by keyword",
         // Geospatial (Category 23)
-        "POST /api/v1/geo/geocode": "$0.005 - Geocode an address or place to lat/lng coordinates (OpenStreetMap).",
-        "POST /api/v1/geo/reverse-geocode": "$0.005 - Reverse geocode lat/lng to an address (OpenStreetMap).",
-        "POST /api/v1/geo/route": "$0.01 - Turn-by-turn directions between waypoints with distance and duration.",
-        "POST /api/v1/geo/isochrone": "$0.02 - Reachability polygon",
         "POST /api/v1/geo/elevation": "$0.003 - Terrain elevation at one or more coordinates (SRTM 30m).",
         "POST /api/v1/geo/weather": "$0.01 - Current weather and 24h forecast at coordinates.",
         "POST /api/v1/geo/weather-alerts": "$0.01 - Severe weather alerts at coordinates",
         "POST /api/v1/geo/flight-status": "$0.05 - Real-time flight status, times, gates, aircraft, delays (AeroDataBox).",
         "POST /api/v1/geo/airport-info": "$0.03 - Airport details",
-        "POST /api/v1/geo/distance-matrix": "$0.02 - Distance and duration matrix between multiple origin-destination pairs.",
-        "POST /api/v1/geo/nearby": "$0.005 - Find points of interest near coordinates",
-        "POST /api/v1/geo/timezone": "$0.003 - Country and timezone info at coordinates.",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 151,
+    totalEndpoints: 144,
     protocols: {
       x402: {
         status: "active",
@@ -1724,7 +1666,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
   res.json({
     mppVersion: "1.0",
     name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 151+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    description: "Universal agent payment gateway — 144+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
     homepage: BASE_URL,
     status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
     paymentMethods: {
@@ -1736,7 +1678,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
       },
     },
     endpoints: {
-      total: 151,
+      total: 144,
       docs: `${BASE_URL}/.well-known/x402.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
@@ -1759,7 +1701,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
   res.json({
     schemaVersion: "0.2.0",
     name: "Spraay Universal Agent Payment Gateway",
-    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 151 paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
+    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 144 paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
     version: "3.8.1",
@@ -1789,7 +1731,6 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
       { id: "sctp_pay", name: "POST /api/v1/sctp/pay", description: "Execute supplier payment via SCTP", tags: ["supply-chain"], examples: [`POST ${BASE_URL}/api/v1/sctp/pay`], inputModes: ["application/json"], outputModes: ["application/json"] },
       { id: "compute_futures_deposit", name: "POST /api/v1/compute-futures/deposit", description: "Open a prepaid compute credit account with tier discounts", tags: ["compute-futures"], examples: [`POST ${BASE_URL}/api/v1/compute-futures/deposit`], inputModes: ["application/json"], outputModes: ["application/json"] },
       { id: "research_papers_search", name: "GET /api/v1/research/papers/search", description: "Search 250M+ academic papers (OpenAlex)", tags: ["research"], examples: [`GET ${BASE_URL}/api/v1/research/papers/search`], inputModes: ["application/json"], outputModes: ["application/json"] },
-      { id: "geo_geocode", name: "POST /api/v1/geo/geocode", description: "Geocode an address to coordinates", tags: ["geo"], examples: [`POST ${BASE_URL}/api/v1/geo/geocode`], inputModes: ["application/json"], outputModes: ["application/json"] },
     ],
     links: {
       fullManifest: `${BASE_URL}/.well-known/x402.json`,
@@ -1810,7 +1751,7 @@ app.get("/.well-known/agent-registration.json", (_req, res) => {
     schemaVersion: "1.0",
     agentId: "spraay-x402-gateway",
     displayName: "Spraay",
-    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 151 endpoints across AI, DeFi, payments, compute, search, and robotics.",
+    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 144 endpoints across AI, DeFi, payments, compute, search, and robotics.",
     endpoints: {
       base: BASE_URL,
       agentCard: `${BASE_URL}/.well-known/agent.json`,
@@ -1842,7 +1783,7 @@ app.get("/llms.txt", (_req, res) => {
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 151 paid API endpoints (157 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides 144 paid API endpoints (150 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
@@ -1869,7 +1810,6 @@ POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments to up to
 GET ${BASE_URL}/api/v1/oracle/prices — $0.008 — Multi-source price feed
 GET ${BASE_URL}/api/v1/swap/quote — $0.008 — Uniswap V3 / Aerodrome quote
 GET ${BASE_URL}/api/v1/research/papers/search — $0.002 — Search 250M+ academic papers (OpenAlex)
-POST ${BASE_URL}/api/v1/geo/geocode — $0.005 — Geocode an address to lat/lng coordinates
 POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain trustless escrow
 POST ${BASE_URL}/api/v1/payroll/execute — $0.10 — Crypto payroll run
 POST ${BASE_URL}/api/v1/compute-futures/deposit — $0.01 — Prepaid compute credits with tier discounts
@@ -2335,18 +2275,6 @@ app.get("/openapi.json", (_req, res) => {
       queryParams: [],
       outputProps: { status: { type: "string" } } },
     // ---- GEOSPATIAL ----
-    { method: "post", path: "/api/v1/geo/geocode", price: "$0.005", priceNum: "0.005000", tag: "geo", desc: "Geocode an address or place to lat/lng coordinates (OpenStreetMap).",
-      inputProps: { query: { type: "string" }, limit: { type: "number" }, countrycodes: { type: "string" } }, required: ["query"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/reverse-geocode", price: "$0.005", priceNum: "0.005000", tag: "geo", desc: "Reverse geocode lat/lng to an address (OpenStreetMap).",
-      inputProps: { lat: { type: "number" }, lng: { type: "number" }, zoom: { type: "number" } }, required: ["lat", "lng"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/route", price: "$0.01", priceNum: "0.010000", tag: "geo", desc: "Turn-by-turn directions between waypoints with distance and duration.",
-      inputProps: { waypoints: { type: "array" }, profile: { type: "string" } }, required: ["waypoints"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/isochrone", price: "$0.02", priceNum: "0.020000", tag: "geo", desc: "Reachability polygon - area reachable within N seconds from a point.",
-      inputProps: { lat: { type: "number" }, lng: { type: "number" }, range_seconds: { type: "number" }, profile: { type: "string" } }, required: ["lat", "lng"],
-      outputProps: { results: { type: "array" } } },
     { method: "post", path: "/api/v1/geo/elevation", price: "$0.003", priceNum: "0.003000", tag: "geo", desc: "Terrain elevation at one or more coordinates (SRTM 30m).",
       inputProps: { locations: { type: "array" }, dataset: { type: "string" } }, required: ["locations"],
       outputProps: { results: { type: "array" } } },
@@ -2361,15 +2289,6 @@ app.get("/openapi.json", (_req, res) => {
       outputProps: { results: { type: "array" } } },
     { method: "post", path: "/api/v1/geo/airport-info", price: "$0.03", priceNum: "0.030000", tag: "geo", desc: "Airport details - location, timezone, elevation, IATA/ICAO codes (AeroDataBox).",
       inputProps: { iata_code: { type: "string" } }, required: ["iata_code"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/distance-matrix", price: "$0.02", priceNum: "0.020000", tag: "geo", desc: "Distance and duration matrix between multiple origin-destination pairs.",
-      inputProps: { origins: { type: "array" }, destinations: { type: "array" }, profile: { type: "string" } }, required: ["origins", "destinations"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/nearby", price: "$0.005", priceNum: "0.005000", tag: "geo", desc: "Find points of interest near coordinates - gas, hospitals, helipads, etc.",
-      inputProps: { lat: { type: "number" }, lng: { type: "number" }, query: { type: "string" }, limit: { type: "number" } }, required: ["lat", "lng", "query"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/timezone", price: "$0.003", priceNum: "0.003000", tag: "geo", desc: "Country and timezone info at coordinates.",
-      inputProps: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"],
       outputProps: { results: { type: "array" } } },
   ];
 
@@ -2428,7 +2347,7 @@ app.get("/openapi.json", (_req, res) => {
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
-      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 151 paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
+      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 144 paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
     },
     servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
     "x-discovery": {
@@ -2749,18 +2668,11 @@ app.get("/api/v1/research/biomedical/related", researchBiomedRelatedHandler);
 app.get("/api/v1/research/demographics/census", researchCensusHandler);
 app.get("/api/v1/research/demographics/datasets", researchDatasetsHandler);
 // Geospatial (Category 23)
-app.post("/api/v1/geo/geocode", geocodeHandler);
-app.post("/api/v1/geo/reverse-geocode", reverseGeocodeHandler);
-app.post("/api/v1/geo/route", routeHandler);
-app.post("/api/v1/geo/isochrone", isochroneHandler);
 app.post("/api/v1/geo/elevation", elevationHandler);
 app.post("/api/v1/geo/weather", weatherHandler);
 app.post("/api/v1/geo/weather-alerts", weatherAlertsHandler);
 app.post("/api/v1/geo/flight-status", flightStatusHandler);
 app.post("/api/v1/geo/airport-info", airportInfoHandler);
-app.post("/api/v1/geo/distance-matrix", distanceMatrixHandler);
-app.post("/api/v1/geo/nearby", nearbyHandler);
-app.post("/api/v1/geo/timezone", timezoneHandler);
 
 
 // Final error handler — any uncaught error returns JSON, never HTML.
@@ -2792,8 +2704,8 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
-  console.log('🌍 Geospatial endpoints active — geocode, route, weather, flights, elevation');
-  console.log(`\n🌐 151 paid endpoints live across 37 categories\n`);
+  console.log('\u{1F30D} Geospatial endpoints active \u2014 weather, weather-alerts, flights, airport-info, elevation');
+  console.log(`\n🌐 144 paid endpoints live across 37 categories\n`);
 });
 
 export default app;
