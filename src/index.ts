@@ -99,11 +99,6 @@ import {
   researchBiomedSearchHandler, researchBiomedByPmidHandler, researchBiomedRelatedHandler,
   researchCensusHandler, researchDatasetsHandler,
 } from "./routes/research.js";
-// NEW: Geospatial (Category 23)
-import {
-  elevationHandler, weatherHandler, weatherAlertsHandler,
-  flightStatusHandler, airportInfoHandler,
-} from "./routes/geospatial.js";
 
 dotenv.config();
 const app = express();
@@ -887,33 +882,6 @@ app.use(
         mimeType: "application/json",
       },
 
-      // ---- GEOSPATIAL (Category 23) ----
-      "POST /api/v1/geo/elevation": {
-        accepts: [{ scheme: "exact", price: "$0.003", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.003", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Terrain elevation at one or more coordinates. SRTM 30m resolution.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { locations: [[33.812, -117.918]], dataset: "srtm30m" }, inputSchema: { properties: { locations: { type: "array" }, dataset: { type: "string" } }, required: ["locations"] }, bodyType: "json", output: { example: { results: [{ lat: 33.812, lng: -117.918, elevation_m: 47 }] }, schema: { properties: { results: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/geo/weather": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Current weather and 24h forecast at coordinates. Temperature, wind, humidity, precipitation.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918, units: "imperial" }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" }, units: { type: "string" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { current: { temp: 72, description: "clear sky" }, forecast: [] }, schema: { properties: { current: { type: "object" }, forecast: { type: "array" } } } } }) },
-      },
-      "POST /api/v1/geo/weather-alerts": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Severe weather alerts at coordinates — storms, floods, heat, wind advisories.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { lat: 33.812, lng: -117.918 }, inputSchema: { properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] }, bodyType: "json", output: { example: { alerts: [], has_alerts: false }, schema: { properties: { alerts: { type: "array" }, has_alerts: { type: "boolean" } } } } }) },
-      },
-      "POST /api/v1/geo/flight-status": {
-        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Real-time flight status, departure/arrival times, gates, aircraft, delays. AeroDataBox.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { flight_number: "AA100", date: "2026-06-04" }, inputSchema: { properties: { flight_number: { type: "string" }, date: { type: "string" } }, required: ["flight_number"] }, bodyType: "json", output: { example: { flights: [{ status: "Expected", departure: { airport: "JFK", iata: "JFK" }, arrival: { airport: "LAX", iata: "LAX" } }] }, schema: { properties: { flights: { type: "array" }, count: { type: "number" } } } } }) },
-      },
-      "POST /api/v1/geo/airport-info": {
-        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Airport details — location, timezone, elevation, IATA/ICAO codes, country. AeroDataBox.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { iata_code: "LAX" }, inputSchema: { properties: { iata_code: { type: "string" } }, required: ["iata_code"] }, bodyType: "json", output: { example: { airport: { name: "Los Angeles International", iata: "LAX", lat: 33.942, lng: -118.408, timezone: "America/Los_Angeles" } }, schema: { properties: { airport: { type: "object" } } } } }) },
-      },
- 
       // ---- CATEGORY 19: BITTENSOR DROP-IN API (OpenAI-compatible) ----
       "GET /bittensor/v1/models": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -1253,12 +1221,6 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/research/biomedical/related`, method: "GET", price: "$0.002", category: "research", description: "Related articles for a PubMed ID.", searchTerms: ["related articles", "similar papers", "PubMed related"] },
       { resource: `${BASE_URL}/api/v1/research/demographics/census`, method: "GET", price: "$0.001", category: "research", description: "US Census data by state, county, or zip.", searchTerms: ["census", "demographics", "population data"] },
       { resource: `${BASE_URL}/api/v1/research/demographics/datasets`, method: "GET", price: "$0.001", category: "research", description: "Search Data.gov datasets by keyword.", searchTerms: ["Data.gov", "open data", "government datasets"] },
-      // Geospatial (Category 23)
-      { resource: `${BASE_URL}/api/v1/geo/elevation`, method: "POST", price: "$0.003", category: "geo", description: "Terrain elevation at one or more coordinates (SRTM 30m).", searchTerms: ["elevation", "altitude", "terrain", "SRTM"] },
-      { resource: `${BASE_URL}/api/v1/geo/weather`, method: "POST", price: "$0.01", category: "geo", description: "Current weather and 24h forecast at coordinates.", searchTerms: ["weather", "forecast", "temperature", "conditions"] },
-      { resource: `${BASE_URL}/api/v1/geo/weather-alerts`, method: "POST", price: "$0.01", category: "geo", description: "Severe weather alerts at coordinates - storms, floods, heat, wind.", searchTerms: ["weather alerts", "severe weather", "storm warning", "advisory"] },
-      { resource: `${BASE_URL}/api/v1/geo/flight-status`, method: "POST", price: "$0.05", category: "geo", description: "Real-time flight status, times, gates, aircraft, delays (AeroDataBox).", searchTerms: ["flight status", "flight tracker", "departure arrival", "delays"] },
-      { resource: `${BASE_URL}/api/v1/geo/airport-info`, method: "POST", price: "$0.03", category: "geo", description: "Airport details - location, timezone, elevation, IATA/ICAO codes (AeroDataBox).", searchTerms: ["airport info", "IATA", "ICAO", "airport details"] },
     ],
     solanaPayment: {
       enabled: true,
@@ -1412,12 +1374,6 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_compute_futures_history", description: "Full usage ledger", price: "$0.002" },
       { name: "spraay_compute_futures_refund", description: "Refund unused compute credit balance to the original depositor", price: "$0.01" },
       { name: "spraay_compute_futures_pricing", description: "Compute futures pricing", price: "$0.001" },
-      // Geospatial
-      { name: "spraay_geo_elevation", description: "Terrain elevation at one or more coordinates (SRTM 30m).", price: "$0.003" },
-      { name: "spraay_geo_weather", description: "Current weather and 24h forecast at coordinates.", price: "$0.01" },
-      { name: "spraay_geo_weather_alerts", description: "Severe weather alerts at coordinates", price: "$0.01" },
-      { name: "spraay_geo_flight_status", description: "Real-time flight status, times, gates, delays", price: "$0.05" },
-      { name: "spraay_geo_airport_info", description: "Airport details", price: "$0.03" },
     ],
   });
 });
@@ -1598,17 +1554,11 @@ app.get("/", (_req, res) => {
         "GET /api/v1/research/biomedical/related": "$0.002 - Related articles for a PubMed ID",
         "GET /api/v1/research/demographics/census": "$0.001 - US Census data by state, county, or zip",
         "GET /api/v1/research/demographics/datasets": "$0.001 - Search Data.gov datasets by keyword",
-        // Geospatial (Category 23)
-        "POST /api/v1/geo/elevation": "$0.003 - Terrain elevation at one or more coordinates (SRTM 30m).",
-        "POST /api/v1/geo/weather": "$0.01 - Current weather and 24h forecast at coordinates.",
-        "POST /api/v1/geo/weather-alerts": "$0.01 - Severe weather alerts at coordinates",
-        "POST /api/v1/geo/flight-status": "$0.05 - Real-time flight status, times, gates, aircraft, delays (AeroDataBox).",
-        "POST /api/v1/geo/airport-info": "$0.03 - Airport details",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 144,
+    totalEndpoints: 139,
     protocols: {
       x402: {
         status: "active",
@@ -1666,7 +1616,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
   res.json({
     mppVersion: "1.0",
     name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 144+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    description: "Universal agent payment gateway — 139+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
     homepage: BASE_URL,
     status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
     paymentMethods: {
@@ -1678,7 +1628,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
       },
     },
     endpoints: {
-      total: 144,
+      total: 139,
       docs: `${BASE_URL}/.well-known/x402.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
@@ -1701,7 +1651,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
   res.json({
     schemaVersion: "0.2.0",
     name: "Spraay Universal Agent Payment Gateway",
-    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 144 paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
+    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 139 paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
     version: "3.8.1",
@@ -1751,7 +1701,7 @@ app.get("/.well-known/agent-registration.json", (_req, res) => {
     schemaVersion: "1.0",
     agentId: "spraay-x402-gateway",
     displayName: "Spraay",
-    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 144 endpoints across AI, DeFi, payments, compute, search, and robotics.",
+    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 139 endpoints across AI, DeFi, payments, compute, search, and robotics.",
     endpoints: {
       base: BASE_URL,
       agentCard: `${BASE_URL}/.well-known/agent.json`,
@@ -1783,7 +1733,7 @@ app.get("/llms.txt", (_req, res) => {
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 144 paid API endpoints (150 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides 139 paid API endpoints (145 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
@@ -1791,7 +1741,7 @@ Spraay provides 144 paid API endpoints (150 total) that agents call with USDC mi
 - Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
 - Pay to: ${PAY_TO}
 - Facilitator: Coinbase CDP
-- Solana rail: USDC payments also accepted on Solana — see ${BASE_URL}/.well-known/solana.json, research, geospatial
+- Solana rail: USDC payments also accepted on Solana — see ${BASE_URL}/.well-known/solana.json, research
 
 ## Categories
 ai, payments, defi, oracle, bridge, payroll, invoice, analytics, escrow, inference, communication, infrastructure, identity, compliance, gpu, search, compute, compute-futures, rtp, agent-wallet, supply-chain, bittensor
@@ -2274,22 +2224,6 @@ app.get("/openapi.json", (_req, res) => {
     { method: "get", path: "/api/v1/compute-futures/pricing", price: "$0.001", priceNum: "0.001000", tag: "compute-futures", desc: "Compute futures pricing - tier discounts, per-model costs, bulk discount info.",
       queryParams: [],
       outputProps: { status: { type: "string" } } },
-    // ---- GEOSPATIAL ----
-    { method: "post", path: "/api/v1/geo/elevation", price: "$0.003", priceNum: "0.003000", tag: "geo", desc: "Terrain elevation at one or more coordinates (SRTM 30m).",
-      inputProps: { locations: { type: "array" }, dataset: { type: "string" } }, required: ["locations"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/weather", price: "$0.01", priceNum: "0.010000", tag: "geo", desc: "Current weather and 24h forecast at coordinates.",
-      inputProps: { lat: { type: "number" }, lng: { type: "number" }, units: { type: "string" } }, required: ["lat", "lng"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/weather-alerts", price: "$0.01", priceNum: "0.010000", tag: "geo", desc: "Severe weather alerts at coordinates - storms, floods, heat, wind.",
-      inputProps: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/flight-status", price: "$0.05", priceNum: "0.050000", tag: "geo", desc: "Real-time flight status, times, gates, aircraft, delays (AeroDataBox).",
-      inputProps: { flight_number: { type: "string" }, date: { type: "string" } }, required: ["flight_number"],
-      outputProps: { results: { type: "array" } } },
-    { method: "post", path: "/api/v1/geo/airport-info", price: "$0.03", priceNum: "0.030000", tag: "geo", desc: "Airport details - location, timezone, elevation, IATA/ICAO codes (AeroDataBox).",
-      inputProps: { iata_code: { type: "string" } }, required: ["iata_code"],
-      outputProps: { results: { type: "array" } } },
   ];
 
   const paths: Record<string, any> = {};
@@ -2347,7 +2281,7 @@ app.get("/openapi.json", (_req, res) => {
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
-      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 144 paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
+      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 139 paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
     },
     servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
     "x-discovery": {
@@ -2667,12 +2601,6 @@ app.get("/api/v1/research/biomedical/by-pmid", researchBiomedByPmidHandler);
 app.get("/api/v1/research/biomedical/related", researchBiomedRelatedHandler);
 app.get("/api/v1/research/demographics/census", researchCensusHandler);
 app.get("/api/v1/research/demographics/datasets", researchDatasetsHandler);
-// Geospatial (Category 23)
-app.post("/api/v1/geo/elevation", elevationHandler);
-app.post("/api/v1/geo/weather", weatherHandler);
-app.post("/api/v1/geo/weather-alerts", weatherAlertsHandler);
-app.post("/api/v1/geo/flight-status", flightStatusHandler);
-app.post("/api/v1/geo/airport-info", airportInfoHandler);
 
 
 // Final error handler — any uncaught error returns JSON, never HTML.
@@ -2704,8 +2632,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
-  console.log('\u{1F30D} Geospatial endpoints active \u2014 weather, weather-alerts, flights, airport-info, elevation');
-  console.log(`\n🌐 144 paid endpoints live across 37 categories\n`);
+  console.log(`\n🌐 139 paid endpoints live across 36 categories\n`);
 });
 
 export default app;
