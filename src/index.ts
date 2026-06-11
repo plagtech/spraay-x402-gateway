@@ -109,6 +109,7 @@ import {
 import { tokenSafetyHandler } from "./routes/tokenSafety.js";
 import { addressSafetyHandler } from "./routes/addressSafety.js";
 import { trustScoreHandler } from "./routes/trustScore.js";
+import { txDecodeHandler } from "./routes/txDecode.js";
 
 dotenv.config();
 const app = express();
@@ -1102,6 +1103,7 @@ app.get("/api/v1/trust/score", trustScoreHandler);
 // FREE ROUTES
 app.get("/api/v1/token/safety", tokenSafetyHandler);
 app.get("/api/v1/address/safety", addressSafetyHandler);
+app.get("/api/v1/tx/decode", txDecodeHandler);
 app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2, name: "Spraay x402 Gateway",
@@ -1281,6 +1283,8 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/address/safety`, method: "GET", price: "free", category: "payments", description: "Free address safety screen — phishing, sanctions, exploits, mixer usage, malicious contracts. Screen recipients before sending funds.", searchTerms: ["address safety","malicious address","phishing","sanctions check","wallet check","is address safe","recipient check","AML","scam address","blacklist"] },
       // Paid — Trust Score
       { resource: `${BASE_URL}/api/v1/trust/score`, method: "GET", price: "$0.03", category: "trust", description: "Multi-dimensional wallet/agent trust score via ProofLayer. Financial, reliability, trust, social axes + XMTP reputation + on-chain signals. Counterparty due diligence for agent-to-agent payments.", searchTerms: ["trust score","wallet reputation","agent trust","counterparty check","ProofLayer","wallet score","agent reputation","due diligence","XMTP reputation","wallet risk"] },
+      // Free — TX Decoder
+      { resource: `${BASE_URL}/api/v1/tx/decode`, method: "GET", price: "free", category: "defi", description: "Free transaction decoder — plain-English summary + structured token transfers for any EVM tx. Covers swaps, transfers, approvals, wraps, NFTs, batch payments. Blockscout-powered.", searchTerms: ["decode transaction","tx decoder","explain transaction","transaction summary","what happened","parse tx","token transfers","swap decode","tx analysis"] },
 
     ],
     solanaPayment: {
