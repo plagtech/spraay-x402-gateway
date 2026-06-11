@@ -317,7 +317,7 @@ export async function txDecodeHandler(req: Request, res: Response) {
       status: tx.status || null,
       result: tx.result || null,
       blockNumber: tx.block_number || null,
-      timestamp: tx.timestamp || null,
+      blockTimestamp: tx.timestamp || null,
       from: fromAddr,
       to: toAddr,
       value: tx.value || "0",
