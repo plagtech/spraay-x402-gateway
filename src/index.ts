@@ -99,6 +99,13 @@ import {
   researchBiomedSearchHandler, researchBiomedByPmidHandler, researchBiomedRelatedHandler,
   researchCensusHandler, researchDatasetsHandler,
 } from "./routes/research.js";
+import { freeLimit, fetchLimit } from "./middleware/freeRateLimit.js";
+import {
+  freeCatalogHandler, freeGasHandler, freePricesHandler, freeChainStatusHandler,
+  freeNonceHandler, freeValidateAddressHandler, freeValidateBatchHandler,
+  freeEstimateBatchHandler, freeResolveHandler, freeAgentCardHandler,
+  freeX402CheckHandler, freeConvertHandler, freeTimestampHandler, freeUuidHandler,
+} from "./routes/free-tier.js";
 
 dotenv.config();
 const app = express();
@@ -1069,6 +1076,19 @@ app.get("/.well-known/x402.json", (_req, res) => {
     network: CAIP2_NETWORK, payTo: PAY_TO,
     facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
     resources: [
+      { resource: `${BASE_URL}/free/gas`,            method: "GET",  price: "free", category: "free-tier", description: "Gas prices across 7 EVM chains (Base, Ethereum, Arbitrum, Polygon, Optimism, Avalanche, BSC). Cached 15s. No payment required.", searchTerms: ["gas price","free gas","network fee","gwei","base fee"] },
+      { resource: `${BASE_URL}/free/prices`,         method: "GET",  price: "free", category: "free-tier", description: "USDC, ETH, SOL spot prices in USD. Cached 60s. No payment required.", searchTerms: ["token price","free price","ETH price","SOL price","spot price"] },
+      { resource: `${BASE_URL}/free/chain-status`,   method: "GET",  price: "free", category: "free-tier", description: "Block height and liveness for 7 EVM chains. No payment required.", searchTerms: ["chain status","block height","chain health","network status"] },
+      { resource: `${BASE_URL}/free/nonce`,          method: "GET",  price: "free", category: "free-tier", description: "Transaction count (nonce) for any EVM address. No payment required.", searchTerms: ["nonce","transaction count","tx count","pending nonce"] },
+      { resource: `${BASE_URL}/free/validate-address`, method: "GET", price: "free", category: "free-tier", description: "Validate blockchain address format for EVM, Solana, XRP, Stellar. Pure checksum. No payment required.", searchTerms: ["validate address","address check","checksum","verify address"] },
+      { resource: `${BASE_URL}/free/validate-batch`, method: "POST", price: "free", category: "free-tier", description: "Validate a BPA 1.0 batch payment payload (schema only, no cost data). No payment required.", searchTerms: ["validate batch","BPA validation","schema check","batch preflight"] },
+      { resource: `${BASE_URL}/free/estimate-batch`, method: "GET",  price: "free", category: "free-tier", description: "Rough cost estimate for batch payments by recipient count and chain. No payment required.", searchTerms: ["batch estimate","rough estimate","cost preview","free estimate"] },
+      { resource: `${BASE_URL}/free/resolve`,        method: "GET",  price: "free", category: "free-tier", description: "Resolve ENS name or Basename to an address. Cached 5min. No payment required.", searchTerms: ["ENS resolve","basename","name resolution","free resolve"] },
+      { resource: `${BASE_URL}/free/agent-card`,     method: "GET",  price: "free", category: "free-tier", description: "Look up AI agent registration from ERC-8004 Identity Registry on Base. No payment required.", searchTerms: ["ERC-8004","agent card","agent registry","agent identity","agent lookup"] },
+      { resource: `${BASE_URL}/free/x402-check`,     method: "POST", price: "free", category: "free-tier", description: "Probe any URL to check x402 payment support, pricing, and .well-known discovery. No payment required.", searchTerms: ["x402 check","x402 probe","payment check","402 detect","x402 scan"] },
+      { resource: `${BASE_URL}/free/convert`,        method: "GET",  price: "free", category: "free-tier", description: "Convert between fiat and crypto or between native units (wei/gwei/lamports/drops). No payment required.", searchTerms: ["convert","unit conversion","fiat to crypto","wei to ETH","currency convert"] },
+      { resource: `${BASE_URL}/free/timestamp`,      method: "GET",  price: "free", category: "free-tier", description: "Current Unix timestamp in seconds, milliseconds, and ISO 8601. No payment required.", searchTerms: ["timestamp","unix time","current time","epoch"] },
+      { resource: `${BASE_URL}/free/uuid`,           method: "GET",  price: "free", category: "free-tier", description: "Generate UUID v4 identifiers (up to 100). No payment required.", searchTerms: ["uuid","unique id","generate id","uuid v4"] },
       { resource: `${BASE_URL}/api/v1/chat/completions`, method: "POST", price: "$0.04", category: "ai", description: "OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.", searchTerms: ["chat completion","LLM","AI chat","text generation","GPT","language model","OpenAI compatible","inference"] },
       { resource: `${BASE_URL}/api/v1/models`, method: "GET", price: "$0.001", category: "ai", description: "List all available AI models with IDs, capabilities, and pricing. Call before chat/completions to pick the right model.", searchTerms: ["list models","available models","model catalog","which models","supported models","LLM list","model pricing"] },
       { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.02", category: "payments", description: "Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0.", searchTerms: ["batch payment","bulk payout","mass payout","send to many wallets","airdrop","disbursement","multi-send","pay many recipients"], spec: "https://docs.spraay.app/bpa/1.0/" },
@@ -1385,7 +1405,33 @@ app.get("/", (_req, res) => {
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
-      free: { "GET /": "Info", "GET /health": "Health", "GET /stats": "Stats", "GET /.well-known/x402.json": "Discovery", "GET /api/v1/tokens": "Tokens", "GET /api/v1/gpu/models": "GPU Models", "POST /api/v1/robots/register": "Register Robot (RTP)", "POST /api/v1/robots/complete": "Report Task Complete (RTP)", "PATCH /api/v1/robots/update": "Update Robot (RTP)", "POST /api/v1/robots/deregister": "Remove Robot (RTP)", "GET /bittensor/v1/health": "Bittensor health" },
+      free: {
+  "GET /": "Info",
+  "GET /health": "Health",
+  "GET /stats": "Stats",
+  "GET /.well-known/x402.json": "Discovery",
+  "GET /api/v1/tokens": "Tokens",
+  "GET /api/v1/gpu/models": "GPU Models",
+  "POST /api/v1/robots/register": "Register Robot (RTP)",
+  "POST /api/v1/robots/complete": "Report Task Complete (RTP)",
+  "PATCH /api/v1/robots/update": "Update Robot (RTP)",
+  "POST /api/v1/robots/deregister": "Remove Robot (RTP)",
+  "GET /bittensor/v1/health": "Bittensor health",
+  "GET /free": "Free tier catalog",
+  "GET /free/gas": "Gas prices — 7 EVM chains via Alchemy (cached 15s)",
+  "GET /free/prices": "USDC/ETH/SOL spot prices (cached 60s)",
+  "GET /free/chain-status": "Block height & liveness — 7 EVM chains (cached 30s)",
+  "GET /free/nonce": "EVM nonce / tx count for address",
+  "GET /free/validate-address": "Multi-chain address checksum validation",
+  "POST /free/validate-batch": "BPA 1.0 payload schema validation",
+  "GET /free/estimate-batch": "Rough batch cost estimate (no live quote)",
+  "GET /free/resolve": "ENS & Basename → address resolution",
+  "GET /free/agent-card": "ERC-8004 agent registry lookup",
+  "POST /free/x402-check": "Probe URL for x402 payment support",
+  "GET /free/convert": "Fiat ↔ crypto conversion (unit math + spot)",
+  "GET /free/timestamp": "Current Unix timestamp",
+  "GET /free/uuid": "UUID v4 generator (up to 100)",
+},
       paid: {
         // AI
         "POST /api/v1/chat/completions": "$0.04 - AI chat",
@@ -1558,7 +1604,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 139,
+    totalEndpoints: 153,
     protocols: {
       x402: {
         status: "active",
@@ -1599,6 +1645,21 @@ app.post("/v1/auth/rotate", rotateHandler);
 app.post("/v1/auth/portal", portalHandler);
 app.get("/health", healthHandler);
 app.get("/stats", statsHandler);
+// Free Tier
+app.get("/free",                freeLimit, freeCatalogHandler);
+app.get("/free/gas",            freeLimit, freeGasHandler);
+app.get("/free/prices",         freeLimit, freePricesHandler);
+app.get("/free/chain-status",   freeLimit, freeChainStatusHandler);
+app.get("/free/nonce",          freeLimit, freeNonceHandler);
+app.get("/free/validate-address", freeLimit, freeValidateAddressHandler);
+app.post("/free/validate-batch",  freeLimit, freeValidateBatchHandler);
+app.get("/free/estimate-batch",   freeLimit, freeEstimateBatchHandler);
+app.get("/free/resolve",        freeLimit, freeResolveHandler);
+app.get("/free/agent-card",     freeLimit, freeAgentCardHandler);
+app.post("/free/x402-check",    fetchLimit, freeX402CheckHandler);  // tighter limit
+app.get("/free/convert",        freeLimit, freeConvertHandler);
+app.get("/free/timestamp",      freeLimit, freeTimestampHandler);
+app.get("/free/uuid",           freeLimit, freeUuidHandler);
 
 // ============================================
 // DISCOVERY ROUTES — kill the 404 bleed
@@ -1616,7 +1677,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
   res.json({
     mppVersion: "1.0",
     name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 139+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    description: "Universal agent payment gateway — 153+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
     homepage: BASE_URL,
     status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
     paymentMethods: {
@@ -2632,6 +2693,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
+  console.log(`💧 Free Tier active — 14 endpoints at /free/* (gas, prices, chain-status, nonce, validate, resolve, agent-card, x402-check, convert)`);
   console.log(`\n🌐 139 paid endpoints live across 36 categories\n`);
 });
 
