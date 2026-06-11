@@ -4,12 +4,20 @@
 import { isAddress, getAddress } from "viem";
 import { PublicKey } from "@solana/web3.js";
 
-// Optional — comment out if not in your deps
+// Optional deps — loaded via require so they're safe to omit.
+// CommonJS-compatible (no top-level await).
 let isValidClassicAddress: ((addr: string) => boolean) | null = null;
 let StrKey: { isValidEd25519PublicKey: (key: string) => boolean } | null = null;
 
-try { ({ isValidClassicAddress } = await import("ripple-address-codec")); } catch { /* optional dep */ }
-try { ({ StrKey } = await import("@stellar/stellar-sdk")); } catch { /* optional dep */ }
+try {
+  const rac = require("ripple-address-codec");
+  isValidClassicAddress = rac.isValidClassicAddress;
+} catch { /* optional dep not installed — XRP validation disabled */ }
+
+try {
+  const stellar = require("@stellar/stellar-sdk");
+  StrKey = stellar.StrKey;
+} catch { /* optional dep not installed — Stellar validation disabled */ }
 
 export interface AddressResult {
   valid: boolean;
@@ -21,7 +29,7 @@ export interface AddressResult {
 
 const EVM_CHAIN_ALIASES = [
   "evm", "ethereum", "base", "arbitrum", "polygon",
-  "bnb", "avalanche", "unichain", "plasma", "bob",
+  "bnb", "bsc", "avalanche", "optimism", "unichain", "plasma", "bob",
 ];
 
 export function validateAddress(address: string, chain?: string): AddressResult {
