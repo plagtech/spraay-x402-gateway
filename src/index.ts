@@ -106,6 +106,9 @@ import {
   freeEstimateBatchHandler, freeResolveHandler, freeAgentCardHandler,
   freeX402CheckHandler, freeConvertHandler, freeTimestampHandler, freeUuidHandler,
 } from "./routes/free-tier.js";
+import { tokenSafetyHandler } from "./routes/tokenSafety.js";
+import { addressSafetyHandler } from "./routes/addressSafety.js";
+import { trustScoreHandler } from "./routes/trustScore.js";
 
 dotenv.config();
 const app = express();
@@ -1062,12 +1065,43 @@ app.use(
         description: "On-chain DeFi positions across Aave V3, Compound V3, Aerodrome on Base.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chain: "base-mainnet" }, inputSchema: { properties: { address: { type: "string" }, chain: { type: "string" } }, required: ["address"] }, output: { example: { address: "0xd8dA...", chain: "base-mainnet", total_positions: 3, protocols_with_exposure: ["aave-v3", "aerodrome"], positions: [] }, schema: { properties: { address: { type: "string" }, total_positions: { type: "number" }, positions: { type: "array" } } } } }) },
       },
+      "GET /api/v1/trust/score": {
+        accepts: [
+          { scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO },
+          { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO },
+        ],
+        description: "Multi-dimensional wallet/agent trust score via ProofLayer. Financial, reliability, trust, social axes + XMTP reputation + on-chain signals.",
+        mimeType: "application/json",
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { address: "0x..." },
+            inputSchema: {
+              properties: { address: { type: "string" } },
+              required: ["address"],
+            },
+            output: {
+              example: { overall: 72, verdict: "Trusted", tier: "Silver", breakdown: { financial: 70, reliability: 70, trust: 80, social: 66 } },
+              schema: {
+                properties: {
+                  overall: { type: "number" },
+                  verdict: { type: "string" },
+                  tier: { type: "string" },
+                  breakdown: { type: "object" },
+                },
+              },
+            },
+          }),
+        },
+      },
     },
     server
   ))
 );
 
+app.get("/api/v1/trust/score", trustScoreHandler);
 // FREE ROUTES
+app.get("/api/v1/token/safety", tokenSafetyHandler);
+app.get("/api/v1/address/safety", addressSafetyHandler);
 app.get("/.well-known/x402.json", (_req, res) => {
   res.json({
     x402Version: 2, name: "Spraay x402 Gateway",
@@ -1241,6 +1275,13 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/api/v1/research/biomedical/related`, method: "GET", price: "$0.002", category: "research", description: "Related articles for a PubMed ID.", searchTerms: ["related articles", "similar papers", "PubMed related"] },
       { resource: `${BASE_URL}/api/v1/research/demographics/census`, method: "GET", price: "$0.001", category: "research", description: "US Census data by state, county, or zip.", searchTerms: ["census", "demographics", "population data"] },
       { resource: `${BASE_URL}/api/v1/research/demographics/datasets`, method: "GET", price: "$0.001", category: "research", description: "Search Data.gov datasets by keyword.", searchTerms: ["Data.gov", "open data", "government datasets"] },
+      // Free — Token Safety
+      { resource: `${BASE_URL}/api/v1/token/safety`, method: "GET", price: "free", category: "defi", description: "Free pre-trade token safety check — honeypot, sell tax, mint/blacklist, proxy risk. GoPlus-powered with Spraay severity scoring. Called before every trade.", searchTerms: ["token safety","honeypot","scam check","sell tax","rug pull","token security","is it safe","can I sell","buy tax","token risk"] },
+      // Free — Address Safety
+      { resource: `${BASE_URL}/api/v1/address/safety`, method: "GET", price: "free", category: "payments", description: "Free address safety screen — phishing, sanctions, exploits, mixer usage, malicious contracts. Screen recipients before sending funds.", searchTerms: ["address safety","malicious address","phishing","sanctions check","wallet check","is address safe","recipient check","AML","scam address","blacklist"] },
+      // Paid — Trust Score
+      { resource: `${BASE_URL}/api/v1/trust/score`, method: "GET", price: "$0.03", category: "trust", description: "Multi-dimensional wallet/agent trust score via ProofLayer. Financial, reliability, trust, social axes + XMTP reputation + on-chain signals. Counterparty due diligence for agent-to-agent payments.", searchTerms: ["trust score","wallet reputation","agent trust","counterparty check","ProofLayer","wallet score","agent reputation","due diligence","XMTP reputation","wallet risk"] },
+
     ],
     solanaPayment: {
       enabled: true,
@@ -2694,7 +2735,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
   console.log(`💧 Free Tier active — 14 endpoints at /free/* (gas, prices, chain-status, nonce, validate, resolve, agent-card, x402-check, convert)`);
-  console.log(`\n🌐 139 paid endpoints live across 36 categories\n`);
+  console.log(`\n🌐 140 paid endpoints live across 37 categories\n`);
 });
 
 export default app;

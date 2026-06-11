@@ -173,6 +173,9 @@ export const ENDPOINT_PRICES: Record<string, EndpointPrice> = {
 
   // ---- DeFi Positions ----
   "GET /api/v1/defi/positions":            { price: "0.02",  category: "defi" },
+
+  // ---- Trust / Reputation ----
+  "GET /api/v1/trust/score":               { price: "0.03",  category: "trust" },
 };
 
 /**
