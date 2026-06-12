@@ -1,10 +1,14 @@
 // src/middleware/freeRateLimit.ts
-import rateLimit from "express-rate-limit";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 
 const sharedOpts = {
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip,
+  // req.ip already resolves the client IP from X-Forwarded-For because
+  // index.ts sets `app.set('trust proxy', true)`. ipKeyGenerator normalizes
+  // IPv6 addresses to their /56 subnet so users can't rotate within a
+  // subnet to bypass limits (fixes ERR_ERL_KEY_GEN_IPV6).
+  keyGenerator: (req: any) => ipKeyGenerator(req.ip ?? ""),
 };
 
 /** Standard free tier: 60 req/min per IP */

@@ -161,9 +161,12 @@ app.use(protocolDetectorMiddleware);
 app.use(solanaPaymentMiddleware);     
 app.use(mppMiddleware);
 app.use(apiKeyAuthMiddleware);
-app.use(
-  wrapWithSolanaBypass(paymentMiddleware(
-    {
+// ════════════════════════════════════════════════════════════
+// PAID ROUTES — single source of truth.
+// PAID_COUNT is computed from this object and used in every
+// discovery doc, so counts can never drift again.
+// ════════════════════════════════════════════════════════════
+const paidRoutes = {
       "POST /api/v1/chat/completions": {
         accepts: [{ scheme: "exact", price: "$0.04", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.04", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "AI chat completions via 200+ models.", mimeType: "application/json",
@@ -1094,10 +1097,42 @@ app.use(
           }),
         },
       },
-    },
-    server
-  ))
-);
+};
+
+const PAID_COUNT = Object.keys(paidRoutes).length;
+
+const FREE_ENDPOINTS = {
+  "GET /": "Info",
+  "GET /health": "Health",
+  "GET /stats": "Stats",
+  "GET /.well-known/x402.json": "Discovery",
+  "GET /api/v1/tokens": "Tokens",
+  "GET /api/v1/gpu/models": "GPU Models",
+  "POST /api/v1/robots/register": "Register Robot (RTP)",
+  "POST /api/v1/robots/complete": "Report Task Complete (RTP)",
+  "PATCH /api/v1/robots/update": "Update Robot (RTP)",
+  "POST /api/v1/robots/deregister": "Remove Robot (RTP)",
+  "GET /bittensor/v1/health": "Bittensor health",
+  "GET /free": "Free tier catalog",
+  "GET /free/gas": "Gas prices — 7 EVM chains via Alchemy (cached 15s)",
+  "GET /free/prices": "USDC/ETH/SOL spot prices (cached 60s)",
+  "GET /free/chain-status": "Block height & liveness — 7 EVM chains (cached 30s)",
+  "GET /free/nonce": "EVM nonce / tx count for address",
+  "GET /free/validate-address": "Multi-chain address checksum validation",
+  "POST /free/validate-batch": "BPA 1.0 payload schema validation",
+  "GET /free/estimate-batch": "Rough batch cost estimate (no live quote)",
+  "GET /free/resolve": "ENS & Basename → address resolution",
+  "GET /free/agent-card": "ERC-8004 agent registry lookup",
+  "POST /free/x402-check": "Probe URL for x402 payment support",
+  "GET /free/convert": "Fiat ↔ crypto conversion (unit math + spot)",
+  "GET /free/timestamp": "Current Unix timestamp",
+  "GET /free/uuid": "UUID v4 generator (up to 100)",
+};
+const FREE_COUNT = Object.keys(FREE_ENDPOINTS).length;
+const TOTAL_COUNT = PAID_COUNT + FREE_COUNT;
+
+
+app.use(wrapWithSolanaBypass(paymentMiddleware(paidRoutes, server)));
 
 app.get("/api/v1/trust/score", trustScoreHandler);
 // FREE ROUTES
@@ -1306,7 +1341,7 @@ app.get("/.well-known/solana.json", solanaDiscoveryHandler);
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
-    description: "Full-stack DeFi infrastructure for AI agents on Base. 126 tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).",
+    description: `Full-stack DeFi infrastructure for AI agents on Base. ${PAID_COUNT} tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).`,
     version: "3.8.1",
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
@@ -1450,33 +1485,7 @@ app.get("/", (_req, res) => {
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
     endpoints: {
-      free: {
-  "GET /": "Info",
-  "GET /health": "Health",
-  "GET /stats": "Stats",
-  "GET /.well-known/x402.json": "Discovery",
-  "GET /api/v1/tokens": "Tokens",
-  "GET /api/v1/gpu/models": "GPU Models",
-  "POST /api/v1/robots/register": "Register Robot (RTP)",
-  "POST /api/v1/robots/complete": "Report Task Complete (RTP)",
-  "PATCH /api/v1/robots/update": "Update Robot (RTP)",
-  "POST /api/v1/robots/deregister": "Remove Robot (RTP)",
-  "GET /bittensor/v1/health": "Bittensor health",
-  "GET /free": "Free tier catalog",
-  "GET /free/gas": "Gas prices — 7 EVM chains via Alchemy (cached 15s)",
-  "GET /free/prices": "USDC/ETH/SOL spot prices (cached 60s)",
-  "GET /free/chain-status": "Block height & liveness — 7 EVM chains (cached 30s)",
-  "GET /free/nonce": "EVM nonce / tx count for address",
-  "GET /free/validate-address": "Multi-chain address checksum validation",
-  "POST /free/validate-batch": "BPA 1.0 payload schema validation",
-  "GET /free/estimate-batch": "Rough batch cost estimate (no live quote)",
-  "GET /free/resolve": "ENS & Basename → address resolution",
-  "GET /free/agent-card": "ERC-8004 agent registry lookup",
-  "POST /free/x402-check": "Probe URL for x402 payment support",
-  "GET /free/convert": "Fiat ↔ crypto conversion (unit math + spot)",
-  "GET /free/timestamp": "Current Unix timestamp",
-  "GET /free/uuid": "UUID v4 generator (up to 100)",
-},
+      free: FREE_ENDPOINTS,
       paid: {
         // AI
         "POST /api/v1/chat/completions": "$0.04 - AI chat",
@@ -1649,7 +1658,7 @@ app.get("/", (_req, res) => {
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
     network: CAIP2_NETWORK, payTo: PAY_TO, mainnet: IS_MAINNET, bazaar: "discoverable",
-    totalEndpoints: 153,
+    totalEndpoints: TOTAL_COUNT,
     protocols: {
       x402: {
         status: "active",
@@ -1722,7 +1731,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
   res.json({
     mppVersion: "1.0",
     name: "Spraay Gateway",
-    description: "Universal agent payment gateway — 153+ endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.",
+    description: `Universal agent payment gateway — ${TOTAL_COUNT} endpoints for AI, DeFi, payments, compute, search, robotics & more. Accepts x402 and MPP.`,
     homepage: BASE_URL,
     status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
     paymentMethods: {
@@ -1734,7 +1743,7 @@ app.get("/.well-known/mpp.json", (_req, res) => {
       },
     },
     endpoints: {
-      total: 139,
+      total: PAID_COUNT,
       docs: `${BASE_URL}/.well-known/x402.json`,
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
@@ -1757,7 +1766,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
   res.json({
     schemaVersion: "0.2.0",
     name: "Spraay Universal Agent Payment Gateway",
-    description: "Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with 139 paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.",
+    description: `Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with ${PAID_COUNT} paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.`,
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
     version: "3.8.1",
@@ -1807,7 +1816,7 @@ app.get("/.well-known/agent-registration.json", (_req, res) => {
     schemaVersion: "1.0",
     agentId: "spraay-x402-gateway",
     displayName: "Spraay",
-    description: "Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to 139 endpoints across AI, DeFi, payments, compute, search, and robotics.",
+    description: `Universal payment gateway (x402 + MPP) for AI agents — pay-per-call access to ${PAID_COUNT} paid endpoints across AI, DeFi, payments, compute, search, and robotics.`,
     endpoints: {
       base: BASE_URL,
       agentCard: `${BASE_URL}/.well-known/agent.json`,
@@ -1839,7 +1848,7 @@ app.get("/llms.txt", (_req, res) => {
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 139 paid API endpoints (145 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides ${PAID_COUNT} paid API endpoints (${TOTAL_COUNT} total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
@@ -2387,7 +2396,7 @@ app.get("/openapi.json", (_req, res) => {
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
-      "x-guidance": "Spraay is a multi-chain payment and AI inference gateway with 139 paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.",
+      "x-guidance": `Spraay is a multi-chain payment and AI inference gateway with ${PAID_COUNT} paid endpoints. Use POST /api/v1/chat/completions for LLM chat (200+ models, OpenAI-compatible). POST /api/v1/batch/execute for batch USDC payments. GET /api/v1/oracle/prices for real-time price feeds. POST /api/v1/robots/task to dispatch robot tasks via RTP. POST /api/v1/search/qna for structured Q&A. Bittensor decentralized AI at /bittensor/v1/chat/completions. Supply chain at /api/v1/sctp/*. All endpoints accept micropayments via x402 and MPP (USDC on Base). No API keys needed — just pay per call.`,
     },
     servers: [{ url: BASE_URL, description: "Production (Base mainnet)" }],
     "x-discovery": {
@@ -2739,7 +2748,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
   console.log(`💧 Free Tier active — 14 endpoints at /free/* (gas, prices, chain-status, nonce, validate, resolve, agent-card, x402-check, convert)`);
-  console.log(`\n🌐 140 paid endpoints live across 37 categories\n`);
+  console.log(`\n🌐 ${PAID_COUNT} paid + ${FREE_COUNT} free endpoints live (${TOTAL_COUNT} total)\n`);
 });
 
 export default app;
