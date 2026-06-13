@@ -1,0 +1,66 @@
+# Spraay x402 Gateway
+Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
+
+## What this is
+Spraay provides 129 paid API endpoints (153 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+
+## Payment details
+- Protocol: x402 (https://x402.org)
+- Network: Base mainnet (EVM, eip155:8453)
+- Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
+- Pay to: 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8
+- Facilitator: Coinbase CDP
+- Solana rail: USDC payments also accepted on Solana — see https://gateway.spraay.app/.well-known/solana.json
+
+## Getting started
+1. Fund an agent wallet with USDC on Base
+2. Send a request to any endpoint
+3. Receive 402 Payment Required with x402 payment terms
+4. Retry with the x402 payment header
+5. Receive 200 with your data
+
+## Categories
+- Agent Wallets (5)
+- AI Chat & Models (2)
+- AI Inference (Intelligence) (4)
+- Batch Payments (8)
+- Bittensor (SN64) (4)
+- Communication (Email/SMS/XMTP) (9)
+- Compute (Inference Jobs) (10)
+- Compute Futures (Prepaid) (6)
+- Cross-Chain Bridge (2)
+- Data (1)
+- DeFi & Swaps (6)
+- Discovery (1)
+- Escrow (6)
+- Free Tier (No Wallet) (13)
+- GPU / Compute (3)
+- Identity & Auth (5)
+- Infrastructure (RPC/Storage/Webhooks) (10)
+- Invoicing (3)
+- KYC & Compliance (4)
+- On-Chain Analytics (2)
+- Payroll (3)
+- Price & Gas Oracle (3)
+- Research & Reference (23)
+- Robot Task Protocol (RTP) (8)
+- Search & RAG (3)
+- Supply Chain (SCTP) (8)
+- Trust & Safety (1)
+
+## Full catalog
+Every endpoint, price, and search terms: https://gateway.spraay.app/llms-full.txt
+
+## Resources
+- Full x402 manifest: https://gateway.spraay.app/.well-known/x402.json
+- Solana discovery: https://gateway.spraay.app/.well-known/solana.json
+- Agent card (A2A): https://gateway.spraay.app/.well-known/agent.json
+- OpenAPI 3.1 spec: https://gateway.spraay.app/openapi.json
+- MCP server card: https://gateway.spraay.app/.well-known/mcp/server-card.json
+- Docs: https://docs.spraay.app
+- GitHub: https://github.com/plagtech/spraay-x402-gateway
+- MCP on Smithery: https://smithery.ai/servers/Plagtech/Spraay-x402-mcp
+
+## Contact
+Twitter: @Spraay_app
+Email: hello@spraay.app

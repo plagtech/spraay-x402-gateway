@@ -1,0 +1,387 @@
+# Spraay x402 Gateway — Full Endpoint Catalog
+Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
+
+153 endpoints (129 paid + 24 free) across 27 categories.
+Network: Base mainnet (eip155:8453) · Asset: USDC · Pay to: 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8
+Source of truth: https://gateway.spraay.app/.well-known/x402.json
+
+## Agent Wallets
+
+- `GET /api/v1/agent-wallet/info` — $0.005 — Get an agent wallet's address, balance, and active session keys.
+  search: agent wallet info, wallet balance, wallet details, check agent wallet, wallet status
+- `GET /api/v1/agent-wallet/predict` — $0.001 — Predict the counterfactual address of an agent wallet before it's deployed. For pre-funding and address reservation.
+  search: predict address, counterfactual address, wallet address before deploy, precompute address, reserve address
+- `POST /api/v1/agent-wallet/provision` — $0.05 — Provision a smart-contract wallet for an AI agent on Base, with programmable spending controls. Non-custodial.
+  search: agent wallet, smart wallet, provision wallet, create agent wallet, AI agent wallet, smart account, ERC-4337, account abstraction
+- `POST /api/v1/agent-wallet/revoke-key` — $0.02 — Revoke a session key on an agent wallet, immediately ending its spending authority.
+  search: revoke key, revoke session, kill key, remove spending key, disable session key, emergency revoke
+- `POST /api/v1/agent-wallet/session-key` — $0.02 — Add a session key to an agent wallet with spending limits and an expiry. For safe delegated, time-boxed spending.
+  search: session key, spending limit, delegated key, scoped permissions, agent spending control, time-boxed key, spend cap
+
+## AI Chat & Models
+
+- `POST /api/v1/chat/completions` — $0.04 — OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.
+  search: chat completion, LLM, AI chat, text generation, GPT, language model, OpenAI compatible, inference
+- `GET /api/v1/models` — $0.001 — List all available AI models with IDs, capabilities, and pricing. Call before chat/completions to pick the right model.
+  search: list models, available models, model catalog, which models, supported models, LLM list, model pricing
+
+## AI Inference (Intelligence)
+
+- `POST /api/v1/inference/classify-address` — $0.03 — AI classification of a wallet as EOA, contract, exchange, DeFi protocol, DAO, or bot, with risk signals. For counterparty screening and smart routing.
+  search: classify address, wallet type, address risk, is this a contract, address screening, counterparty check
+- `POST /api/v1/inference/classify-tx` — $0.03 — AI classification of an on-chain transaction as swap, transfer, mint, bridge, liquidation, or contract call, with decoded intent and risk flags. For monitoring and accounting.
+  search: classify transaction, tx type, transaction intent, decode tx, transaction analysis, anomaly detection
+- `POST /api/v1/inference/explain-contract` — $0.03 — Plain-language explanation of a smart contract: functions, risks, and ownership, plus security flags. For due diligence and safe-interaction checks.
+  search: explain contract, smart contract analysis, contract audit, contract risk, solidity explanation, contract review
+- `POST /api/v1/inference/summarize` — $0.03 — AI intelligence briefing for a wallet, token, or protocol, synthesizing on-chain activity and holdings into a concise summary. For research and reporting.
+  search: summarize wallet, AI briefing, wallet summary, token summary, intelligence report, on-chain research
+
+## Batch Payments
+
+- `GET /api/v1/address/safety` — free — Free address safety screen — phishing, sanctions, exploits, mixer usage, malicious contracts. Screen recipients before sending funds.
+  search: address safety, malicious address, phishing, sanctions check, wallet check, is address safe, recipient check, AML, scam address, blacklist
+- `POST /api/v1/batch/estimate` — $0.001 — Estimate gas and total USDC for a batch payment before sending. Returns per-recipient breakdown. Call before batch/execute.
+  search: batch estimate, payment estimate, gas estimate, fee preview, bulk payment cost, pre-flight check, dry run
+- `POST /api/v1/batch/execute` — $0.02 — Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0.
+  search: batch payment, bulk payout, mass payout, send to many wallets, airdrop, disbursement, multi-send, pay many recipients
+- `POST /api/v1/stellar/batch` — $0.02 — Send batch payments to many recipients in one transaction on the Stellar network.
+  search: Stellar batch, XLM payments, batch Stellar, mass Stellar payout, Stellar disbursement, send XLM to many, lumens
+- `POST /api/v1/stellar/estimate` — $0.001 — Estimate fees for a batch Stellar payment before sending.
+  search: Stellar estimate, XLM fee, Stellar batch cost, preview Stellar payment, lumens fee
+- `POST /api/v1/xrp/batch` — $0.02 — Send batch XRP payments to many recipients in one transaction on the XRP Ledger.
+  search: XRP batch, XRP Ledger, batch XRP, mass XRP payout, ripple payments, XRP disbursement, send XRP to many
+- `POST /api/v1/xrp/estimate` — $0.001 — Estimate fees for a batch XRP payment before sending on the XRP Ledger.
+  search: XRP estimate, XRP fee, ripple fee estimate, XRP batch cost, preview XRP payment
+- `GET /api/v1/xrp/info` — $0.001 — Get current XRP Ledger network info — base fee and reserve requirements.
+  search: XRP info, XRP Ledger fee, ripple network, XRP reserve, base fee, ledger info
+
+## Bittensor (SN64)
+
+- `POST /bittensor/v1/chat/completions` — $0.03 — OpenAI-compatible chat completions routed through the Bittensor SN64 decentralized inference network. Drop-in replacement for OpenAI /v1/chat/completions for censorship-resistant, permissionless LLM access.
+  search: bittensor chat, decentralized inference, permissionless LLM, SN64, TAO inference, censorship resistant AI, OpenAI compatible
+- `POST /bittensor/v1/embeddings` — $0.005 — Decentralized text embeddings via Bittensor. OpenAI-compatible embeddings endpoint for RAG pipelines, semantic search, and vector indexing without centralized providers.
+  search: bittensor embeddings, decentralized embeddings, text embeddings, vector embeddings, RAG, semantic search, TAO embeddings
+- `POST /bittensor/v1/images/generations` — $0.05 — Decentralized text-to-image generation via the Bittensor SN19 network. OpenAI-compatible image generation endpoint for permissionless, pay-per-use AI art.
+  search: bittensor images, decentralized image generation, text to image, SN19, TAO image, permissionless AI art, OpenAI compatible
+- `GET /bittensor/v1/models` — $0.001 — List decentralized AI models available via Bittensor (SN64). OpenAI-compatible model catalog. Call before bittensor/chat/completions to pick a model.
+  search: bittensor models, decentralized models, TAO models, SN64, permissionless LLM, list models, model catalog
+
+## Communication (Email/SMS/XMTP)
+
+- `POST /api/v1/notify/email` — $0.01 — Send transactional or notification email via Resend with HTML templates and custom from address. For payment confirmations, invoice delivery, and alerts.
+  search: send email, email notification, transactional email, email alert, notify by email, email delivery
+- `POST /api/v1/notify/sms` — $0.02 — Send SMS text messages via Twilio. For payment alerts, 2FA codes, on-chain event notifications, and urgent agent-to-human messaging.
+  search: send SMS, text message, SMS notification, text alert, notify by SMS, mobile notification
+- `GET /api/v1/notify/status` — $0.002 — Check delivery status of a sent email or SMS (delivered, bounced, or pending). For delivery confirmation and retry logic.
+  search: notification status, email status, SMS status, delivery confirmation, message delivered, check notification
+- `POST /api/v1/webhook/delete` — $0.002 — Delete a registered webhook to stop receiving its event callbacks.
+  search: delete webhook, remove webhook, unsubscribe, cancel webhook, stop callbacks
+- `GET /api/v1/webhook/list` — $0.002 — List all registered webhooks with their URLs, subscribed events, and status.
+  search: list webhooks, my webhooks, webhook list, registered callbacks, view webhooks
+- `POST /api/v1/webhook/register` — $0.01 — Register a webhook to receive real-time event callbacks for payments, on-chain events, and job completions.
+  search: webhook, event callback, subscribe to events, register webhook, push notification, event listener, real-time events
+- `POST /api/v1/webhook/test` — $0.005 — Send a test event to a registered webhook to verify delivery and payload format.
+  search: test webhook, webhook test, verify callback, ping webhook, debug webhook, test event
+- `GET /api/v1/xmtp/inbox` — $0.01 — Read encrypted XMTP messages for a wallet address. For agent inboxes and wallet-to-wallet conversations.
+  search: XMTP inbox, read messages, wallet inbox, web3 messages, check dms, encrypted inbox
+- `POST /api/v1/xmtp/send` — $0.01 — Send an end-to-end encrypted wallet-to-wallet message via XMTP. For agent-to-agent and agent-to-human messaging.
+  search: XMTP, encrypted message, wallet messaging, web3 dm, send message to wallet, agent messaging, decentralized chat
+
+## Compute (Inference Jobs)
+
+- `POST /api/v1/compute/batch` — varies — Submit up to 50 compute jobs in one batch (text, image, audio, embeddings) at a 10% discount. For high-throughput agent workloads and bulk processing.
+  search: batch inference, bulk compute, batch jobs, mass inference, bulk processing, compute batch, high throughput
+- `POST /api/v1/compute/embeddings` — $0.005 — 
+- `POST /api/v1/compute/estimate` — free — Free price estimation for a compute job before committing. Returns expected cost by model and input size. Call before any paid compute request to validate budget.
+  search: compute estimate, price estimate, cost preview, inference cost, estimate price, pre-flight check, budget check
+- `POST /api/v1/compute/image-generation` — $0.02-$0.08 — Text-to-image generation via 4 models on Replicate including FLUX and SDXL. For agent-generated art, marketing assets, and visual content.
+  search: text to image, AI image generation, FLUX, SDXL, image synthesis, generate image, AI art
+- `GET /api/v1/compute/models` — free — Free discovery endpoint listing all compute models across text, image, video, speech, and embeddings with pricing. Call first to pick the right model and provider.
+  search: compute models, available models, model catalog, list models, model pricing, which models, model discovery
+- `POST /api/v1/compute/speech-to-text` — $0.02 — 
+- `GET /api/v1/compute/status/:jobId` — $0.001 — Poll the status of a compute job by jobId (processing, succeeded, or failed) and retrieve output when complete. Call after any async compute request.
+  search: compute status, job status, inference status, check job, async result, poll job, model output
+- `POST /api/v1/compute/text-inference` — $0.003-$0.10 — LLM text inference and chat completion via 11+ models across Chutes and OpenRouter (GPT-4o, Claude, Llama 3, Mistral). For agent reasoning, summarization, and code generation.
+  search: LLM, chat completion, text generation, language model, AI reasoning, code generation, inference
+- `POST /api/v1/compute/text-to-speech` — $0.03-$0.05 — 
+- `POST /api/v1/compute/video-generation` — $0.40-$0.50 — Text-to-video generation via 2 models on Replicate. For agent-generated video clips, marketing content, and animated visuals.
+  search: text to video, AI video generation, video synthesis, generate video, AI video, video model
+
+## Compute Futures (Prepaid)
+
+- `GET /api/v1/compute-futures/balance` — $0.001 — Check remaining compute credit balance, tier, discount, and usage stats for a futures account (CFE ID).
+  search: compute balance, prepaid balance, credit balance, remaining compute, futures balance, compute credit
+- `POST /api/v1/compute-futures/deposit` — $0.01 — Deposit USDC to open a prepaid compute credit account with tier discounts ($10+ 5%, $50+ 10%, $200+ 15%). Draw down per inference and refund unused balance anytime. USDC on Base or Solana.
+  search: compute futures, prepay compute, compute credits, lock compute price, bulk compute discount, prepaid inference, hedge inference cost
+- `POST /api/v1/compute-futures/execute` — $0.001 — Run a compute job (text-inference, image-gen, video-gen, TTS, STT, embeddings) and deduct cost from the prepaid balance instead of paying per call. Tier discount applied automatically.
+  search: execute compute futures, use prepaid compute, draw down credit, run job from credit, redeem compute, prepaid inference run
+- `GET /api/v1/compute-futures/history` — $0.002 — Full usage ledger for a compute futures account: every job, model, price, and balance change. For accounting and reconciliation.
+  search: compute history, usage ledger, futures history, usage history, compute accounting, prepaid usage
+- `GET /api/v1/compute-futures/pricing` — $0.001 — Compute futures pricing: tier discounts, per-model costs, and bulk discount info. Call before deposit to evaluate tiers.
+  search: compute futures pricing, tier discounts, per-model cost, bulk discount, compute rates, prepaid pricing
+- `POST /api/v1/compute-futures/refund` — $0.01 — Refund the unused compute credit balance back to the original depositor. Only the depositor can request a refund.
+  search: refund compute, reclaim prepaid, return credit, withdraw unused, cancel compute futures, unwind credit
+
+## Cross-Chain Bridge
+
+- `GET /api/v1/bridge/chains` — $0.002 — List networks supported by the cross-chain bridge (Base, Ethereum, Solana, XRP Ledger, Stellar and more) with chain IDs. Call before bridge/quote.
+  search: supported chains, bridge chains, cross-chain networks, which chains, multichain, chain list, interoperability
+- `GET /api/v1/bridge/quote` — $0.05 — Cross-chain bridge quote across LiFi-aggregated routes.
+  search: bridge, cross-chain transfer, move tokens between chains, bridge quote, interchain, cross chain swap
+
+## Data
+
+- `GET /api/v1/balances` — $0.005 — Get all ERC-20 and native token balances for a wallet address on Base and Ethereum.
+  search: token balances, wallet balance, check balance, ERC-20 balances, holdings, what tokens, wallet holdings
+
+## DeFi & Swaps
+
+- `GET /api/v1/prices` — $0.002 — Live token prices for one or many tokens, sourced from on-chain and market feeds.
+  search: token price, crypto price, live prices, price lookup, market price, get price, token value
+- `POST /api/v1/swap/execute` — $0.015 — Execute a token swap on Base via the MangoSwap router (Uniswap V3 / Aerodrome).
+  search: swap tokens, exchange tokens, trade tokens, DEX swap, convert tokens, buy token, sell token
+- `GET /api/v1/swap/quote` — $0.008 — Get a token swap quote across Uniswap V3, Aerodrome and other DEXes on Base.
+  search: swap quote, best swap rate, token exchange rate, DEX aggregator, get swap price, price impact
+- `GET /api/v1/swap/tokens` — $0.001 — List tokens available for swapping on Base via Uniswap V3 / Aerodrome with addresses, symbols, and decimals. Call before swap/quote.
+  search: list tokens, token list, swappable tokens, Base tokens, tradeable tokens, token discovery, ERC-20 list
+- `GET /api/v1/token/safety` — free — Free pre-trade token safety check — honeypot, sell tax, mint/blacklist, proxy risk. GoPlus-powered with Spraay severity scoring. Called before every trade.
+  search: token safety, honeypot, scam check, sell tax, rug pull, token security, is it safe, can I sell, buy tax, token risk
+- `GET /api/v1/tx/decode` — free — Free transaction decoder — plain-English summary + structured token transfers for any EVM tx. Covers swaps, transfers, approvals, wraps, NFTs, batch payments. Blockscout-powered.
+  search: decode transaction, tx decoder, explain transaction, transaction summary, what happened, parse tx, token transfers, swap decode, tx analysis
+
+## Discovery
+
+- `GET /api/v1/tokens` — free — Free discovery endpoint listing supported tokens with addresses, symbols, and decimals across chains.
+  search: token list, supported tokens, token directory, ERC-20 list, available tokens, token addresses
+
+## Escrow
+
+- `GET /api/v1/escrow/:id` — $0.001 — Retrieve a single escrow by ID with locked amount, parties, status, and release conditions. For real-time monitoring and release-trigger evaluation.
+  search: get escrow, escrow lookup, escrow details, check escrow, contract status, locked payment
+- `POST /api/v1/escrow/cancel` — $0.02 — Cancel an active escrow and return locked funds to the depositor. For dispute resolution, expired milestones, or abandoned-contract cleanup.
+  search: cancel escrow, refund escrow, void contract, return funds, escrow dispute, cancel payment
+- `POST /api/v1/escrow/create` — $0.10 — Create an on-chain escrow holding funds until release conditions are met. Trustless conditional payment between two parties.
+  search: escrow, conditional payment, hold funds, milestone payment, trustless payment, release on completion, dispute protection
+- `POST /api/v1/escrow/fund` — $0.02 — Deposit USDC into an existing escrow to lock funds pending conditions. Required after escrow/create and before escrow/release.
+  search: fund escrow, deposit escrow, lock funds, escrow deposit, add funds, fund contract
+- `GET /api/v1/escrow/list` — $0.02 — List active and historical escrow contracts for a wallet with status, locked amounts, counterparties, and release conditions. For contract oversight.
+  search: list escrows, active escrows, escrow status, pending payments, locked funds, contract list
+- `POST /api/v1/escrow/release` — $0.08 — Release locked escrow funds to the recipient once conditions are met, finalizing a trustless payment. Pairs with escrow/create and escrow/fund.
+  search: release escrow, release funds, complete escrow, finalize payment, escrow payout, trustless release
+
+## Free Tier (No Wallet)
+
+- `GET /free/agent-card` — free — Look up AI agent registration from ERC-8004 Identity Registry on Base. No payment required.
+  search: ERC-8004, agent card, agent registry, agent identity, agent lookup
+- `GET /free/chain-status` — free — Block height and liveness for 7 EVM chains. No payment required.
+  search: chain status, block height, chain health, network status
+- `GET /free/convert` — free — Convert between fiat and crypto or between native units (wei/gwei/lamports/drops). No payment required.
+  search: convert, unit conversion, fiat to crypto, wei to ETH, currency convert
+- `GET /free/estimate-batch` — free — Rough cost estimate for batch payments by recipient count and chain. No payment required.
+  search: batch estimate, rough estimate, cost preview, free estimate
+- `GET /free/gas` — free — Gas prices across 7 EVM chains (Base, Ethereum, Arbitrum, Polygon, Optimism, Avalanche, BSC). Cached 15s. No payment required.
+  search: gas price, free gas, network fee, gwei, base fee
+- `GET /free/nonce` — free — Transaction count (nonce) for any EVM address. No payment required.
+  search: nonce, transaction count, tx count, pending nonce
+- `GET /free/prices` — free — USDC, ETH, SOL spot prices in USD. Cached 60s. No payment required.
+  search: token price, free price, ETH price, SOL price, spot price
+- `GET /free/resolve` — free — Resolve ENS name or Basename to an address. Cached 5min. No payment required.
+  search: ENS resolve, basename, name resolution, free resolve
+- `GET /free/timestamp` — free — Current Unix timestamp in seconds, milliseconds, and ISO 8601. No payment required.
+  search: timestamp, unix time, current time, epoch
+- `GET /free/uuid` — free — Generate UUID v4 identifiers (up to 100). No payment required.
+  search: uuid, unique id, generate id, uuid v4
+- `GET /free/validate-address` — free — Validate blockchain address format for EVM, Solana, XRP, Stellar. Pure checksum. No payment required.
+  search: validate address, address check, checksum, verify address
+- `POST /free/validate-batch` — free — Validate a BPA 1.0 batch payment payload (schema only, no cost data). No payment required.
+  search: validate batch, BPA validation, schema check, batch preflight
+- `POST /free/x402-check` — free — Probe any URL to check x402 payment support, pricing, and .well-known discovery. No payment required.
+  search: x402 check, x402 probe, payment check, 402 detect, x402 scan
+
+## GPU / Compute
+
+- `GET /api/v1/gpu/models` — free — Free discovery endpoint listing available GPU model shortcuts (image, video, LLM, audio) with pricing. Call before gpu/run.
+  search: GPU models, available models, model list, Replicate models, model catalog, which GPU models
+- `POST /api/v1/gpu/run` — $0.06 — Run GPU inference via Replicate: image, video, audio, and LLM workloads.
+  search: GPU inference, run AI model, image generation, video generation, model inference, Replicate, run model
+- `GET /api/v1/gpu/status/:id` — $0.005 — Poll the status of a GPU prediction job by ID and retrieve output when complete. Call after gpu/run.
+  search: GPU status, prediction status, job status, check GPU job, Replicate status, inference status, poll job
+
+## Identity & Auth
+
+- `POST /api/v1/auth/session` — $0.01 — Create an authenticated session token with scoped permissions and TTL for an address. For agent auth and delegated access.
+  search: auth session, create session, login, access token, session token, authentication, delegated access, API session
+- `GET /api/v1/auth/verify` — $0.005 — Verify a session token and return its validity and granted permissions.
+  search: verify token, validate session, check auth, token verification, auth check
+- `GET /api/v1/kyc/status` — $0.01 — Check the status and result of a previously submitted KYC/sanctions verification.
+  search: KYC status, verification status, compliance status, screening result, check KYC
+- `POST /api/v1/kyc/verify` — $0.02 — Screen a wallet or person against OFAC sanctions lists for compliance. Returns risk result and match details.
+  search: KYC, sanctions screening, OFAC, compliance check, AML, know your customer, watchlist screening, wallet screening
+- `GET /api/v1/resolve` — $0.002 — Resolve an ENS name or Base name to its wallet address (and reverse). For human-readable addresses.
+  search: ENS, Basename, resolve name, name to address, ENS lookup, .eth, reverse resolve, human readable address
+
+## Infrastructure (RPC/Storage/Webhooks)
+
+- `POST /api/v1/cron/cancel` — $0.002 — Cancel a scheduled cron job so it no longer runs.
+  search: cancel cron, stop scheduled job, remove job, delete schedule, unschedule
+- `POST /api/v1/cron/create` — $0.01 — Schedule a recurring or one-time job (payments, API calls, on-chain actions) with cron syntax. For automation and recurring payouts.
+  search: cron, schedule job, recurring task, automate, scheduled payment, timer, recurring payout, task scheduler
+- `GET /api/v1/cron/list` — $0.002 — List scheduled cron jobs with their schedules, actions, and next run times.
+  search: list cron jobs, scheduled tasks, my jobs, view schedules, recurring jobs
+- `POST /api/v1/logs/ingest` — $0.002 — Ingest structured log entries for agent observability and audit trails. Batch up to many entries per call.
+  search: ingest logs, log events, structured logging, observability, send logs, agent logging, telemetry
+- `GET /api/v1/logs/query` — $0.005 — Query ingested structured logs by service, level, and time range. For debugging and monitoring agent activity.
+  search: query logs, search logs, log search, read logs, debug logs, monitoring, log analytics
+- `POST /api/v1/rpc/call` — $0.001 — Make a raw JSON-RPC call to Base, Ethereum, and other supported chains. Premium multi-chain node access without running your own.
+  search: RPC, JSON-RPC, node access, eth_call, blockchain query, read chain state, Infura alternative, Alchemy alternative
+- `GET /api/v1/rpc/chains` — $0.001 — List chains supported by the multi-chain RPC endpoint with their IDs and allowed methods. Call before rpc/call.
+  search: RPC chains, supported networks, chain list, available chains, node networks
+- `GET /api/v1/storage/get` — $0.005 — Retrieve content from IPFS or Arweave by CID. Pairs with storage/pin.
+  search: IPFS get, retrieve from IPFS, fetch by CID, read decentralized storage, download pinned content
+- `POST /api/v1/storage/pin` — $0.01 — Pin content to IPFS or Arweave for permanent decentralized storage. Returns a CID for retrieval.
+  search: IPFS, Arweave, pin file, decentralized storage, store data permanently, upload to IPFS, content addressing, pin content
+- `GET /api/v1/storage/status` — $0.002 — Check the pin status of content on IPFS or Arweave (pinned, pending, or failed).
+  search: pin status, IPFS status, storage status, check pin, pinning state
+
+## Invoicing
+
+- `GET /api/v1/invoice/:id` — $0.001 — Retrieve a single invoice by ID with payment status, recipient, amount, and on-chain settlement details. For payment verification and reconciliation.
+  search: get invoice, invoice lookup, invoice details, check payment, payment confirmation, invoice status
+- `POST /api/v1/invoice/create` — $0.05 — Create a crypto-native invoice with on-chain payment tracking in USDC on Base/Ethereum. For contractor billing, vendor payments, and AR workflows.
+  search: create invoice, crypto invoice, billing, accounts receivable, payment request, invoice generation, on-chain invoice
+- `GET /api/v1/invoice/list` — $0.01 — List invoices for a wallet or org with status, amounts, and payment history. For AR tracking, status monitoring, and financial reporting.
+  search: list invoices, invoice history, unpaid invoices, invoice status, outstanding payments, billing history
+
+## KYC & Compliance
+
+- `POST /api/v1/audit/log` — $0.001 — Record an immutable audit-trail entry (action, actor, resource) for compliance and accountability.
+  search: audit log, audit trail, compliance record, activity log, record action, accountability, immutable log
+- `GET /api/v1/audit/query` — $0.03 — Query the audit trail by actor, action, and time range for compliance reporting and investigations.
+  search: query audit, audit search, compliance report, activity history, investigate actions, audit trail lookup
+- `POST /api/v1/tax/calculate` — $0.08 — Calculate crypto capital gains and losses using FIFO accounting across a set of transactions. For tax reporting.
+  search: crypto tax, capital gains, FIFO, tax calculation, gain loss, cost basis, tax accounting, calculate taxes
+- `GET /api/v1/tax/report` — $0.05 — Generate an IRS Form 8949-compatible tax report from calculated gain/loss events.
+  search: tax report, IRS 8949, crypto tax report, capital gains report, tax form, 8949, tax filing
+
+## On-Chain Analytics
+
+- `GET /api/v1/analytics/txhistory` — $0.008 — Full transaction history for any wallet across Base and Ethereum: decoded transfers, swaps, contract calls, and timestamps. For portfolio tracking and due diligence.
+  search: transaction history, tx history, wallet history, past transactions, on-chain activity, transfer history, defi history
+- `GET /api/v1/analytics/wallet` — $0.01 — Wallet profile: balances, top tokens, activity tier, age, and risk signals for any address.
+  search: wallet analysis, address profile, wallet risk, wallet reputation, check wallet, due diligence, wallet score
+
+## Payroll
+
+- `POST /api/v1/payroll/estimate` — $0.003 — Estimate total cost and gas for a payroll run before execution. Returns per-recipient breakdown. Call before payroll/execute.
+  search: payroll estimate, salary estimate, payment cost, payroll preview, fee estimate, payroll dry run
+- `POST /api/v1/payroll/execute` — $0.10 — Run payroll: batch USDC/stablecoin payments to a list of employees or contractors in one transaction.
+  search: payroll, pay employees, pay contractors, salary payments, stablecoin payroll, recurring payouts, crypto payroll
+- `GET /api/v1/payroll/tokens` — $0.002 — List stablecoins supported for payroll (USDC, USDT, DAI) across Base, Ethereum and Solana. Call before payroll/execute to pick the payout token.
+  search: payroll tokens, supported stablecoins, pay in USDC, salary token, payment currency, payroll assets
+
+## Price & Gas Oracle
+
+- `GET /api/v1/oracle/fx` — $0.008 — Live stablecoin and fiat FX rates (USDC, USDT, DAI, major fiat). Use for multi-currency payroll and cross-border payment normalization.
+  search: FX rates, exchange rates, fiat conversion, stablecoin rates, currency conversion, forex, USD to EUR
+- `GET /api/v1/oracle/gas` — $0.005 — Current gas prices across Base, Ethereum and supported chains with fast/standard/slow tiers. Time transactions and avoid overpaying.
+  search: gas price, gas fee, transaction cost, gwei, base fee, priority fee, network fee
+- `GET /api/v1/oracle/prices` — $0.008 — Aggregated oracle price feed across multiple sources.
+  search: crypto prices, token price, price feed, ETH price, BTC price, market data, oracle
+
+## Research & Reference
+
+- `GET /api/v1/research/biomedical/by-pmid` — $0.001 — Paper metadata by PubMed ID.
+  search: PMID, PubMed lookup, medical paper
+- `GET /api/v1/research/biomedical/related` — $0.002 — Related articles for a PubMed ID.
+  search: related articles, similar papers, PubMed related
+- `GET /api/v1/research/biomedical/search` — $0.002 — Search 36M+ biomedical papers in PubMed.
+  search: PubMed, biomedical search, medical literature
+- `GET /api/v1/research/chemistry/bioactivity` — $0.002 — Biological assay results for a PubChem compound.
+  search: bioactivity, assay, drug screening
+- `GET /api/v1/research/chemistry/compound` — $0.002 — PubChem compound by name, formula, or CID.
+  search: PubChem, chemical compound, molecule, CID
+- `GET /api/v1/research/chemistry/similarity` — $0.002 — Find structurally similar compounds in PubChem.
+  search: compound similarity, structure search, cheminformatics
+- `GET /api/v1/research/demographics/census` — $0.001 — US Census data by state, county, or zip.
+  search: census, demographics, population data
+- `GET /api/v1/research/demographics/datasets` — $0.001 — Search Data.gov datasets by keyword.
+  search: Data.gov, open data, government datasets
+- `GET /api/v1/research/dictionary/define` — $0.001 — Dictionary definition with phonetics and examples.
+  search: dictionary, definition, define word, meaning
+- `GET /api/v1/research/dictionary/phonetics` — $0.001 — Phonetic transcription and audio URL.
+  search: phonetics, pronunciation, IPA
+- `GET /api/v1/research/dictionary/synonyms` — $0.001 — Synonyms and antonyms for a word.
+  search: synonyms, antonyms, thesaurus
+- `GET /api/v1/research/papers/by-author` — $0.002 — Papers by author name or ORCID (OpenAlex).
+  search: papers by author, ORCID, author search
+- `GET /api/v1/research/papers/by-doi` — $0.001 — Paper metadata by DOI (OpenAlex).
+  search: paper by DOI, DOI lookup, citation metadata
+- `GET /api/v1/research/papers/citations` — $0.002 — Citation graph - cited-by count and references.
+  search: citations, cited by, citation graph
+- `GET /api/v1/research/papers/search` — $0.002 — Search 250M+ academic papers (OpenAlex CC0).
+  search: academic papers, research search, OpenAlex, scholarly
+- `GET /api/v1/research/papers/trending` — $0.002 — Trending papers by topic in the last N days.
+  search: trending papers, hot papers, popular research
+- `GET /api/v1/research/preprints/by-id` — $0.001 — arXiv preprint metadata by ID.
+  search: arXiv id, preprint lookup
+- `GET /api/v1/research/preprints/recent` — $0.002 — Latest arXiv preprints by category.
+  search: recent preprints, new arXiv, latest research
+- `GET /api/v1/research/preprints/search` — $0.002 — Search arXiv preprints by keyword and category.
+  search: arXiv, preprints, preprint search
+- `GET /api/v1/research/scholarly/by-doi` — $0.001 — Full Crossref metadata for any DOI.
+  search: Crossref, DOI metadata, scholarly record
+- `GET /api/v1/research/scholarly/citations-count` — $0.001 — Citation count and references for a DOI.
+  search: citation count, reference count, impact
+- `GET /api/v1/research/scholarly/journal-info` — $0.001 — Journal metadata by ISSN.
+  search: journal, ISSN, journal metadata
+- `GET /api/v1/research/scholarly/search` — $0.002 — Search 150M+ works via Crossref (CC0).
+  search: Crossref search, scholarly works, literature search
+
+## Robot Task Protocol (RTP)
+
+- `POST /api/v1/robots/complete` — free — Report completion of an RTP robot task and trigger escrow release. Called by the robot.
+  search: complete task, robot task done, RTP complete, report completion, finish robot task
+- `POST /api/v1/robots/deregister` — free — Remove a robot from the RTP network so it no longer receives tasks. Free.
+  search: deregister robot, remove robot, offboard robot, delete robot, take robot offline
+- `GET /api/v1/robots/list` — $0.005 — 
+- `GET /api/v1/robots/profile` — $0.002 — Get the full capability profile of an RTP robot — supported tasks, pricing, and location.
+  search: robot profile, robot capabilities, RTP profile, robot details, what can robot do
+- `POST /api/v1/robots/register` — free — Register a robot on the Robot Task Protocol (RTP) network with its capabilities and pricing. Free to register.
+  search: register robot, RTP, robot network, add robot, robot onboarding, physical robot, robotics
+- `GET /api/v1/robots/status` — $0.002 — Poll the status of a dispatched RTP robot task (pending, in-progress, complete) and retrieve results.
+  search: robot task status, RTP status, task progress, check robot task, poll task
+- `POST /api/v1/robots/task` — $0.05 — 
+- `PATCH /api/v1/robots/update` — free — Update an RTP robot's capabilities, pricing, or availability. Free for registered operators.
+  search: update robot, edit robot, change robot pricing, robot availability, modify robot
+
+## Search & RAG
+
+- `POST /api/v1/search/extract` — $0.02 — Extract clean, LLM-ready text content from a list of URLs. For RAG pipelines and web scraping.
+  search: extract content, scrape URL, web scraping, clean text, RAG, extract article, url to text, content extraction
+- `POST /api/v1/search/qna` — $0.03 — Question answering over fresh web results. Retrieval-augmented generation (RAG) out of the box.
+  search: question answering, RAG, ask the web, AI search, answer questions, retrieval augmented generation
+- `POST /api/v1/search/web` — $0.02 — Web search powered by Tavily. Returns ranked URLs with snippets.
+  search: web search, search the internet, google search, find URLs, web results, search engine
+
+## Supply Chain (SCTP)
+
+- `POST /api/v1/sctp/invoice` — $0.02 — Submit an invoice against an SCTP purchase order for verification and payment.
+  search: submit invoice, SCTP invoice, supplier invoice, B2B invoice, trade invoice, bill against PO
+- `GET /api/v1/sctp/invoice/:id` — $0.005 — Get an SCTP invoice by ID with its verification result and payment status.
+  search: invoice details, get invoice, SCTP invoice lookup, invoice status, view invoice
+- `POST /api/v1/sctp/invoice/verify` — $0.03 — 
+- `POST /api/v1/sctp/pay` — $0.10 — 
+- `POST /api/v1/sctp/po` — $0.02 — Create a purchase order in SCTP with line items and currency. For B2B procurement and trade.
+  search: purchase order, create PO, procurement, SCTP PO, B2B order, trade order, supply chain order
+- `GET /api/v1/sctp/po/:id` — $0.005 — Get details for an SCTP purchase order by ID.
+  search: purchase order details, get PO, SCTP PO lookup, order status, view PO
+- `POST /api/v1/sctp/supplier` — $0.02 — Register a supplier in the Supply Chain Trade Protocol (SCTP) with wallet and payment preferences.
+  search: register supplier, SCTP, supply chain, vendor onboarding, add supplier, trade protocol, B2B payments
+- `GET /api/v1/sctp/supplier/:id` — $0.005 — Get details for a registered SCTP supplier by ID.
+  search: supplier details, get supplier, SCTP supplier, vendor info, supplier lookup
+
+## Trust & Safety
+
+- `GET /api/v1/trust/score` — $0.03 — Multi-dimensional wallet/agent trust score via ProofLayer. Financial, reliability, trust, social axes + XMTP reputation + on-chain signals. Counterparty due diligence for agent-to-agent payments.
+  search: trust score, wallet reputation, agent trust, counterparty check, ProofLayer, wallet score, agent reputation, due diligence, XMTP reputation, wallet risk
+

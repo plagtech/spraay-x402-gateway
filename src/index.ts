@@ -110,6 +110,7 @@ import { tokenSafetyHandler } from "./routes/tokenSafety.js";
 import { addressSafetyHandler } from "./routes/addressSafety.js";
 import { trustScoreHandler } from "./routes/trustScore.js";
 import { txDecodeHandler } from "./routes/txDecode.js";
+import discoveryRoutes from "./routes/discovery.routes.js";
 
 dotenv.config();
 const app = express();
@@ -122,6 +123,7 @@ app.use(cors({
 }));
 app.post("/v1/webhooks/stripe", express.raw({ type: "application/json" }), stripeWebhookHandler);
 app.use(express.json());
+app.use(discoveryRoutes);
 
 // Catch malformed JSON bodies → return structured JSON, not HTML.
 // Without this, body-parser throws and agents get an unparseable HTML 400.
@@ -1841,64 +1843,6 @@ _gateway: { provider: "spraay", version: "3.8.1", protocols: ["x402", "mpp", "so
   });
 });
 
-// LLM crawler standard — plain text summary
-app.get("/llms.txt", (_req, res) => {
-  const body = `# Spraay x402 Gateway
-
-Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
-
-## What this is
-Spraay provides ${PAID_COUNT} paid API endpoints (${TOTAL_COUNT} total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
-
-## Payment details
-- Protocol: x402 (https://x402.org)
-- Network: Base mainnet (EVM, chainId 8453)
-- Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
-- Pay to: ${PAY_TO}
-- Facilitator: Coinbase CDP
-- Solana rail: USDC payments also accepted on Solana — see ${BASE_URL}/.well-known/solana.json, research
-
-## Categories
-ai, payments, defi, oracle, bridge, payroll, invoice, analytics, escrow, inference, communication, infrastructure, identity, compliance, gpu, search, compute, compute-futures, rtp, agent-wallet, supply-chain, bittensor
-
-## Getting started
-1. Fund an agent wallet with USDC on Base
-2. Send a request to any endpoint below
-3. Receive 402 Payment Required with x402 payment terms
-4. Retry with the x402 payment header
-5. Receive 200 with your data
-
-## Example endpoints
-POST ${BASE_URL}/api/v1/chat/completions — $0.04 — OpenAI-compatible chat via 200+ models
-POST ${BASE_URL}/bittensor/v1/chat/completions — $0.03 — Bittensor SN64 decentralized inference
-POST ${BASE_URL}/api/v1/batch/execute — $0.02 — Batch USDC payments to up to 200 recipients
-GET ${BASE_URL}/api/v1/oracle/prices — $0.008 — Multi-source price feed
-GET ${BASE_URL}/api/v1/swap/quote — $0.008 — Uniswap V3 / Aerodrome quote
-GET ${BASE_URL}/api/v1/research/papers/search — $0.002 — Search 250M+ academic papers (OpenAlex)
-POST ${BASE_URL}/api/v1/escrow/create — $0.10 — On-chain trustless escrow
-POST ${BASE_URL}/api/v1/payroll/execute — $0.10 — Crypto payroll run
-POST ${BASE_URL}/api/v1/compute-futures/deposit — $0.01 — Prepaid compute credits with tier discounts
-POST ${BASE_URL}/api/v1/gpu/run — $0.06 — GPU workload execution
-POST ${BASE_URL}/api/v1/search/qna — $0.03 — Structured Q&A search with sources
-POST ${BASE_URL}/api/v1/robots/task — $0.05 — Dispatch paid robot task (RTP)
-
-## Resources
-- Full x402 manifest: ${BASE_URL}/.well-known/x402.json
-- Solana discovery: ${BASE_URL}/.well-known/solana.json
-- Agent card (A2A): ${BASE_URL}/.well-known/agent.json
-- OpenAPI 3.1 spec: ${BASE_URL}/openapi.json
-- MCP server card: ${BASE_URL}/.well-known/mcp/server-card.json
-- Docs: https://docs.spraay.app
-- GitHub: https://github.com/plagtech/spraay-x402-gateway
-- MCP on Smithery: https://smithery.ai/servers/Plagtech/Spraay-x402-mcp
-
-## Contact
-Twitter: @Spraay_app
-Email: hello@spraay.app
-`;
-  res.type("text/plain; charset=utf-8").send(body);
-});
- 
 // OpenAPI 3.1 spec — x402 + MPP discovery compatible (full schemas)
 app.get("/openapi.json", (_req, res) => {
   const endpoints = [
