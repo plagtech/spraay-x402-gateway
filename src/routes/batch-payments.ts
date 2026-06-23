@@ -259,6 +259,18 @@ export async function batchPaymentHandler(req: Request, res: Response) {
       };
     }
 
+    // 💧 Loop-native webhook callback
+    if (req.webhookCallback) {
+      const webhook = await req.webhookCallback('batch.created', {
+        recipient_count: recipients.length,
+        token: token.symbol,
+        chain: 'base',
+        total_amount: ethers.formatUnits(totalRaw, token.decimals),
+        total_with_fee: ethers.formatUnits(totalWithFee, token.decimals),
+        contract: SPRAAY_CONTRACT,
+      });
+      response.webhook = webhook;
+    }
     return res.json(response);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
