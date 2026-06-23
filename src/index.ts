@@ -111,6 +111,9 @@ import { addressSafetyHandler } from "./routes/addressSafety.js";
 import { trustScoreHandler } from "./routes/trustScore.js";
 import { txDecodeHandler } from "./routes/txDecode.js";
 import discoveryRoutes from "./routes/discovery.routes.js";
+// 💧 Loop-native webhook callbacks
+import { WebhookService, webhookMiddleware, startWebhookWorker, createWebhookRouter } from "./webhooks/index.js";
+import { supabase } from "./middleware/supabase.js";
 
 dotenv.config();
 const app = express();
@@ -163,6 +166,9 @@ app.use(protocolDetectorMiddleware);
 app.use(solanaPaymentMiddleware);     
 app.use(mppMiddleware);
 app.use(apiKeyAuthMiddleware);
+const webhookService = new WebhookService(supabase!);
+app.use(webhookMiddleware(webhookService));
+app.use("/api/v1/callbacks", createWebhookRouter(webhookService));
 // ════════════════════════════════════════════════════════════
 // PAID ROUTES — single source of truth.
 // PAID_COUNT is computed from this object and used in every
@@ -2674,6 +2680,8 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 app.listen(PORT, async () => {
   await initMpp();
+const webhookWorker = startWebhookWorker(supabase!, { pollIntervalMs: 5_000, batchSize: 25 });
+  process.on("SIGTERM", () => webhookWorker.stop());
   console.log(`\n💧 Spraay x402 Gateway v3.8.1 running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
@@ -2691,6 +2699,7 @@ app.listen(PORT, async () => {
   console.log(`☀️  Solana Helius DAS endpoints active — assets-by-owner + asset${process.env.HELIUS_API_KEY ? "" : " (HELIUS_API_KEY missing — endpoints will 503)"}`);
   console.log(`☀️  Solana Pyth price feeds active — price + prices (Hermes public API)`);
   console.log(`📚 Research & Reference active — dictionary, papers, preprints, chemistry, biomedical, demographics (23 endpoints)`);
+  console.log(`🔁 Loop-native webhook callbacks active — /api/v1/callbacks`);
   console.log(`💧 Free Tier active — 14 endpoints at /free/* (gas, prices, chain-status, nonce, validate, resolve, agent-card, x402-check, convert)`);
   console.log(`\n🌐 ${PAID_COUNT} paid + ${FREE_COUNT} free endpoints live (${TOTAL_COUNT} total)\n`);
 });
