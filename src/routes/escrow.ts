@@ -94,7 +94,7 @@ export async function escrowCreateHandler(req: Request, res: Response) {
     await escrowDb.create(escrow);
     trackRequest("escrow_create");
 
-    return res.json({
+    const response: any = {
       status: "created",
       escrow: { id: escrowId, depositor, beneficiary, arbiter: arbiter || null, token: { symbol: tokenInfo.symbol, address: tokenInfo.address, decimals: tokenInfo.decimals }, amount, amountRaw: amountRaw.toString(), description: description || null, conditions: escrow.conditions, status: "created", expiresAt, expiresInHours: hours },
       actions: {
@@ -105,7 +105,17 @@ export async function escrowCreateHandler(req: Request, res: Response) {
       },
       _gateway: { provider: "spraay-x402", version: "2.8.0", endpoint: "POST /api/v1/escrow/create" },
       timestamp: now.toISOString(),
-    });
+    };
+
+    // 💧 Loop-native webhook callback
+    if (req.webhookCallback) {
+      response.webhook = await req.webhookCallback('escrow.created' as any, {
+        escrow_id: escrowId, depositor, beneficiary, token: tokenInfo.symbol,
+        amount, expires_at: expiresAt,
+      });
+    }
+
+    return res.json(response);
   } catch (error: any) {
     console.error("Escrow create error:", error.message);
     return res.status(500).json({ error: "Failed to create escrow", details: error.message });
@@ -153,13 +163,23 @@ export async function escrowFundHandler(req: Request, res: Response) {
     await escrowDb.update(escrowId, { status: "funded", fundedAt: now });
     trackRequest("escrow_fund");
 
-    return res.json({
+    const response: any = {
       status: "funded",
       escrow: { id: escrow.id, status: "funded", amount: escrow.amount, token: escrow.token.symbol, fundedAt: now, beneficiary: escrow.beneficiary },
       nextSteps: ["POST /api/v1/escrow/release with { escrowId, caller }", "POST /api/v1/escrow/cancel with { escrowId, caller }"],
       _gateway: { provider: "spraay-x402", version: "2.8.0" },
       timestamp: now,
-    });
+    };
+
+    // 💧 Loop-native webhook callback
+    if (req.webhookCallback) {
+      response.webhook = await req.webhookCallback('escrow.funded' as any, {
+        escrow_id: escrow.id, amount: escrow.amount, token: escrow.token.symbol,
+        beneficiary: escrow.beneficiary, funded_at: now,
+      });
+    }
+
+    return res.json(response);
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to fund escrow", details: error.message });
   }
@@ -186,13 +206,24 @@ export async function escrowReleaseHandler(req: Request, res: Response) {
     await escrowDb.update(escrowId, { status: "released", releasedAt: now });
     trackRequest("escrow_release");
 
-    return res.json({
+    const response: any = {
       status: "released",
       escrow: { id: escrow.id, status: "released", amount: escrow.amount, token: escrow.token.symbol, depositor: escrow.depositor, beneficiary: escrow.beneficiary, releasedBy: isDepositor ? "depositor" : "arbiter", releasedAt: now },
       transaction: { to: escrow.token.address, data: transferCalldata, value: "0x0", chainId: CHAIN_ID, signer: escrow.depositor },
       _gateway: { provider: "spraay-x402", version: "2.8.0" },
       timestamp: now,
-    });
+    };
+
+    // 💧 Loop-native webhook callback
+    if (req.webhookCallback) {
+      response.webhook = await req.webhookCallback('escrow.released' as any, {
+        escrow_id: escrow.id, amount: escrow.amount, token: escrow.token.symbol,
+        beneficiary: escrow.beneficiary, released_by: isDepositor ? "depositor" : "arbiter",
+        released_at: now,
+      });
+    }
+
+    return res.json(response);
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to release escrow", details: error.message });
   }
@@ -217,12 +248,23 @@ export async function escrowCancelHandler(req: Request, res: Response) {
     await escrowDb.update(escrowId, { status: "cancelled", cancelledAt: now });
     trackRequest("escrow_cancel");
 
-    return res.json({
+    const response: any = {
       status: "cancelled",
       escrow: { id: escrow.id, status: "cancelled", amount: escrow.amount, token: escrow.token.symbol, cancelledBy: isDepositor ? "depositor" : "arbiter", cancelledAt: now, wasFunded: escrow.fundedAt !== null },
       _gateway: { provider: "spraay-x402", version: "2.8.0" },
       timestamp: now,
-    });
+    };
+
+    // 💧 Loop-native webhook callback
+    if (req.webhookCallback) {
+      response.webhook = await req.webhookCallback('escrow.disputed' as any, {
+        escrow_id: escrow.id, amount: escrow.amount, token: escrow.token.symbol,
+        cancelled_by: isDepositor ? "depositor" : "arbiter", was_funded: escrow.fundedAt !== null,
+        cancelled_at: now,
+      });
+    }
+
+    return res.json(response);
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to cancel escrow", details: error.message });
   }

@@ -264,7 +264,7 @@ export async function payrollExecuteHandler(req: Request, res: Response) {
 
     trackRequest("payroll_execute");
 
-    return res.json({
+    const response: any = {
       status: "ready",
       payroll: {
         token: {
@@ -322,7 +322,22 @@ export async function payrollExecuteHandler(req: Request, res: Response) {
         endpoint: "POST /api/v1/payroll/execute",
       },
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    // 💧 Loop-native webhook callback
+    if (req.webhookCallback) {
+      response.webhook = await req.webhookCallback('batch.created' as any, {
+        type: 'payroll',
+        employee_count: employees.length,
+        token: tokenInfo.symbol,
+        chain: 'base',
+        total_amount: formatUnits(totalRaw, tokenInfo.decimals),
+        total_with_fee: formatUnits(totalWithFee, tokenInfo.decimals),
+        memo: memo || null,
+      });
+    }
+
+    return res.json(response);
   } catch (error: any) {
     console.error("Payroll execute error:", error.message);
     return res.status(500).json({
