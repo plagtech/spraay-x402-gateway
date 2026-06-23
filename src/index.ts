@@ -114,6 +114,7 @@ import discoveryRoutes from "./routes/discovery.routes.js";
 // 💧 Loop-native webhook callbacks
 import { WebhookService, webhookMiddleware, startWebhookWorker, createWebhookRouter } from "./webhooks/index.js";
 import { supabase } from "./middleware/supabase.js";
+import { loopRateLimiter, duplicatePaymentGuard } from "./middleware/loop-safety.js";
 
 dotenv.config();
 const app = express();
@@ -169,6 +170,14 @@ app.use(apiKeyAuthMiddleware);
 const webhookService = new WebhookService(supabase!);
 app.use(webhookMiddleware(webhookService));
 app.use("/api/v1/callbacks", createWebhookRouter(webhookService));
+// 💧 Loop safety guards
+app.use(loopRateLimiter());
+app.use("/api/v1/batch", duplicatePaymentGuard());
+app.use("/api/v1/escrow", duplicatePaymentGuard());
+app.use("/api/v1/payroll", duplicatePaymentGuard());
+app.use("/api/v1/stellar", duplicatePaymentGuard());
+app.use("/api/v1/xrp", duplicatePaymentGuard());
+app.use("/api/v1/wallet/send-transaction", duplicatePaymentGuard());
 // ════════════════════════════════════════════════════════════
 // PAID ROUTES — single source of truth.
 // PAID_COUNT is computed from this object and used in every
