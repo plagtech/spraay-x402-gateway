@@ -38,6 +38,7 @@ import { auditLogHandler, auditQueryHandler } from "./routes/audit.js";
 import { taxCalculateHandler, taxReportHandler } from "./routes/tax.js";
 // NEW: GPU/Compute
 import { gpuRunHandler, gpuStatusHandler, gpuModelsHandler } from "./routes/gpu.js";
+import { gpuDirectRunHandler, gpuDirectRegisterHandler, gpuDirectOperatorsHandler, gpuDirectQuoteHandler } from "./routes/gpu-direct.js";
 // NEW: Wallet Provisioning (Category 14)
 import { walletCreateHandler, walletGetHandler, walletListHandler, walletSignMessageHandler, walletSendTxHandler, walletAddressesHandler } from "./routes/wallet.js";
 // NEW: Agent Wallet (Category 17)
@@ -688,6 +689,13 @@ const paidRoutes = {
         accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "GPU/Compute — check prediction status for async jobs.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { id: "abc123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { id: "abc123", status: "succeeded", output: [] }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+      },
+
+      // ---- GPU DIRECT (operator-fulfilled, instant USDC payout) ----
+      "POST /api/v1/gpu-direct/run": {
+        accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }],
+        description: "GPU inference via Spraay Direct operator — instant USDC settlement to GPU host.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { model: "llama-3.1-8b", input: { prompt: "Hello" } }, inputSchema: { properties: { model: { type: "string" }, input: { type: "object" } }, required: ["model", "input"] }, bodyType: "json", output: { example: { status: "succeeded", output: "...", settlement: { currency: "USDC", chain: "base", amount: "0.03", timing: "instant" } }, schema: { properties: { status: { type: "string" }, output: {} } } } }) },
       },
 
       // ---- SEARCH/RAG ----
@@ -2568,6 +2576,11 @@ app.get("/api/v1/tax/report", taxReportHandler);
 app.post("/api/v1/gpu/run", gpuRunHandler);
 app.get("/api/v1/gpu/status/:id", gpuStatusHandler);
 app.get("/api/v1/gpu/models", gpuModelsHandler);
+// GPU Direct (operator-fulfilled inference — instant USDC payouts)
+app.post("/api/v1/gpu-direct/register", gpuDirectRegisterHandler);
+app.post("/api/v1/gpu-direct/run", gpuDirectRunHandler);
+app.get("/api/v1/gpu-direct/operators", gpuDirectOperatorsHandler);
+app.get("/api/v1/gpu-direct/quote", gpuDirectQuoteHandler);
 // Search/RAG
 app.post("/api/v1/search/web", searchWebHandler);
 app.post("/api/v1/search/extract", searchExtractHandler);
