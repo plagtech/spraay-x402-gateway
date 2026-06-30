@@ -72,7 +72,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     description: "List all available AI models across providers (OpenRouter + BlockRun). Returns model IDs, context windows, and capabilities.",
     example_response: { models: [{ id: "openai/gpt-4o-mini", context_length: 128000 }], count: 200 },
     related_endpoints: [
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Run inference on any listed model" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Run inference on any listed model" },
       { method: "POST", path: "/bittensor/v1/chat/completions", price: "$0.03", why: "Decentralized inference via Bittensor SN64" },
     ],
   },
@@ -91,7 +91,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
       choices: [{ message: { role: "assistant", content: "Bittensor is a decentralized AI network..." } }],
     },
     related_endpoints: [
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Fallback to centralized models (OpenRouter/BlockRun)" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Fallback to centralized models (OpenRouter/BlockRun)" },
       { method: "POST", path: "/api/v1/search/qna", price: "$0.03", why: "Augment Bittensor inference with web search" },
     ],
   },
@@ -223,7 +223,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     example_response: { symbol: "ETH", priceUsd: "3842.15", sources: ["chainlink", "pyth"], confidence: 0.99 },
     related_endpoints: [
       { method: "GET", path: "/api/v1/swap/quote", price: "$0.008", why: "Use oracle prices to validate swap quotes" },
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Feed prices into AI for financial analysis" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Feed prices into AI for financial analysis" },
     ],
   },
   "GET /api/v1/oracle/gas": {
@@ -452,7 +452,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     example_request: { data: { txs: [] }, style: "concise" },
     example_response: { summary: "This wallet is an active DeFi trader focused on stablecoin arbitrage..." },
     related_endpoints: [
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Extend summaries with custom prompts" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Extend summaries with custom prompts" },
       { method: "POST", path: "/api/v1/search/qna", price: "$0.03", why: "Answer questions about the summarized data" },
     ],
   },
@@ -718,7 +718,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     example_response: { jobId: "gpu_abc", status: "running", estimatedCompleteAt: "..." },
     related_endpoints: [
       { method: "GET", path: "/api/v1/gpu/status/:id", price: "$0.005", why: "Poll job completion status" },
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Describe or refine GPU outputs via chat" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Describe or refine GPU outputs via chat" },
     ],
   },
   "GET /api/v1/gpu/status/:id": {
@@ -748,7 +748,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     example_response: { title: "...", markdown: "...", wordCount: 1240 },
     related_endpoints: [
       { method: "POST", path: "/api/v1/search/qna", price: "$0.03", why: "Ask questions about extracted content" },
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Summarize or analyze extracted content" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Summarize or analyze extracted content" },
     ],
   },
   "POST /api/v1/search/qna": {
@@ -756,7 +756,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     example_request: { question: "What is x402 USDC facilitator?" },
     example_response: { answer: "...", citations: [{ url: "...", snippet: "..." }], confidence: 0.92 },
     related_endpoints: [
-      { method: "POST", path: "/api/v1/chat/completions", price: "$0.04", why: "Extend Q&A with conversational follow-up" },
+      { method: "POST", path: "/api/v1/chat/completions", price: "$0.005", why: "Extend Q&A with conversational follow-up" },
       { method: "POST", path: "/api/v1/search/web", price: "$0.02", why: "Broader search if Q&A lacks depth" },
     ],
   },

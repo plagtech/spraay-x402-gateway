@@ -21,7 +21,7 @@ export interface EndpointPrice {
  */
 export const ENDPOINT_PRICES: Record<string, EndpointPrice> = {
   // ---- AI ----
-  "POST /api/v1/chat/completions":        { price: "0.04",  category: "ai" },
+  "POST /api/v1/chat/completions":        { price: "0.005", category: "ai" },
   "GET /api/v1/models":                    { price: "0.001", category: "ai" },
 
   // ---- Batch Payments ----
@@ -176,6 +176,26 @@ export const ENDPOINT_PRICES: Record<string, EndpointPrice> = {
 
   // ---- Trust / Reputation ----
   "GET /api/v1/trust/score":               { price: "0.03",  category: "trust" },
+
+  // ---- Prediction Markets (BlockRun parity) ----
+  "GET /api/v1/markets/polymarket/events":              { price: "0.001", category: "markets" },
+  "GET /api/v1/markets/polymarket/market/:conditionId": { price: "0.001", category: "markets" },
+  "GET /api/v1/markets/polymarket/orderbook/:tokenId":  { price: "0.001", category: "markets" },
+  "GET /api/v1/markets/polymarket/trades/:conditionId": { price: "0.001", category: "markets" },
+  "GET /api/v1/markets/kalshi/events":                  { price: "0.001", category: "markets" },
+  "GET /api/v1/markets/kalshi/market/:ticker":          { price: "0.001", category: "markets" },
+  "GET /api/v1/markets/search":                         { price: "0.002", category: "markets" },
+
+  // ---- Stock Market Data (BlockRun parity) ----
+  "GET /api/v1/stocks/price":                           { price: "0.001", category: "stocks" },
+  "GET /api/v1/stocks/search":                          { price: "0.001", category: "stocks" },
+  "GET /api/v1/stocks/history":                         { price: "0.001", category: "stocks" },
+  "GET /api/v1/stocks/company":                         { price: "0.001", category: "stocks" },
+
+  // ---- Image Generation (BlockRun parity) ----
+  "POST /api/v1/image/generate":                        { price: "0.06",  category: "image" },
+  "POST /api/v1/image/edit":                            { price: "0.05",  category: "image" },
+  "GET /api/v1/image/status/:id":                       { price: "0.001", category: "image" },
 };
 
 /**

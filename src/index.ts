@@ -116,6 +116,12 @@ import discoveryRoutes from "./routes/discovery.routes.js";
 import { WebhookService, webhookMiddleware, startWebhookWorker, createWebhookRouter } from "./webhooks/index.js";
 import { supabase } from "./middleware/supabase.js";
 import { loopRateLimiter, duplicatePaymentGuard } from "./middleware/loop-safety.js";
+// 🆕 BlockRun-parity routes (Express routers — mounted below)
+import freeDex from "./routes/free/dex.js";
+import freeChat from "./routes/free/chat.js";
+import markets from "./routes/paid/markets.js";
+import stocks from "./routes/paid/stocks.js";
+import image from "./routes/paid/image.js";
 
 dotenv.config();
 const app = express();
@@ -186,7 +192,7 @@ app.use("/api/v1/wallet/send-transaction", duplicatePaymentGuard());
 // ════════════════════════════════════════════════════════════
 const paidRoutes = {
       "POST /api/v1/chat/completions": {
-        accepts: [{ scheme: "exact", price: "$0.04", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.04", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        accepts: [{ scheme: "exact", price: "$0.005", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.005", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "AI chat completions via 200+ models.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { model: "openai/gpt-4o-mini", messages: [{ role: "user", content: "Hello" }] }, inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { choices: [{ message: { content: "Hello!" } }] }, schema: { properties: { choices: { type: "array" } } } } }) },
       },
@@ -1122,6 +1128,71 @@ const paidRoutes = {
           }),
         },
       },
+
+      // ════════════════════════════════════════════════════════════
+      // 🆕 BlockRun-parity paid routes (markets / stocks / image)
+      // ════════════════════════════════════════════════════════════
+      "GET /api/v1/markets/polymarket/events": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — Polymarket events (Gamma API).", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { query: "election", limit: 10 }, inputSchema: { properties: { query: { type: "string" }, limit: { type: "number" }, active: { type: "string" } } }, output: { example: { source: "polymarket", count: 1, events: [] }, schema: { properties: { events: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/markets/polymarket/market/:conditionId": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — Polymarket market detail by condition ID.", mimeType: "application/json",
+      },
+      "GET /api/v1/markets/polymarket/orderbook/:tokenId": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — Polymarket CLOB orderbook by token ID.", mimeType: "application/json",
+      },
+      "GET /api/v1/markets/polymarket/trades/:conditionId": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — Polymarket recent trades by condition ID.", mimeType: "application/json",
+      },
+      "GET /api/v1/markets/kalshi/events": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — Kalshi events.", mimeType: "application/json",
+      },
+      "GET /api/v1/markets/kalshi/market/:ticker": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — Kalshi market detail by ticker.", mimeType: "application/json",
+      },
+      "GET /api/v1/markets/search": {
+        accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Prediction markets — multi-source search (Polymarket + Kalshi).", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { q: "bitcoin", source: "all" }, inputSchema: { properties: { q: { type: "string" }, source: { type: "string" } }, required: ["q"] }, output: { example: { source: "multi", markets: [], count: 0 }, schema: { properties: { markets: { type: "array" } } } } }) },
+      },
+      "GET /api/v1/stocks/price": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Stock market — real-time quote (Finnhub).", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { symbol: "AAPL" }, inputSchema: { properties: { symbol: { type: "string" } }, required: ["symbol"] }, output: { example: { symbol: "AAPL", current: 195.12 }, schema: { properties: { current: { type: "number" } } } } }) },
+      },
+      "GET /api/v1/stocks/search": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Stock market — symbol search (Finnhub).", mimeType: "application/json",
+      },
+      "GET /api/v1/stocks/history": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Stock market — OHLC candles (Finnhub).", mimeType: "application/json",
+      },
+      "GET /api/v1/stocks/company": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Stock market — company profile (Finnhub).", mimeType: "application/json",
+      },
+      "POST /api/v1/image/generate": {
+        accepts: [{ scheme: "exact", price: "$0.06", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.06", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Image generation — DALL-E 3 / GPT-image-2 / FLUX / SDXL.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { prompt: "a serene mountain lake at sunset", model: "dall-e-3" }, inputSchema: { properties: { prompt: { type: "string" }, model: { type: "string" }, size: { type: "string" }, n: { type: "number" } }, required: ["prompt"] }, bodyType: "json", output: { example: { source: "openai", images: [] }, schema: { properties: { images: { type: "array" } } } } }) },
+      },
+      "POST /api/v1/image/edit": {
+        accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Image editing — img2img.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { image_url: "https://...", prompt: "make it watercolor" }, inputSchema: { properties: { image_url: { type: "string" }, prompt: { type: "string" } }, required: ["image_url", "prompt"] }, bodyType: "json", output: { example: { source: "spraay" }, schema: { properties: { redirect: { type: "string" } } } } }) },
+      },
+      "GET /api/v1/image/status/:id": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Image generation — poll Replicate prediction status.", mimeType: "application/json",
+      },
 };
 
 const PAID_COUNT = Object.keys(paidRoutes).length;
@@ -1152,6 +1223,13 @@ const FREE_ENDPOINTS = {
   "GET /free/convert": "Fiat ↔ crypto conversion (unit math + spot)",
   "GET /free/timestamp": "Current Unix timestamp",
   "GET /free/uuid": "UUID v4 generator (up to 100)",
+  "GET /free/dex/search": "DEX token pair search (DexScreener)",
+  "GET /free/dex/pairs/:chain/:pair": "DEX pair detail by chain",
+  "GET /free/dex/tokens/:address": "All pairs for a token (DexScreener)",
+  "GET /free/dex/trending": "Trending tokens (DexScreener boosts)",
+  "POST /free/chat": "Free AI chat (NVIDIA NIM models)",
+  "GET /free/chat/models": "Free model catalog (NVIDIA NIM)",
+  "GET /free/models": "AI model catalog — free mirror of /api/v1/models",
 };
 const FREE_COUNT = Object.keys(FREE_ENDPOINTS).length;
 const TOTAL_COUNT = PAID_COUNT + FREE_COUNT;
@@ -1185,7 +1263,7 @@ app.get("/.well-known/x402.json", (_req, res) => {
       { resource: `${BASE_URL}/free/convert`,        method: "GET",  price: "free", category: "free-tier", description: "Convert between fiat and crypto or between native units (wei/gwei/lamports/drops). No payment required.", searchTerms: ["convert","unit conversion","fiat to crypto","wei to ETH","currency convert"] },
       { resource: `${BASE_URL}/free/timestamp`,      method: "GET",  price: "free", category: "free-tier", description: "Current Unix timestamp in seconds, milliseconds, and ISO 8601. No payment required.", searchTerms: ["timestamp","unix time","current time","epoch"] },
       { resource: `${BASE_URL}/free/uuid`,           method: "GET",  price: "free", category: "free-tier", description: "Generate UUID v4 identifiers (up to 100). No payment required.", searchTerms: ["uuid","unique id","generate id","uuid v4"] },
-      { resource: `${BASE_URL}/api/v1/chat/completions`, method: "POST", price: "$0.04", category: "ai", description: "OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.", searchTerms: ["chat completion","LLM","AI chat","text generation","GPT","language model","OpenAI compatible","inference"] },
+      { resource: `${BASE_URL}/api/v1/chat/completions`, method: "POST", price: "$0.005", category: "ai", description: "OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.", searchTerms: ["chat completion","LLM","AI chat","text generation","GPT","language model","OpenAI compatible","inference"] },
       { resource: `${BASE_URL}/api/v1/models`, method: "GET", price: "$0.001", category: "ai", description: "List all available AI models with IDs, capabilities, and pricing. Call before chat/completions to pick the right model.", searchTerms: ["list models","available models","model catalog","which models","supported models","LLM list","model pricing"] },
       { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.02", category: "payments", description: "Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0.", searchTerms: ["batch payment","bulk payout","mass payout","send to many wallets","airdrop","disbursement","multi-send","pay many recipients"], spec: "https://docs.spraay.app/bpa/1.0/" },
       { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", category: "payments", description: "Estimate gas and total USDC for a batch payment before sending. Returns per-recipient breakdown. Call before batch/execute.", searchTerms: ["batch estimate","payment estimate","gas estimate","fee preview","bulk payment cost","pre-flight check","dry run"] },
@@ -1380,7 +1458,7 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       },
     },
     tools: [
-      { name: "spraay_chat", description: "AI chat via 200+ models", price: "$0.04" },
+      { name: "spraay_chat", description: "AI chat via 200+ models", price: "$0.005" },
       { name: "spraay_models", description: "List AI models", price: "$0.001" },
       { name: "spraay_batch_execute", description: "Batch pay up to 200 recipients", price: "$0.02" },
       { name: "spraay_batch_estimate", description: "Estimate batch gas", price: "$0.001" },
@@ -1513,7 +1591,7 @@ app.get("/", (_req, res) => {
       free: FREE_ENDPOINTS,
       paid: {
         // AI
-        "POST /api/v1/chat/completions": "$0.04 - AI chat",
+        "POST /api/v1/chat/completions": "$0.005 - AI chat",
         "GET /api/v1/models": "$0.001 - AI models",
         // Payments
         "POST /api/v1/batch/execute": "$0.02 - Batch payment",
@@ -1679,6 +1757,23 @@ app.get("/", (_req, res) => {
         "GET /api/v1/research/biomedical/related": "$0.002 - Related articles for a PubMed ID",
         "GET /api/v1/research/demographics/census": "$0.001 - US Census data by state, county, or zip",
         "GET /api/v1/research/demographics/datasets": "$0.001 - Search Data.gov datasets by keyword",
+        // 🆕 Prediction Markets (BlockRun parity)
+        "GET /api/v1/markets/polymarket/events": "$0.001 - Polymarket events",
+        "GET /api/v1/markets/polymarket/market/:id": "$0.001 - Polymarket market detail",
+        "GET /api/v1/markets/polymarket/orderbook/:id": "$0.001 - Polymarket orderbook",
+        "GET /api/v1/markets/polymarket/trades/:id": "$0.001 - Polymarket trades",
+        "GET /api/v1/markets/kalshi/events": "$0.001 - Kalshi events",
+        "GET /api/v1/markets/kalshi/market/:ticker": "$0.001 - Kalshi market detail",
+        "GET /api/v1/markets/search": "$0.002 - Multi-source market search",
+        // 🆕 Stock Market Data (BlockRun parity)
+        "GET /api/v1/stocks/price": "$0.001 - Stock quote",
+        "GET /api/v1/stocks/search": "$0.001 - Stock symbol search",
+        "GET /api/v1/stocks/history": "$0.001 - Stock OHLC candles",
+        "GET /api/v1/stocks/company": "$0.001 - Company profile",
+        // 🆕 Image Generation (BlockRun parity)
+        "POST /api/v1/image/generate": "$0.06 - Image generation (DALL-E 3, FLUX, SDXL)",
+        "POST /api/v1/image/edit": "$0.05 - Image editing",
+        "GET /api/v1/image/status/:id": "$0.001 - Image gen status",
       },
     },
     contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
@@ -1739,6 +1834,10 @@ app.post("/free/x402-check",    fetchLimit, freeX402CheckHandler);  // tighter l
 app.get("/free/convert",        freeLimit, freeConvertHandler);
 app.get("/free/timestamp",      freeLimit, freeTimestampHandler);
 app.get("/free/uuid",           freeLimit, freeUuidHandler);
+// 🆕 Free BlockRun-parity routers (not in paidRoutes → never charged; rate-limited like siblings)
+app.use("/free/dex",  freeLimit, freeDex);   // DexScreener data
+app.use("/free/chat", freeLimit, freeChat);  // NVIDIA NIM free chat
+app.get("/free/models",         freeLimit, aiModelsHandler);  // free mirror of GET /api/v1/models (not in paidRoutes → not charged)
 
 // ============================================
 // DISCOVERY ROUTES — kill the 404 bleed
@@ -1870,7 +1969,7 @@ _gateway: { provider: "spraay", version: "3.8.1", protocols: ["x402", "mpp", "so
 app.get("/openapi.json", (_req, res) => {
   const endpoints = [
     // ---- AI ----
-    { method: "post", path: "/api/v1/chat/completions", price: "$0.04", priceNum: "0.040000", tag: "ai", desc: "OpenAI-compatible chat via 200+ models",
+    { method: "post", path: "/api/v1/chat/completions", price: "$0.005", priceNum: "0.005000", tag: "ai", desc: "OpenAI-compatible chat via 200+ models",
       inputProps: { model: { type: "string", description: "Model ID" }, messages: { type: "array", description: "Chat messages" }, max_tokens: { type: "number" }, temperature: { type: "number" } }, required: ["model", "messages"],
       outputProps: { choices: { type: "array" }, usage: { type: "object" } } },
     { method: "get", path: "/api/v1/models", price: "$0.001", priceNum: "0.001000", tag: "ai", desc: "List AI models",
@@ -2664,6 +2763,10 @@ app.post("/api/v1/compute-futures/refund", computeFuturesRefundHandler);
 app.get("/api/v1/compute-futures/pricing", computeFuturesPricingHandler);
 // Base MCP Plugin (free — not in paymentMiddleware config)
 app.use("/api/v1/plugin", pluginRouter);
+// 🆕 BlockRun-parity paid routers (gated by paidRoutes entries → x402 paymentMiddleware charges them)
+app.use("/api/v1/markets", markets);
+app.use("/api/v1/stocks", stocks);
+app.use("/api/v1/image", image);
 // Research & Reference
 app.get("/api/v1/research/dictionary/define", researchDictDefineHandler);
 app.get("/api/v1/research/dictionary/synonyms", researchDictSynonymsHandler);
