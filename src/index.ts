@@ -1903,6 +1903,16 @@ app.get("/", (_req, res) => {
         spec: "https://mpp.dev",
       },
     },
+    subscription: {
+      status: "active",
+      provider: "stripe",
+      plans: [
+        { name: "Starter", price: "$29/mo", limit: "1,000 calls/day" },
+        { name: "Pro", price: "$99/mo", limit: "10,000 calls/day" },
+      ],
+      signup: "https://spraay.app/#pricing",
+      note: "API-key access, no wallet needed. All paid endpoints included.",
+    },
   });
 });
 

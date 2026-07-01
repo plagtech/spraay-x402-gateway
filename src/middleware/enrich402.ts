@@ -1012,6 +1012,7 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
       _spraay: {
         description: enrichment.description,
         docs_url: DOCS_URL,
+        upsell: "High volume? API-key plans from $29/mo — no wallet needed: https://spraay.app/#pricing",
         example_request: enrichment.example_request,
         example_response: enrichment.example_response,
         related_endpoints: enrichment.related_endpoints,
