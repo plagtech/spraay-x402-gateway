@@ -1242,14 +1242,17 @@ app.get("/api/v1/trust/score", trustScoreHandler);
 app.get("/api/v1/token/safety", tokenSafetyHandler);
 app.get("/api/v1/address/safety", addressSafetyHandler);
 app.get("/api/v1/tx/decode", txDecodeHandler);
-app.get("/.well-known/x402.json", (_req, res) => {
-  res.json({
-    x402Version: 2, name: "Spraay x402 Gateway",
-    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, identity, compliance, scheduling, GPU/Compute, Search/RAG & more.",
-    homepage: BASE_URL, repository: "https://github.com/plagtech/spraay-x402-gateway",
-    network: CAIP2_NETWORK, payTo: PAY_TO,
-    facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
-    resources: [
+// ════════════════════════════════════════════════════════════
+// DISCOVERY MANIFEST (.well-known/x402.json)
+// ────────────────────────────────────────────────────────────
+// MANIFEST_META below is *decoration only* — curated category +
+// searchTerms + protocol extras for the routes we've written copy
+// for. It is NOT the source of truth for which routes exist.
+// The actual resource list (MANIFEST_RESOURCES) is auto-computed
+// further down from paidRoutes + FREE_ENDPOINTS, so any route the
+// gateway serves appears exactly once and the count can never drift.
+// ════════════════════════════════════════════════════════════
+const MANIFEST_META = [
       { resource: `${BASE_URL}/free/gas`,            method: "GET",  price: "free", category: "free-tier", description: "Gas prices across 7 EVM chains (Base, Ethereum, Arbitrum, Polygon, Optimism, Avalanche, BSC). Cached 15s. No payment required.", searchTerms: ["gas price","free gas","network fee","gwei","base fee"] },
       { resource: `${BASE_URL}/free/prices`,         method: "GET",  price: "free", category: "free-tier", description: "USDC, ETH, SOL spot prices in USD. Cached 60s. No payment required.", searchTerms: ["token price","free price","ETH price","SOL price","spot price"] },
       { resource: `${BASE_URL}/free/chain-status`,   method: "GET",  price: "free", category: "free-tier", description: "Block height and liveness for 7 EVM chains. No payment required.", searchTerms: ["chain status","block height","chain health","network status"] },
@@ -1424,7 +1427,113 @@ app.get("/.well-known/x402.json", (_req, res) => {
       // Free — TX Decoder
       { resource: `${BASE_URL}/api/v1/tx/decode`, method: "GET", price: "free", category: "defi", description: "Free transaction decoder — plain-English summary + structured token transfers for any EVM tx. Covers swaps, transfers, approvals, wraps, NFTs, batch payments. Blockscout-powered.", searchTerms: ["decode transaction","tx decoder","explain transaction","transaction summary","what happened","parse tx","token transfers","swap decode","tx analysis"] },
 
-    ],
+];
+
+// ── Auto-compute the manifest resource list from the SOURCE OF TRUTH ──
+// (paidRoutes + FREE_ENDPOINTS). Every served route appears exactly once,
+// enriched with curated MANIFEST_META when we have it, otherwise with a
+// derived category + the route's own description. This keeps the manifest
+// count in lockstep with what the gateway actually serves.
+const _normKey = (method: string, path: string): string =>
+  `${method} ${path.replace(/:[^/]+/g, ":p")}`;
+
+const _metaExact = new Map<string, any>();
+const _metaNorm = new Map<string, any>();
+for (const m of MANIFEST_META as any[]) {
+  const path = m.resource.startsWith(BASE_URL) ? m.resource.slice(BASE_URL.length) : m.resource;
+  _metaExact.set(`${m.method} ${path}`, m);
+  _metaNorm.set(_normKey(m.method, path), m);
+}
+
+function deriveManifestCategory(path: string): string {
+  const table: Array<[RegExp, string]> = [
+    [/^\/free\b/, "free-tier"],
+    [/^\/api\/v1\/(chat|models)\b/, "ai"],
+    [/^\/api\/v1\/markets\b/, "prediction-markets"],
+    [/^\/api\/v1\/stocks\b/, "stocks"],
+    [/^\/api\/v1\/image\b/, "image"],
+    [/^\/api\/v1\/gpu-direct\b/, "gpu-direct"],
+    [/^\/api\/v1\/gpu\b/, "gpu"],
+    [/^\/api\/v1\/agent-wallet\b/, "agent-wallet"],
+    [/^\/api\/v1\/trust\b/, "trust"],
+    [/^\/api\/v1\/(swap|prices|tx|token)\b/, "defi"],
+    [/^\/api\/v1\/oracle\b/, "oracle"],
+    [/^\/api\/v1\/bridge\b/, "bridge"],
+    [/^\/api\/v1\/payroll\b/, "payroll"],
+    [/^\/api\/v1\/invoice\b/, "invoice"],
+    [/^\/api\/v1\/analytics\b/, "analytics"],
+    [/^\/api\/v1\/escrow\b/, "escrow"],
+    [/^\/api\/v1\/inference\b/, "inference"],
+    [/^\/api\/v1\/(notify|webhook|xmtp)\b/, "communication"],
+    [/^\/api\/v1\/(rpc|storage|cron|logs)\b/, "infrastructure"],
+    [/^\/api\/v1\/(kyc|auth|resolve|address)\b/, "identity"],
+    [/^\/api\/v1\/(audit|tax)\b/, "compliance"],
+    [/^\/api\/v1\/search\b/, "search"],
+    [/^\/api\/v1\/robots\b/, "rtp"],
+    [/^\/api\/v1\/sctp\b/, "supply-chain"],
+    [/^\/api\/v1\/compute-futures\b/, "compute-futures"],
+    [/^\/api\/v1\/compute\b/, "compute"],
+    [/^\/api\/v1\/research\b/, "research"],
+    [/^\/api\/v1\/(batch|xrp|stellar)\b/, "payments"],
+    [/^\/api\/v1\/solana\b/, "solana"],
+    [/^\/bittensor\b/, "bittensor"],
+    [/^\/api\/v1\/(tokens|balances)\b/, "data"],
+  ];
+  for (const [re, cat] of table) if (re.test(path)) return cat;
+  return "general";
+}
+
+const _extraMetaKeys = ["spec", "rtp", "sctp", "bittensor", "compute", "chain"] as const;
+function buildManifestResource(method: string, path: string, price: string, description?: string): Record<string, any> {
+  const meta = _metaExact.get(`${method} ${path}`) || _metaNorm.get(_normKey(method, path));
+  const out: Record<string, any> = {
+    resource: `${BASE_URL}${path}`,
+    method,
+    price,
+    category: meta?.category ?? deriveManifestCategory(path),
+    description: meta?.description ?? description ?? "",
+  };
+  if (meta?.searchTerms) out.searchTerms = meta.searchTerms;
+  for (const k of _extraMetaKeys) if (meta && meta[k] !== undefined) out[k] = meta[k];
+  return out;
+}
+
+const _splitRouteKey = (k: string): [string, string] => {
+  const i = k.indexOf(" ");
+  return [k.slice(0, i), k.slice(i + 1)];
+};
+
+const MANIFEST_RESOURCES: Array<Record<string, any>> = [
+  ...Object.entries(paidRoutes).map(([k, v]: [string, any]) => {
+    const [method, path] = _splitRouteKey(k);
+    const price = v?.accepts?.[0]?.price ?? "varies";
+    return buildManifestResource(method, path, price, v?.description);
+  }),
+  ...Object.entries(FREE_ENDPOINTS).map(([k, label]: [string, any]) => {
+    const [method, path] = _splitRouteKey(k);
+    return buildManifestResource(method, path, "free", typeof label === "string" ? label : undefined);
+  }),
+];
+
+console.log(
+  `🗂️  [discovery] x402.json manifest: ${MANIFEST_RESOURCES.length} resources ` +
+  `(${PAID_COUNT} paid + ${FREE_COUNT} free) — expected ${TOTAL_COUNT}`
+);
+if (MANIFEST_RESOURCES.length !== TOTAL_COUNT) {
+  console.warn(
+    `⚠️  [discovery] manifest count ${MANIFEST_RESOURCES.length} != expected ${TOTAL_COUNT} — ` +
+    `paidRoutes/FREE_ENDPOINTS drift detected`
+  );
+}
+
+app.get("/.well-known/x402.json", (_req, res) => {
+  res.json({
+    x402Version: 2, name: "Spraay x402 Gateway",
+    description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, inference, analytics, communication, identity, compliance, scheduling, GPU/Compute, Search/RAG & more.",
+    homepage: BASE_URL, repository: "https://github.com/plagtech/spraay-x402-gateway",
+    network: CAIP2_NETWORK, payTo: PAY_TO,
+    facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
+    resources: MANIFEST_RESOURCES,
     solanaPayment: {
       enabled: true,
       chain: "solana",
