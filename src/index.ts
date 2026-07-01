@@ -1227,8 +1227,8 @@ const FREE_ENDPOINTS = {
   "GET /free/dex/pairs/:chain/:pair": "DEX pair detail by chain",
   "GET /free/dex/tokens/:address": "All pairs for a token (DexScreener)",
   "GET /free/dex/trending": "Trending tokens (DexScreener boosts)",
-  "POST /free/chat": "Free AI chat (NVIDIA NIM models)",
-  "GET /free/chat/models": "Free model catalog (NVIDIA NIM)",
+  "POST /free/chat": "Free AI chat (open-weight models)",
+  "GET /free/chat/models": "Free model catalog (open-weight models)",
   "GET /free/models": "AI model catalog — free mirror of /api/v1/models",
 };
 const FREE_COUNT = Object.keys(FREE_ENDPOINTS).length;
@@ -1955,7 +1955,7 @@ app.get("/free/timestamp",      freeLimit, freeTimestampHandler);
 app.get("/free/uuid",           freeLimit, freeUuidHandler);
 // 🆕 Free BlockRun-parity routers (not in paidRoutes → never charged; rate-limited like siblings)
 app.use("/free/dex",  freeLimit, freeDex);   // DexScreener data
-app.use("/free/chat", freeLimit, freeChat);  // NVIDIA NIM free chat
+app.use("/free/chat", freeLimit, freeChat);  // OpenRouter free open-weight chat
 app.get("/free/models",         freeLimit, aiModelsHandler);  // free mirror of GET /api/v1/models (not in paidRoutes → not charged)
 
 // ============================================

@@ -1,29 +1,49 @@
-// src/routes/free/chat.ts — Free AI chat via NVIDIA NIM API
-// Matches BlockRun's blockrun_chat mode:"free" (NVIDIA models at $0)
+// src/routes/free/chat.ts — Free AI chat via OpenRouter open-weight models
+// Matches BlockRun's blockrun_chat mode:"free" (open models at $0)
 //
-// NVIDIA NIM provides free inference for select models.
-// Requires NVIDIA_NIM_API_KEY env var (free to obtain at build.nvidia.com)
+// Reuses the same OpenRouter client/config as paid chat completions.
+// Targets OpenRouter's ":free" model tier — no USDC charge to callers.
+// Requires OPENROUTER_API_KEY env var (already set for paid chat).
 
 import { Router, Request, Response } from "express";
 
 const router = Router();
 
-const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
-const NVIDIA_API_KEY = process.env.NVIDIA_NIM_API_KEY;
+// Reuse the shared OpenRouter config used by paid chat completions.
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_HEADERS = {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+  "HTTP-Referer": "https://gateway.spraay.app",
+  "X-Title": "Spraay x402 Gateway",
+};
 
-// Free models available through NVIDIA NIM
+// Free open-weight models available through OpenRouter's ":free" tier.
 const FREE_MODELS: Record<string, { id: string; description: string }> = {
-  "nvidia/deepseek-v4-flash": { id: "deepseek-ai/deepseek-r1-distill-llama-70b", description: "DeepSeek V4 Flash — fast chat & reasoning" },
-  "nvidia/qwen3-next-80b": { id: "nvidia/qwen3-next-80b-a3b-thinking", description: "Qwen3 80B MoE — strong multilingual" },
-  "nvidia/llama-4-maverick": { id: "meta/llama-4-maverick-17b-128e-instruct", description: "Llama 4 Maverick — efficient reasoning" },
-  "nvidia/mistral-large-3": { id: "mistralai/mistral-large-2-instruct", description: "Mistral Large — code & analysis" },
-  "nvidia/nemotron-nano": { id: "nvidia/llama-3.3-nemotron-super-49b-v1", description: "Nemotron Super — NVIDIA optimized" },
+  "llama-3.3-70b": { id: "meta-llama/llama-3.3-70b-instruct:free", description: "Llama 3.3 70B — strong general instruct" },
+  "qwen3-80b": { id: "qwen/qwen3-next-80b-a3b-instruct:free", description: "Qwen3 Next 80B — multilingual & reasoning" },
+  "gpt-oss-120b": { id: "openai/gpt-oss-120b:free", description: "GPT-OSS 120B — open-weight flagship" },
+  "gpt-oss-20b": { id: "openai/gpt-oss-20b:free", description: "GPT-OSS 20B — fast & lightweight" },
+  "qwen3-coder": { id: "qwen/qwen3-coder:free", description: "Qwen3 Coder — code generation" },
+};
+
+const DEFAULT_MODEL = "llama-3.3-70b";
+
+// Back-compat: legacy aliases from the previous free-chat backend still resolve
+// so existing callers/MCP tools don't break. Not advertised in /models.
+const LEGACY_ALIASES: Record<string, string> = {
+  "nvidia/deepseek-v4-flash": "llama-3.3-70b",
+  "nvidia/qwen3-next-80b": "qwen3-80b",
+  "nvidia/llama-4-maverick": "llama-3.3-70b",
+  "nvidia/mistral-large-3": "gpt-oss-120b",
+  "nvidia/nemotron-nano": "gpt-oss-20b",
 };
 
 // GET /free/chat/models — List available free models
 router.get("/models", (_req: Request, res: Response) => {
   res.json({
-    source: "nvidia-nim",
+    source: "openrouter",
     tier: "free",
     cost: "$0.00",
     models: Object.entries(FREE_MODELS).map(([alias, m]) => ({
@@ -37,10 +57,10 @@ router.get("/models", (_req: Request, res: Response) => {
 
 // POST /free/chat — Free chat completion
 router.post("/", async (req: Request, res: Response) => {
-  if (!NVIDIA_API_KEY) {
+  if (!OPENROUTER_API_KEY) {
     return res.status(503).json({
-      error: "NVIDIA NIM not configured",
-      detail: "Free chat requires NVIDIA_NIM_API_KEY environment variable",
+      error: "Free chat not configured",
+      detail: "Free chat requires OPENROUTER_API_KEY environment variable",
     });
   }
 
@@ -51,8 +71,9 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "messages array is required" });
     }
 
-    // Resolve model — default to deepseek-v4-flash
-    const selectedAlias = model || "nvidia/deepseek-v4-flash";
+    // Resolve model — default to llama-3.3-70b; map legacy aliases transparently.
+    let selectedAlias = model || DEFAULT_MODEL;
+    if (LEGACY_ALIASES[selectedAlias]) selectedAlias = LEGACY_ALIASES[selectedAlias];
     const modelEntry = FREE_MODELS[selectedAlias];
     if (!modelEntry) {
       return res.status(400).json({
@@ -74,18 +95,15 @@ router.post("/", async (req: Request, res: Response) => {
 
     // Streaming response
     if (stream) {
-      const resp = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+      const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${NVIDIA_API_KEY}`,
-        },
+        headers: OPENROUTER_HEADERS,
         body: JSON.stringify(body),
       });
 
       if (!resp.ok) {
         const errText = await resp.text();
-        return res.status(resp.status).json({ error: "NVIDIA API error", detail: errText });
+        return res.status(resp.status).json({ error: "Upstream API error", detail: errText });
       }
 
       res.setHeader("Content-Type", "text/event-stream");
@@ -111,18 +129,15 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     // Non-streaming response
-    const resp = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+    const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${NVIDIA_API_KEY}`,
-      },
+      headers: OPENROUTER_HEADERS,
       body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
       const errText = await resp.text();
-      return res.status(resp.status).json({ error: "NVIDIA API error", detail: errText });
+      return res.status(resp.status).json({ error: "Upstream API error", detail: errText });
     }
 
     const data: any = await resp.json();
@@ -137,7 +152,7 @@ router.post("/", async (req: Request, res: Response) => {
       cost: "$0.00",
       choices: data.choices,
       usage: data.usage,
-      source: "nvidia-nim",
+      source: "openrouter",
     });
   } catch (err: any) {
     console.error("[free/chat] error:", err.message);
