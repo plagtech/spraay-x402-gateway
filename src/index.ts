@@ -1149,17 +1149,9 @@ const paidRoutes = {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Prediction markets — Polymarket recent trades by condition ID.", mimeType: "application/json",
       },
-      "GET /api/v1/markets/kalshi/events": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Prediction markets — Kalshi events.", mimeType: "application/json",
-      },
-      "GET /api/v1/markets/kalshi/market/:ticker": {
-        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Prediction markets — Kalshi market detail by ticker.", mimeType: "application/json",
-      },
       "GET /api/v1/markets/search": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Prediction markets — multi-source search (Polymarket + Kalshi).", mimeType: "application/json",
+        description: "Prediction markets — Polymarket search.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { q: "bitcoin", source: "all" }, inputSchema: { properties: { q: { type: "string" }, source: { type: "string" } }, required: ["q"] }, output: { example: { source: "multi", markets: [], count: 0 }, schema: { properties: { markets: { type: "array" } } } } }) },
       },
       "GET /api/v1/stocks/price": {
@@ -1871,9 +1863,7 @@ app.get("/", (_req, res) => {
         "GET /api/v1/markets/polymarket/market/:id": "$0.001 - Polymarket market detail",
         "GET /api/v1/markets/polymarket/orderbook/:id": "$0.001 - Polymarket orderbook",
         "GET /api/v1/markets/polymarket/trades/:id": "$0.001 - Polymarket trades",
-        "GET /api/v1/markets/kalshi/events": "$0.001 - Kalshi events",
-        "GET /api/v1/markets/kalshi/market/:ticker": "$0.001 - Kalshi market detail",
-        "GET /api/v1/markets/search": "$0.002 - Multi-source market search",
+        "GET /api/v1/markets/search": "$0.002 - Polymarket search",
         // 🆕 Stock Market Data (BlockRun parity)
         "GET /api/v1/stocks/price": "$0.001 - Stock quote",
         "GET /api/v1/stocks/search": "$0.001 - Stock symbol search",

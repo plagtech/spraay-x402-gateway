@@ -1,7 +1,7 @@
-// src/routes/paid/markets.ts — Prediction Markets (Polymarket + Kalshi)
+// src/routes/paid/markets.ts — Prediction Markets (Polymarket)
 // Matches BlockRun's blockrun_markets ($0.001/query)
 //
-// Both Polymarket and Kalshi have free public APIs — no keys needed.
+// Polymarket has a free public API — no keys needed.
 // We charge $0.001 per call (same as BlockRun) via the x402 paymentMiddleware.
 
 import { Router, Request, Response } from "express";
@@ -10,7 +10,6 @@ const router = Router();
 
 const POLYMARKET_BASE = "https://gamma-api.polymarket.com";
 const POLYMARKET_CLOB = "https://clob.polymarket.com";
-const KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2";
 
 // ─── Polymarket ──────────────────────────────────────────
 
@@ -140,140 +139,42 @@ router.get("/polymarket/trades/:conditionId", async (req: Request, res: Response
   }
 });
 
-// ─── Kalshi ──────────────────────────────────────────────
+// ─── Search ──────────────────────────────────────────────
 
-// GET /api/v1/markets/kalshi/events?query=&limit=&status=
-router.get("/kalshi/events", async (req: Request, res: Response) => {
-  try {
-    const { query, limit = "10", status = "open" } = req.query as Record<string, string>;
-    const params = new URLSearchParams({
-      limit: String(Math.min(Number(limit), 50)),
-      status: String(status),
-      ...(query ? { series_ticker: String(query).toUpperCase() } : {}),
-    });
-
-    const resp = await fetch(`${KALSHI_BASE}/events?${params}`);
-    if (!resp.ok) throw new Error(`Kalshi ${resp.status}`);
-    const data: any = await resp.json();
-
-    res.json({
-      source: "kalshi",
-      count: data.events?.length || 0,
-      events: (data.events || []).map((e: any) => ({
-        ticker: e.event_ticker,
-        title: e.title,
-        category: e.category,
-        status: e.status,
-        mutually_exclusive: e.mutually_exclusive,
-        markets: (e.markets || []).map((m: any) => ({
-          ticker: m.ticker,
-          title: m.title,
-          status: m.status,
-          yesPrice: m.yes_bid,
-          noPrice: m.no_bid,
-          volume: m.volume,
-          openInterest: m.open_interest,
-          closeTime: m.close_time,
-        })),
-      })),
-    });
-  } catch (err: any) {
-    console.error("[markets/kalshi] events error:", err.message);
-    res.status(502).json({ error: "Kalshi API error", detail: err.message });
-  }
-});
-
-// GET /api/v1/markets/kalshi/market/:ticker
-router.get("/kalshi/market/:ticker", async (req: Request, res: Response) => {
-  try {
-    const { ticker } = req.params as Record<string, string>;
-    const resp = await fetch(`${KALSHI_BASE}/markets/${ticker.toUpperCase()}`);
-    if (!resp.ok) throw new Error(`Kalshi ${resp.status}`);
-    const data: any = await resp.json();
-    const m = data.market;
-
-    res.json({
-      source: "kalshi",
-      ticker: m.ticker,
-      title: m.title,
-      subtitle: m.subtitle,
-      status: m.status,
-      yesPrice: m.yes_bid,
-      noPrice: m.no_bid,
-      volume: m.volume,
-      openInterest: m.open_interest,
-      closeTime: m.close_time,
-      result: m.result,
-      category: m.category,
-    });
-  } catch (err: any) {
-    console.error("[markets/kalshi] market error:", err.message);
-    res.status(502).json({ error: "Kalshi API error", detail: err.message });
-  }
-});
-
-// ─── Unified Search ──────────────────────────────────────
-
-// GET /api/v1/markets/search?q=&source=
+// GET /api/v1/markets/search?q=
 router.get("/search", async (req: Request, res: Response) => {
   try {
-    const { q, source = "all" } = req.query as Record<string, string>;
+    const { q } = req.query as Record<string, string>;
     if (!q) return res.status(400).json({ error: "Missing ?q= search query" });
 
     const results: { source: string; query: string; markets: any[]; count?: number } = {
-      source: "multi",
+      source: "polymarket",
       query: q,
       markets: [],
     };
 
     // Polymarket search
-    if (source === "all" || source === "polymarket") {
-      try {
-        const pResp = await fetch(`${POLYMARKET_BASE}/events?limit=10&active=true`);
-        if (pResp.ok) {
-          const events: any[] = await pResp.json();
-          const filtered = events.filter((e: any) =>
-            e.title?.toLowerCase().includes(q.toLowerCase()) ||
-            e.description?.toLowerCase().includes(q.toLowerCase())
-          );
-          filtered.forEach((e: any) => {
-            (e.markets || []).forEach((m: any) => {
-              results.markets.push({
-                source: "polymarket",
-                id: m.id,
-                question: m.question,
-                outcomePrices: m.outcomePrices,
-                volume: m.volume,
-              });
+    try {
+      const pResp = await fetch(`${POLYMARKET_BASE}/events?limit=10&active=true`);
+      if (pResp.ok) {
+        const events: any[] = await pResp.json();
+        const filtered = events.filter((e: any) =>
+          e.title?.toLowerCase().includes(q.toLowerCase()) ||
+          e.description?.toLowerCase().includes(q.toLowerCase())
+        );
+        filtered.forEach((e: any) => {
+          (e.markets || []).forEach((m: any) => {
+            results.markets.push({
+              source: "polymarket",
+              id: m.id,
+              question: m.question,
+              outcomePrices: m.outcomePrices,
+              volume: m.volume,
             });
           });
-        }
-      } catch { /* Polymarket search failed, continue */ }
-    }
-
-    // Kalshi search
-    if (source === "all" || source === "kalshi") {
-      try {
-        const kResp = await fetch(`${KALSHI_BASE}/events?limit=10&status=open`);
-        if (kResp.ok) {
-          const data: any = await kResp.json();
-          const filtered = (data.events || []).filter((e: any) =>
-            e.title?.toLowerCase().includes(q.toLowerCase())
-          );
-          filtered.forEach((e: any) => {
-            (e.markets || []).forEach((m: any) => {
-              results.markets.push({
-                source: "kalshi",
-                ticker: m.ticker,
-                title: m.title,
-                yesPrice: m.yes_bid,
-                volume: m.volume,
-              });
-            });
-          });
-        }
-      } catch { /* Kalshi search failed, continue */ }
-    }
+        });
+      }
+    } catch { /* Polymarket search failed, continue */ }
 
     results.count = results.markets.length;
     res.json(results);
