@@ -64,12 +64,11 @@ import json
 import os
 import sys
 
-# Allow running straight from the example directory without `pip install -e .`.
-_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
-if os.path.isdir(_SRC) and _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
+# The x402 gateway HTTP client is vendored alongside this script so it runs
+# standalone from this repo without installing the NeMo example package.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from spraay_crypto_payments.spraay_client import SpraayClient, to_batch_execute_payload  # noqa: E402
+from spraay_client import SpraayClient, to_batch_execute_payload  # noqa: E402
 
 # Zero-address placeholder used for dry-run quotes (mirrors the batch_send tool).
 _PLACEHOLDER_SENDER = "0x0000000000000000000000000000000000000000"
