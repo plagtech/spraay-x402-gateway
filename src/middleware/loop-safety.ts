@@ -3,7 +3,9 @@
  *
  * Three layers of protection against runaway agent loops:
  *   1. Rate limiter  — caps calls per API key per endpoint per time window
- *   2. Duplicate detection — rejects identical payment payloads within a cooldown
+ *   2. Duplicate detection — rejects identical PAID submissions within a cooldown.
+ *      Keyed by payer + payload (or an explicit idempotency_key). Unpaid x402/MPP
+ *      probes (no payment header) are ignored so the two-leg flow isn't blocked.
  *   3. Webhook cooldown — prevents rapid-fire callback delivery to the same URL
  *
  * NON-BREAKING: All middleware is additive. If no API key is present (free tier),
@@ -170,10 +172,51 @@ setInterval(() => {
   }
 }, 120_000);
 
-function hashPayload(clientKey: string, body: Record<string, unknown>, fields: string[]): string {
-  // Build a deterministic string from the relevant fields
-  const parts: string[] = [clientKey];
+// A payment credential on any rail the gateway speaks. The x402/MPP two-leg
+// flow starts with an UNPAID probe that carries NONE of these — leg 1 exists
+// only to fetch the 402 challenge. Such probes must skip the guard entirely (no
+// check, no register), so the identical body replayed on leg 2 WITH a
+// credential isn't wrongly rejected as a duplicate.
+//   • x402   — `X-PAYMENT` (v1) / `Payment-Signature` (v2)
+//   • Solana — `X-Solana-Tx`
+//   • MPP    — `Authorization: Payment …`  (also tolerates `X-MPP-Payment`)
+//   • L402   — `Authorization: L402 …`
+function hasPaymentCredential(req: Request): boolean {
+  const h = req.headers;
+  if (h["x-payment"] || h["payment-signature"] || h["x-solana-tx"] || h["x-mpp-payment"]) {
+    return true;
+  }
+  const auth = h["authorization"];
+  return typeof auth === "string" && (/^Payment\s/i.test(auth) || /^L402\s/i.test(auth));
+}
 
+// Identity of the paying party. Keying on this (and not the payload alone) stops
+// two different payers who happen to submit an identical body from colliding —
+// one must never be able to 409 the other. Prefers the on-chain sender in the
+// body, then falls back to the API-key / IP client key.
+function getPayerKey(req: Request): string {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const sender = body.sender ?? body.from ?? body.payer;
+  const senderStr = typeof sender === "string" && sender ? sender.toLowerCase() : "";
+  return `${getClientKey(req)}::${senderStr}`;
+}
+
+// Build the dedupe key: payer + (explicit idempotency_key | payment payload).
+// Returns "" when there is nothing payment-relevant to dedupe on.
+function buildDedupeKey(req: Request, fields: string[]): string {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const payer = getPayerKey(req);
+
+  // An explicit idempotency_key is the caller's own dedupe token — honor it
+  // verbatim instead of hashing the payload. Same payer + same key = duplicate;
+  // a different key is always treated as a distinct request.
+  const idem = body.idempotency_key;
+  if (typeof idem === "string" && idem.length > 0) {
+    return crypto.createHash("sha256").update(`${payer}|idem:${idem}`).digest("hex");
+  }
+
+  // Otherwise hash the payer together with the payment-relevant fields.
+  const parts: string[] = [payer];
   for (const field of fields) {
     const val = body[field];
     if (val !== undefined) {
@@ -181,7 +224,7 @@ function hashPayload(clientKey: string, body: Record<string, unknown>, fields: s
     }
   }
 
-  // If no payment-relevant fields found, skip dedup (it's probably not a payment)
+  // No payment-relevant fields found — skip dedup (it's probably not a payment).
   if (parts.length <= 1) return "";
 
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
@@ -194,10 +237,16 @@ export function duplicatePaymentGuard(config?: Partial<DuplicateGuardConfig>) {
     // Only check POSTs with a body
     if (req.method !== "POST" || !req.body) return next();
 
-    const clientKey = getClientKey(req);
-    const hash = hashPayload(clientKey, req.body, cfg.hashFields!);
+    // x402/MPP two-leg flow: leg 1 is an UNPAID probe (no payment credential),
+    // sent only to retrieve the 402 challenge. It must never be recorded or
+    // checked — otherwise leg 2, the SAME body replayed WITH a payment
+    // credential, collides with leg 1 and is wrongly rejected as a duplicate.
+    if (!hasPaymentCredential(req)) return next();
 
-    // No payment-relevant fields found — pass through
+    const clientKey = getClientKey(req);
+    const hash = buildDedupeKey(req, cfg.hashFields!);
+
+    // No payment-relevant fields / idempotency key found — pass through
     if (!hash) return next();
 
     const now = Date.now();
