@@ -377,6 +377,8 @@ cp .env.example .env
 npm start
 ```
 
+Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settlement) end-to-end against `/api/v1/batch/execute` with [`scripts/live_batch_send_smoke.py`](scripts/live_batch_send_smoke.py) (dry-run by default; set `EVM_PRIVATE_KEY` to move real funds).
+
 ---
 
 ## Ecosystem
