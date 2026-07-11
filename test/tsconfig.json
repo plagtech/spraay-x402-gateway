@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".."
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "experimentalResolver": true
+  },
+  "include": ["./**/*", "../src/**/*"]
+}
