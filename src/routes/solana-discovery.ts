@@ -11,6 +11,7 @@
  */
 
 import type { Request, Response } from "express";
+import { GATEWAY_VERSION } from "../lib/version.js";
 
 const SOLANA_ENABLED = process.env.SOLANA_PAYMENTS_ENABLED === "true";
 const SOLANA_RECEIVE_ADDRESS = process.env.SOLANA_RECEIVE_ADDRESS || "";
@@ -27,7 +28,7 @@ export function solanaDiscoveryHandler(_req: Request, res: Response): void {
   res.json({
     name: "Spraay x402 Gateway",
     description: "AI agent payment gateway — Solana USDC rail",
-    version: "3.7.0",
+    version: GATEWAY_VERSION,
     chain: "solana",
     cluster: SOLANA_CLUSTER,
     payment: {

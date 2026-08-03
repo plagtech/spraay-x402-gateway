@@ -32,6 +32,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { getEndpointPrice } from "../config/pricing.js";
+import { GATEWAY_VERSION } from "../lib/version.js";
 
 // ─── Feature flag guard ───────────────────────────────────────────────
 const MPP_ENABLED = process.env.MPP_ENABLED === "true";
@@ -193,7 +194,7 @@ async function handleMppPayment(
       ...challengeBody,
       spraay: {
         gateway: "gateway.spraay.app",
-        version: "3.7.0",
+        version: GATEWAY_VERSION,
         protocol: "mpp",
         category,
         priceUSD: `$${priceUSD}`,

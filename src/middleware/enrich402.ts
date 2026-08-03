@@ -23,6 +23,7 @@
 // ============================================
 
 import { Request, Response, NextFunction } from "express";
+import { GATEWAY_VERSION } from "../lib/version.js";
 
 // ============================================
 // ENRICHMENT MAP
@@ -947,7 +948,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
 // ============================================
 const GATEWAY_META = {
   provider: "spraay-x402",
-  version: "3.7.0",
+  version: GATEWAY_VERSION,
   support: "hello@spraay.app",
   status: `${process.env.BASE_URL || "https://gateway.spraay.app"}/health`,
 };
@@ -991,6 +992,13 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
     }
     // ─── END ───
 
+    // ─── Surface a clean reason for a rejected malformed payment ───
+    // x402PayloadNormalizer neutralises payloads that would otherwise make
+    // @x402/core leak a raw TypeError. The body below is the normal 402
+    // challenge (so the caller can retry correctly); this adds the "why".
+    const paymentError = res.locals?.x402PaymentError;
+    // ─── END ───
+
     // Compute the route key as paymentMiddleware uses it
     // paymentMiddleware keys look like "POST /api/v1/chat/completions"
     const routeKey = `${req.method} ${req.baseUrl || ""}${req.path}`.replace(/\/+$/, "");
@@ -1000,7 +1008,9 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
     // (we never want to inject partial/wrong data)
     if (!enrichment) {
       res.set("x-spraay-meta", JSON.stringify(GATEWAY_META));
-      return originalJson(mergedBody);
+      return originalJson(
+        paymentError ? { ...mergedBody, _spraay: { payment_error: paymentError } } : mergedBody
+      );
     }
 
     // Enrich the 402 body. Preserve all existing x402 fields (accepts, x402Version, etc).
@@ -1017,6 +1027,7 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
         example_response: enrichment.example_response,
         related_endpoints: enrichment.related_endpoints,
         gateway: GATEWAY_META,
+        ...(paymentError ? { payment_error: paymentError } : {}),
       },
     };
 

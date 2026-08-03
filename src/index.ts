@@ -80,6 +80,7 @@ import pluginRouter from "./routes/plugin-router.js";
 import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
 import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
+import { x402PayloadNormalizer } from "./middleware/x402PayloadNormalizer.js";
 import { bazaarIdentityMiddleware } from "./middleware/bazaarIdentityMiddleware.js";
 import { gatewayEventsMiddleware } from "./middleware/gateway-events.js";
 import { protocolDetectorMiddleware } from "./middleware/protocolDetector.js";
@@ -1227,6 +1228,10 @@ const FREE_COUNT = Object.keys(FREE_ENDPOINTS).length;
 const TOTAL_COUNT = PAID_COUNT + FREE_COUNT;
 
 
+// Normalises inbound x402 v2 PAYMENT-SIGNATURE payloads so a spec-compliant
+// echo of our advertised accepts[] matches. Must run immediately before
+// paymentMiddleware. v1 (X-PAYMENT) requests pass through untouched.
+app.use(x402PayloadNormalizer);
 app.use(wrapWithSolanaBypass(paymentMiddleware(paidRoutes, server)));
 
 app.get("/api/v1/trust/score", trustScoreHandler);
