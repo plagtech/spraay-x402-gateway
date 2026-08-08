@@ -5,34 +5,76 @@
 # Spraay x402 Gateway
 
 [![Live](https://img.shields.io/badge/status-live-brightgreen)](https://gateway.spraay.app)
-[![Version](https://img.shields.io/badge/version-3.4.0-blue)](https://gateway.spraay.app)
-[![Endpoints](https://img.shields.io/badge/endpoints-71%20paid%20+%2011%20free-blueviolet)](https://gateway.spraay.app)
+[![Version](https://img.shields.io/badge/version-3.8.1-blue)](https://gateway.spraay.app)
+[![Endpoints](https://img.shields.io/badge/endpoints-190-blueviolet)](https://gateway.spraay.app)
+[![Chains](https://img.shields.io/badge/chains-15%20mainnet-9cf)](https://gateway.spraay.app/api/v1/tokens)
 [![x402](https://img.shields.io/badge/protocol-x402-orange)](https://x402.org)
 [![RTP](https://img.shields.io/badge/RTP-1.0-green)](https://github.com/plagtech/rtp-spec)
+[![BPA](https://img.shields.io/badge/BPA-1.0-green)](https://docs.spraay.app/bpa/1.0/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Full-stack DeFi infrastructure for AI agents — 71 pay-per-use endpoints on Base with dual-provider AI inference, Robot Task Protocol (RTP), and persistent Supabase storage.**
+**Batch payments for AI agents — pay up to 200 recipients in one atomic, non-custodial transaction — plus 190 pay-per-use DeFi endpoints across 15 chains.**
 
-The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly.
+The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly. Categories span batch payments, payroll, escrow, swaps, oracle, bridge, AI inference, GPU/compute, compute futures, Solana DeFi, Robot Task Protocol (RTP), agent wallets, supply chain (SCTP), research, prediction markets, stocks, and more.
 
 - **Gateway**: [gateway.spraay.app](https://gateway.spraay.app)
 - **Docs**: [docs.spraay.app](https://docs.spraay.app)
-- **MCP Server**: [mcp.spraay.app](https://mcp.spraay.app) · [GitHub](https://github.com/plagtech/spraay-x402-mcp)
+- **Live Dashboard**: [live.spraay.app](https://live.spraay.app)
+- **MCP Server**: [Smithery](https://smithery.ai/server/@plagtech/spraay-x402-mcp) · [GitHub](https://github.com/plagtech/spraay-x402-mcp) — 160+ tools
+- **HuggingFace Space**: [plagtech/Spraay-gateway](https://huggingface.co/spaces/plagtech/Spraay-gateway) (MCP endpoint included)
 - **RTP Spec**: [github.com/plagtech/rtp-spec](https://github.com/plagtech/rtp-spec)
+- **BPA 1.0 Spec**: [docs.spraay.app/bpa/1.0](https://docs.spraay.app/bpa/1.0/)
 - **Bazaar Discovery**: [gateway.spraay.app/.well-known/x402.json](https://gateway.spraay.app/.well-known/x402.json)
+- **Solana Discovery**: [gateway.spraay.app/.well-known/solana.json](https://gateway.spraay.app/.well-known/solana.json)
 - **Agent Card (A2A)**: [agent.spraay.app](https://agent.spraay.app/.well-known/agent-card.json)
 
 ---
 
-## How It Works
+## Ways to Pay
+
+| Method | Details |
+|--------|---------|
+| **x402 on Base** (default) | USDC micropayments on Base mainnet (`eip155:8453`), facilitated by Coinbase CDP. No API keys. |
+| **x402 on Solana** | USDC (SPL) on Solana mainnet-beta via the `X-Solana-Tx` header. Discovery: `/.well-known/solana.json` |
+| **Subscription (Stripe)** | API-key access, no wallet needed. **Starter $29/mo** (1,000 calls/day) · **Pro $99/mo** (10,000 calls/day). All paid endpoints included. [Sign up](https://spraay.app/#pricing) |
+| **MPP** | Multi-Party Payments — `tempo` and `stripe-spt` methods, pathUSD on the Tempo network. [Spec](https://mpp.dev) |
+
+## How x402 Works
 
 1. Client sends request to a gateway endpoint
 2. Gateway returns `402 Payment Required` with USDC amount + payment details
-3. Client signs a USDC micropayment on Base mainnet
-4. Gateway validates payment via Coinbase CDP facilitator
+3. Client signs a USDC micropayment (Base or Solana)
+4. Gateway validates payment via the Coinbase CDP facilitator
 5. Gateway returns requested data
 
-All payments settle on Base. Coinbase CDP handles facilitation. No API keys required on either side.
+---
+
+## 💧 Batch Payments — Core Primitive
+
+Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-20 + native ETH. Implements the open **[BPA 1.0](https://docs.spraay.app/bpa/1.0/)** spec (Batch Payments for Agents). Protocol fee: **0.3%** (30 bps).
+
+| Chain | Batch contract |
+|-------|----------------|
+| Base | [`0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC`](https://basescan.org/address/0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC) |
+| Unichain | `0x08fA5D1c16CD6E2a16FC0E4839f262429959E073` |
+
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/api/v1/batch/execute` | POST | $0.02 |
+| `/api/v1/batch/estimate` | POST | $0.001 |
+| `/api/v1/stellar/batch` | POST | $0.02 |
+| `/api/v1/stellar/estimate` | POST | $0.001 |
+| `/api/v1/xrp/batch` | POST | $0.02 |
+| `/api/v1/xrp/estimate` | POST | $0.001 |
+| `/api/v1/xrp/info` | GET | $0.001 |
+
+Free pre-flight: `POST /free/validate-batch` (BPA 1.0 schema validation) and `GET /free/estimate-batch` (rough cost estimate).
+
+## Supported Chains — 15 Mainnet
+
+Base · Ethereum · Solana · Bitcoin · Arbitrum · Polygon · BNB Chain · Avalanche · Unichain · Plasma · BOB · Bittensor · XRP Ledger · Stacks · Stellar
+
+Canton Network is live on **testnet**. Batch payouts settle on the destination chain; x402 API payments settle in USDC on Base or Solana.
 
 ---
 
@@ -66,17 +108,13 @@ curl -X POST https://gateway.spraay.app/api/v1/robots/register \
   }'
 ```
 
-**Resources:**
-- [RTP 1.0 Spec](https://github.com/plagtech/rtp-spec/blob/main/spec/RTP-1.0.md)
-- [TypeScript SDK](https://github.com/plagtech/rtp-spec/tree/main/sdk)
-- [Device Compatibility Guide](https://github.com/plagtech/rtp-spec/blob/main/docs/DEVICE-COMPATIBILITY.md)
-- [x402 Roadmap Proposal #1569](https://github.com/coinbase/x402/issues/1569)
+**Resources:** [RTP 1.0 Spec](https://github.com/plagtech/rtp-spec/blob/main/spec/RTP-1.0.md) · [TypeScript SDK](https://github.com/plagtech/rtp-spec/tree/main/sdk) · [Device Compatibility Guide](https://github.com/plagtech/rtp-spec/blob/main/docs/DEVICE-COMPATIBILITY.md) · [x402 Roadmap Proposal #1569](https://github.com/coinbase/x402/issues/1569)
 
 ---
 
 ## AI Inference — Dual Provider
 
-The gateway offers AI inference through two providers. Agents choose with a single `provider` parameter:
+OpenAI-compatible chat completions across **200+ models** (streaming, function calling, vision). Agents choose with a single `provider` parameter:
 
 | Provider | Models | Auth | Payment |
 |----------|--------|------|---------|
@@ -98,219 +136,259 @@ Set `model: "blockrun/auto"` with `provider: "blockrun"` to let ClawRouter pick 
 
 **Routing profiles:** `free` (NVIDIA free models) · `eco` (budget optimized) · `auto` (balanced, default) · `premium` (best quality)
 
-### Direct Model Call
-
-```json
-{
-  "model": "deepseek/deepseek-chat",
-  "messages": [{ "role": "user", "content": "Hello" }],
-  "provider": "blockrun"
-}
-```
-
-Omit `provider` to use OpenRouter (backward compatible).
+Omit `provider` to use OpenRouter (backward compatible). Free tier: `POST /free/chat` (open-weight models).
 
 ---
 
 ## Endpoints
 
-### Free Discovery
-| Endpoint | Description |
-|----------|-------------|
-| `GET /.well-known/x402.json` | Bazaar discovery manifest |
-| `GET /health` | Gateway health check |
-| `GET /api/v1/info` | Gateway info and version |
-| `GET /api/v1/tokens` | Supported tokens and chains |
-| `GET /stats` | Gateway statistics |
-| `GET /api/v1/gpu/models` | GPU model shortcuts |
-| `POST /api/v1/robots/register` | Register robot (RTP) |
-| `POST /api/v1/robots/complete` | Report task result (RTP) |
-| `PATCH /api/v1/robots/update` | Update robot (RTP) |
-| `POST /api/v1/robots/deregister` | Remove robot (RTP) |
+Full machine-readable catalog: `GET https://gateway.spraay.app` · [Bazaar manifest](https://gateway.spraay.app/.well-known/x402.json)
 
-### AI ($0.001–$0.04)
-| Endpoint | Method | Cost | Notes |
-|----------|--------|------|-------|
-| `/api/v1/chat/completions` | POST | $0.04 | Dual-provider: OpenRouter (default) or BlockRun |
-| `/api/v1/models` | GET | $0.001 | Returns models from both providers |
-
-### Payments ($0.001–$0.01)
+### AI
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/batch/execute` | POST | $0.01 |
-| `/api/v1/batch/estimate` | POST | $0.001 |
+| `/api/v1/chat/completions` | POST | $0.005 |
+| `/api/v1/models` | GET | $0.001 |
 
-### DeFi — Swap ($0.001–$0.01)
+### DeFi — Swap (MangoSwap router: Uniswap V3 / Aerodrome on Base)
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/swap/quote` | GET | $0.002 |
+| `/api/v1/swap/quote` | GET | $0.008 |
 | `/api/v1/swap/tokens` | GET | $0.001 |
-| `/api/v1/swap/execute` | POST | $0.01 |
+| `/api/v1/swap/execute` | POST | $0.015 |
 
-### Oracle ($0.001–$0.003)
+### Solana DeFi (Jupiter / Helius / Pyth)
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/oracle/prices` | GET | $0.003 |
-| `/api/v1/oracle/gas` | GET | $0.001 |
-| `/api/v1/oracle/fx` | GET | $0.002 |
+| `/api/v1/solana/jupiter/quote` | GET | $0.005 |
+| `/api/v1/solana/jupiter/swap-tx` | POST | $0.01 |
+| `/api/v1/solana/helius/assets-by-owner` | GET | $0.003 |
+| `/api/v1/solana/helius/asset` | GET | $0.002 |
+| `/api/v1/solana/pyth/price` | GET | $0.005 |
+| `/api/v1/solana/pyth/prices` | GET | $0.008 |
 
-### Bridge ($0.001–$0.005)
+### Oracle
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/bridge/quote` | GET | $0.005 |
-| `/api/v1/bridge/chains` | GET | $0.001 |
+| `/api/v1/oracle/prices` | GET | $0.008 |
+| `/api/v1/oracle/gas` | GET | $0.005 |
+| `/api/v1/oracle/fx` | GET | $0.008 |
 
-### Payroll ($0.001–$0.02)
+### Bridge (LI.FI)
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/payroll/execute` | POST | $0.02 |
-| `/api/v1/payroll/estimate` | POST | $0.002 |
-| `/api/v1/payroll/tokens` | GET | $0.001 |
+| `/api/v1/bridge/quote` | GET | $0.05 |
+| `/api/v1/bridge/chains` | GET | $0.002 |
 
-### Invoice ($0.001–$0.005) — Supabase persistent
+### Payroll
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/invoice/create` | POST | $0.005 |
-| `/api/v1/invoice/list` | GET | $0.002 |
-| `/api/v1/invoice/:id` | GET | $0.001 |
+| `/api/v1/payroll/execute` | POST | $0.10 |
+| `/api/v1/payroll/estimate` | POST | $0.003 |
+| `/api/v1/payroll/tokens` | GET | $0.002 |
 
-### Analytics ($0.003–$0.005)
+### Invoice — Supabase persistent
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/analytics/wallet` | GET | $0.005 |
-| `/api/v1/analytics/txhistory` | GET | $0.003 |
+| `/api/v1/invoice/create` | POST | $0.05 |
+| `/api/v1/invoice/list` | GET | $0.01 |
+| `/api/v1/invoice/:id` | GET | $0.01 |
 
-### Escrow ($0.001–$0.008) — Supabase persistent
+### Analytics
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/escrow/create` | POST | $0.008 |
-| `/api/v1/escrow/list` | GET | $0.002 |
-| `/api/v1/escrow/:id` | GET | $0.001 |
-| `/api/v1/escrow/fund` | POST | $0.002 |
-| `/api/v1/escrow/release` | POST | $0.005 |
-| `/api/v1/escrow/cancel` | POST | $0.002 |
+| `/api/v1/analytics/wallet` | GET | $0.01 |
+| `/api/v1/analytics/txhistory` | GET | $0.008 |
 
-### AI Inference ($0.008–$0.01)
+### Escrow — Supabase persistent
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/inference/classify-address` | POST | $0.008 |
-| `/api/v1/inference/classify-tx` | POST | $0.008 |
-| `/api/v1/inference/explain-contract` | POST | $0.01 |
-| `/api/v1/inference/summarize` | POST | $0.008 |
+| `/api/v1/escrow/create` | POST | $0.10 |
+| `/api/v1/escrow/fund` | POST | $0.02 |
+| `/api/v1/escrow/release` | POST | $0.08 |
+| `/api/v1/escrow/cancel` | POST | $0.02 |
+| `/api/v1/escrow/list` | GET | $0.02 |
+| `/api/v1/escrow/:id` | GET | $0.005 |
 
-### Communication — Email/SMS ($0.001–$0.005)
-| Endpoint | Method | Cost | Status |
-|----------|--------|------|--------|
-| `/api/v1/notify/email` | POST | $0.003 | ✅ Live (AgentMail) |
-| `/api/v1/notify/sms` | POST | $0.005 | ⏳ Simulated (Twilio pending) |
-| `/api/v1/notify/status` | GET | $0.001 | ✅ Live |
-
-### Communication — Webhook ($0.001–$0.003) — Supabase persistent
+### AI Inference (on-chain intelligence)
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/webhook/register` | POST | $0.003 |
-| `/api/v1/webhook/test` | POST | $0.002 |
-| `/api/v1/webhook/list` | GET | $0.001 |
-| `/api/v1/webhook/delete` | POST | $0.001 |
+| `/api/v1/inference/classify-address` | POST | $0.03 |
+| `/api/v1/inference/classify-tx` | POST | $0.03 |
+| `/api/v1/inference/explain-contract` | POST | $0.03 |
+| `/api/v1/inference/summarize` | POST | $0.03 |
 
-### Communication — XMTP ($0.002–$0.003)
+### Trust (ProofLayer)
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/xmtp/send` | POST | $0.003 |
-| `/api/v1/xmtp/inbox` | GET | $0.002 |
+| `/api/v1/trust/score` | GET | $0.03 |
 
-### Infrastructure — RPC ($0.001)
+Multi-dimensional wallet/agent trust score — financial, reliability, trust, and social axes + XMTP reputation + on-chain signals. Powered by [ProofLayer](https://prooflayer.net).
+
+### Communication
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/api/v1/notify/email` | POST | $0.01 |
+| `/api/v1/notify/sms` | POST | $0.02 |
+| `/api/v1/notify/status` | GET | $0.002 |
+| `/api/v1/webhook/register` | POST | $0.01 |
+| `/api/v1/webhook/test` | POST | $0.005 |
+| `/api/v1/webhook/list` | GET | $0.002 |
+| `/api/v1/webhook/delete` | POST | $0.002 |
+| `/api/v1/xmtp/send` | POST | $0.01 |
+| `/api/v1/xmtp/inbox` | GET | $0.01 |
+
+### Infrastructure
 | Endpoint | Method | Cost |
 |----------|--------|------|
 | `/api/v1/rpc/call` | POST | $0.001 |
 | `/api/v1/rpc/chains` | GET | $0.001 |
+| `/api/v1/storage/pin` | POST | $0.01 |
+| `/api/v1/storage/get` | GET | $0.005 |
+| `/api/v1/storage/status` | GET | $0.002 |
+| `/api/v1/cron/create` | POST | $0.01 |
+| `/api/v1/cron/list` | GET | $0.002 |
+| `/api/v1/cron/cancel` | POST | $0.002 |
+| `/api/v1/logs/ingest` | POST | $0.002 |
+| `/api/v1/logs/query` | GET | $0.005 |
 
-### Infrastructure — IPFS ($0.001–$0.005)
+### Identity, Compliance & Tax — Supabase persistent
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/storage/pin` | POST | $0.005 |
-| `/api/v1/storage/get` | GET | $0.002 |
-| `/api/v1/storage/status` | GET | $0.001 |
+| `/api/v1/kyc/verify` | POST | $0.02 |
+| `/api/v1/kyc/status` | GET | $0.01 |
+| `/api/v1/auth/session` | POST | $0.01 |
+| `/api/v1/auth/verify` | GET | $0.005 |
+| `/api/v1/audit/log` | POST | $0.005 |
+| `/api/v1/audit/query` | GET | $0.03 |
+| `/api/v1/tax/calculate` | POST | $0.08 |
+| `/api/v1/tax/report` | GET | $0.05 |
 
-### Infrastructure — Cron/Scheduler ($0.001–$0.005) — Supabase persistent
+### Agent Wallets (ERC-4337 on Base)
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/cron/create` | POST | $0.005 |
-| `/api/v1/cron/list` | GET | $0.001 |
-| `/api/v1/cron/cancel` | POST | $0.001 |
-
-### Infrastructure — Logging ($0.001–$0.003) — Supabase persistent
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/logs/ingest` | POST | $0.001 |
-| `/api/v1/logs/query` | GET | $0.003 |
-
-### Identity & Access — KYC ($0.005–$0.05) — Supabase persistent
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/kyc/verify` | POST | $0.05 |
-| `/api/v1/kyc/status` | GET | $0.005 |
-
-### Identity & Access — Auth/SSO ($0.001–$0.005) — Supabase persistent
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/auth/session` | POST | $0.005 |
-| `/api/v1/auth/verify` | GET | $0.001 |
-
-### Compliance — Audit Trail ($0.001–$0.005) — Supabase persistent
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/audit/log` | POST | $0.001 |
-| `/api/v1/audit/query` | GET | $0.005 |
-
-### Compliance — Tax ($0.01–$0.02) — Supabase persistent
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/tax/calculate` | POST | $0.01 |
-| `/api/v1/tax/report` | GET | $0.02 |
-
-### Robotics / RTP ($0.002–$0.05) — Supabase persistent
-| Endpoint | Method | Cost | Description |
-|----------|--------|------|-------------|
-| `/api/v1/robots/register` | POST | Free | Register robot on RTP network |
-| `/api/v1/robots/task` | POST | $0.05 | Dispatch paid task with escrow |
-| `/api/v1/robots/complete` | POST | Free | Report task completion |
-| `/api/v1/robots/list` | GET | $0.005 | Discover robots |
-| `/api/v1/robots/status` | GET | $0.002 | Poll task status |
-| `/api/v1/robots/profile` | GET | $0.002 | Robot capability profile |
-| `/api/v1/robots/update` | PATCH | Free | Update robot config |
-| `/api/v1/robots/deregister` | POST | Free | Remove robot |
-
-### Wallet Provisioning ($0.001–$0.02) — Supabase persistent
-| Endpoint | Method | Cost |
-|----------|--------|------|
-| `/api/v1/wallet/create` | POST | $0.02 |
+| `/api/v1/agent-wallet/provision` | POST | $0.05 |
+| `/api/v1/agent-wallet/session-key` | POST | $0.02 |
+| `/api/v1/agent-wallet/revoke-key` | POST | $0.02 |
+| `/api/v1/agent-wallet/info` | GET | $0.005 |
+| `/api/v1/agent-wallet/predict` | GET | $0.001 |
 | `/api/v1/wallet/list` | GET | $0.002 |
 | `/api/v1/wallet/:walletId` | GET | $0.001 |
 | `/api/v1/wallet/:walletId/addresses` | GET | $0.001 |
 | `/api/v1/wallet/sign-message` | POST | $0.005 |
 | `/api/v1/wallet/send-transaction` | POST | $0.02 |
 
-### Search / RAG ($0.02–$0.03)
+### GPU / Compute
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/api/v1/gpu/run` | POST | $0.06 |
+| `/api/v1/gpu/status/:id` | GET | $0.005 |
+| `/api/v1/gpu/models` | GET | Free |
+| `/api/v1/gpu-direct/run` | POST | $0.03 |
+| `/api/v1/compute/text-inference` | POST | $0.003–$0.10 |
+| `/api/v1/compute/image-generation` | POST | $0.02–$0.08 |
+| `/api/v1/compute/video-generation` | POST | $0.40–$0.50 |
+| `/api/v1/compute/text-to-speech` | POST | $0.03–$0.05 |
+| `/api/v1/compute/speech-to-text` | POST | $0.02 |
+| `/api/v1/compute/embeddings` | POST | $0.005 |
+| `/api/v1/compute/batch` | POST | $0.05 (up to 50 jobs, 10% discount) |
+| `/api/v1/compute/status/:jobId` | GET | $0.001 |
+
+### Compute Futures (prepaid credits — tier discounts: $10+ → 5%, $50+ → 10%, $200+ → 15%)
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/api/v1/compute-futures/deposit` | POST | $0.01 |
+| `/api/v1/compute-futures/execute` | POST | $0.001 |
+| `/api/v1/compute-futures/balance` | GET | $0.001 |
+| `/api/v1/compute-futures/history` | GET | $0.002 |
+| `/api/v1/compute-futures/refund` | POST | $0.01 |
+| `/api/v1/compute-futures/pricing` | GET | $0.001 |
+
+### Bittensor (decentralized AI — SN64 inference, SN19 image gen)
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/bittensor/v1/chat/completions` | POST | $0.03 |
+| `/bittensor/v1/images/generations` | POST | $0.05 |
+| `/bittensor/v1/embeddings` | POST | $0.005 |
+| `/bittensor/v1/models` | GET | $0.001 |
+
+### Image Generation
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/api/v1/image/generate` | POST | $0.06 (DALL-E 3, FLUX, SDXL) |
+| `/api/v1/image/edit` | POST | $0.05 |
+| `/api/v1/image/status/:id` | GET | $0.001 |
+
+### Search / RAG (Tavily)
 | Endpoint | Method | Cost |
 |----------|--------|------|
 | `/api/v1/search/web` | POST | $0.02 |
 | `/api/v1/search/extract` | POST | $0.02 |
 | `/api/v1/search/qna` | POST | $0.03 |
 
-### GPU / Compute ($0.005–$0.06)
+### Supply Chain — SCTP v0.1
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/gpu/run` | POST | $0.06 |
-| `/api/v1/gpu/status/:id` | GET | $0.005 |
-| `/api/v1/gpu/models` | GET | Free |
+| `/api/v1/sctp/supplier` | POST | $0.02 |
+| `/api/v1/sctp/supplier/:id` | GET | $0.005 |
+| `/api/v1/sctp/po` | POST | $0.02 |
+| `/api/v1/sctp/po/:id` | GET | $0.005 |
+| `/api/v1/sctp/invoice` | POST | $0.02 |
+| `/api/v1/sctp/invoice/:id` | GET | $0.005 |
+| `/api/v1/sctp/invoice/verify` | POST | $0.03 (AI match vs PO) |
+| `/api/v1/sctp/pay` | POST | $0.10 (batch settlement) |
 
-### Data ($0.001–$0.002)
+### Research & Reference (23 endpoints, $0.001–$0.002)
+Dictionary (define, synonyms, phonetics) · Academic papers via OpenAlex 250M+ (search, by-DOI, by-author, citations, trending) · arXiv preprints (search, by-ID, recent) · Crossref scholarly 150M+ (by-DOI, search, citations-count, journal-info) · PubChem chemistry (compound, similarity, bioactivity) · PubMed biomedical 36M+ (search, by-PMID, related) · US Census + Data.gov demographics — all under `/api/v1/research/*`
+
+### Markets & Stocks
 | Endpoint | Method | Cost |
 |----------|--------|------|
-| `/api/v1/prices` | GET | $0.002 |
-| `/api/v1/balances` | GET | $0.002 |
-| `/api/v1/resolve` | GET | $0.001 |
+| `/api/v1/markets/polymarket/events` | GET | $0.001 |
+| `/api/v1/markets/polymarket/market/:id` | GET | $0.001 |
+| `/api/v1/markets/polymarket/orderbook/:id` | GET | $0.001 |
+| `/api/v1/markets/polymarket/trades/:id` | GET | $0.001 |
+| `/api/v1/markets/search` | GET | $0.002 |
+| `/api/v1/stocks/price` | GET | $0.001 |
+| `/api/v1/stocks/search` | GET | $0.001 |
+| `/api/v1/stocks/history` | GET | $0.001 |
+| `/api/v1/stocks/company` | GET | $0.001 |
+
+### Data & Portfolio
+| Endpoint | Method | Cost |
+|----------|--------|------|
+| `/api/v1/prices` | GET | $0.005 |
+| `/api/v1/balances` | GET | $0.005 |
+| `/api/v1/resolve` | GET | $0.002 |
+| `/api/v1/portfolio/tokens` | GET | $0.008 |
+| `/api/v1/portfolio/nfts` | GET | $0.01 |
+| `/api/v1/contract/read` | POST | $0.002 |
+| `/api/v1/contract/write` | POST | $0.01 |
+| `/api/v1/defi/positions` | GET | $0.008 (Aave V3, Compound V3, Aerodrome) |
+
+### Free Tier — 25+ endpoints, no payment required
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` · `/health` · `/stats` | Gateway info, health, statistics |
+| `GET /.well-known/x402.json` | Bazaar discovery manifest |
+| `GET /api/v1/tokens` | Supported tokens & chains |
+| `GET /free` | Free tier catalog |
+| `GET /free/gas` | Gas prices — 7 EVM chains (cached 15s) |
+| `GET /free/prices` | USDC/ETH/SOL spot prices (cached 60s) |
+| `GET /free/chain-status` | Block height & liveness — 7 EVM chains |
+| `GET /free/nonce` | EVM nonce / tx count |
+| `GET /free/validate-address` | Multi-chain address validation (EVM, Solana, XRP, Stellar) |
+| `POST /free/validate-batch` | BPA 1.0 payload schema validation |
+| `GET /free/estimate-batch` | Rough batch cost estimate |
+| `GET /free/resolve` | ENS & Basename resolution |
+| `GET /free/agent-card` | ERC-8004 agent registry lookup |
+| `POST /free/x402-check` | Probe any URL for x402 support |
+| `GET /free/convert` | Fiat ↔ crypto / unit conversion |
+| `GET /free/timestamp` · `/free/uuid` | Utilities |
+| `GET /free/dex/*` | DEX pair search, detail, trending (DexScreener) |
+| `POST /free/chat` · `GET /free/chat/models` · `GET /free/models` | Free AI chat (open-weight models) + model catalogs |
+| RTP: `register`, `complete`, `update`, `deregister` | Robot lifecycle (free) |
+| `GET /bittensor/v1/health` | Bittensor health |
 
 ---
 
@@ -331,14 +409,13 @@ Omit `provider` to use OpenRouter (backward compatible).
 ## Tech Stack
 
 - **Runtime**: Node.js / Express / TypeScript
-- **Protocol**: x402 with Bazaar discovery + [RTP 1.0](https://github.com/plagtech/rtp-spec)
+- **Protocols**: x402 with Bazaar discovery + [RTP 1.0](https://github.com/plagtech/rtp-spec) + [BPA 1.0](https://docs.spraay.app/bpa/1.0/) + MPP
 - **Facilitator**: Coinbase CDP
-- **Chain**: Base mainnet
-- **Payment token**: USDC
-- **AI Providers**: BlockRun (`@blockrun/llm` — x402 wallet auth), OpenRouter (API key)
+- **Settlement**: USDC on Base mainnet + Solana mainnet-beta
+- **AI Providers**: BlockRun (`@blockrun/llm` — x402 wallet auth), OpenRouter (API key), Chutes (Bittensor)
 - **Database**: Supabase (Postgres) — persistent storage for escrow, invoices, webhooks, cron, auth, KYC, audit, tax, logs, robots, robot_tasks
 - **Hosting**: Railway
-- **Real providers**: Alchemy (RPC across 7 chains), AgentMail (email), Pinata (IPFS), XMTP via Fly.io (messaging), LI.FI (bridge), OpenRouter (AI), BlockRun (AI), Tavily (search), Replicate (GPU)
+- **Providers**: Alchemy (multi-chain RPC), Resend (email), Twilio (SMS), Pinata (IPFS), XMTP via Fly.io (messaging), LI.FI (bridge), Tavily (search), Replicate (GPU), Jupiter/Helius/Pyth (Solana), Finnhub (stocks), Polymarket Gamma/CLOB (prediction markets), ProofLayer (trust)
 
 ---
 
@@ -355,14 +432,14 @@ Omit `provider` to use OpenRouter (backward compatible).
 | `BLOCKRUN_WALLET_KEY` | No | Private key for BlockRun x402 payments (enables dual-provider AI) |
 | `BLOCKRUN_ENABLED` | No | Set to `"false"` to disable BlockRun (default: enabled if wallet key exists) |
 | `ALCHEMY_API_KEY` | Yes | Alchemy API key for multi-chain RPC |
-| `AGENTMAIL_API_KEY` | Yes | AgentMail API key for email |
-| `AGENTMAIL_INBOX_ID` | Yes | AgentMail inbox ID |
 | `PINATA_API_KEY` | Yes | Pinata API key for IPFS |
 | `PINATA_API_SECRET` | Yes | Pinata API secret |
 | `TAVILY_API_KEY` | Yes | Tavily API key for search |
 | `REPLICATE_API_TOKEN` | Yes | Replicate API token for GPU inference |
 | `ANTHROPIC_API_KEY` | No | Anthropic key for AI inference classification |
 | `PORT` | No | Server port (default: 3402) |
+
+Additional provider keys (email, SMS, Solana, stocks, Stripe subscriptions, Bittensor/Chutes, and more) are documented in `.env.example` — treat that file as the authoritative list.
 
 ---
 
@@ -384,9 +461,13 @@ Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settleme
 ## Ecosystem
 
 **Merged PRs:**
+- [NVIDIA NeMo Agent Toolkit #27](https://github.com/NVIDIA/NeMo-Agent-Toolkit/pull/27) — full batch/escrow/RTP toolset
+- [Google ADK #95](https://github.com/google/adk-python/pull/95) — batch payments integration
+- [AWS Strands #825](https://github.com/strands-agents/sdk-python/pull/825) — batch payments integration
+- [Block Goose #7525](https://github.com/block/goose/pull/7525)
 - [coinbase/x402](https://github.com/coinbase/x402) — ecosystem listing
 - [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)
-- [Block Goose #7525](https://github.com/block/goose/pull/7525)
+- [ahmet/awesome-web3 #721](https://github.com/ahmet/awesome-web3/pull/721)
 
 **Open PRs:**
 - [Coinbase AgentKit #944](https://github.com/coinbase/agentkit/pull/944)
@@ -394,22 +475,29 @@ Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settleme
 - [ElizaOS #274](https://github.com/elizaos/eliza/pull/274)
 - [CrewAI #314](https://github.com/crewAIInc/crewAI/pull/314)
 - [smolagents #1997](https://github.com/huggingface/smolagents/pull/1997)
-- [BlockRun awesome-blockrun](https://github.com/BlockRunAI/awesome-blockrun/pulls)
-- [BlockRun awesome-OpenClaw-Money-Maker](https://github.com/BlockRunAI/awesome-OpenClaw-Money-Maker/pulls)
+- BlockRun [awesome-blockrun](https://github.com/BlockRunAI/awesome-blockrun/pulls) · [awesome-OpenClaw-Money-Maker](https://github.com/BlockRunAI/awesome-OpenClaw-Money-Maker/pulls)
 
 **Open Issues:**
 - [coinbase/x402 #1569](https://github.com/coinbase/x402/issues/1569) — RTP (Robot Task Protocol) extension proposal
+
+**OpenClaw / ClawHub:**
+- **SpraayBatch plugin** — [ClawHub](https://clawhub.com) + npm; batch payments for OpenClaw agents (any ERC-20 on Base)
+- 19 published skills including x402 Agent Payments, Spraay Batch Payments, Solana Batch Payments, crypto-payroll, and shopify-batch-payouts — `clawhub install spraay-openclaw`
 
 ---
 
 ## Related
 
 - **RTP Spec**: [github.com/plagtech/rtp-spec](https://github.com/plagtech/rtp-spec) — Robot Task Protocol v1.0 open standard
-- **MCP Server**: [github.com/plagtech/spraay-x402-mcp](https://github.com/plagtech/spraay-x402-mcp) — 60 tools, connect any AI agent via MCP
+- **BPA 1.0**: [docs.spraay.app/bpa/1.0](https://docs.spraay.app/bpa/1.0/) — Batch Payments for Agents open spec
+- **MCP Server**: [github.com/plagtech/spraay-x402-mcp](https://github.com/plagtech/spraay-x402-mcp) — 160+ tools, connect any AI agent via MCP
+- **HuggingFace Space**: [huggingface.co/spaces/plagtech/Spraay-gateway](https://huggingface.co/spaces/plagtech/Spraay-gateway) — Gradio tools + MCP endpoint
 - **Docs**: [docs.spraay.app](https://docs.spraay.app) — Full endpoint catalog
-- **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI on 11 chains
+- **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI across 15 chains
+- **Live Dashboard**: [live.spraay.app](https://live.spraay.app) — real-time gateway activity
 - **Spraay Base App**: [spraay-base-dapp.vercel.app](https://spraay-base-dapp.vercel.app) — Farcaster mini app + onramp
 - **StablePay**: [stablepay.me](https://stablepay.me) — crypto payroll dashboard
+- **ProofLayer**: [prooflayer.net](https://prooflayer.net) — agent trust scoring
 - **MangoSwap**: [mangoswap.xyz](https://mangoswap.xyz) — DEX on Base
 - **x402 Protocol**: [x402.org](https://x402.org)
 - **BlockRun**: [blockrun.ai](https://blockrun.ai)
