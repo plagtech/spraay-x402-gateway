@@ -91,6 +91,8 @@ import { solanaEnrich402Middleware } from "./middleware/solanaEnrich402.js";
 import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
 // Rejects invalid robots/task payloads before the payment gate settles them
 import { robotTaskPrecheck } from "./middleware/robotTaskPrecheck.js";
+// Gateway version — read from package.json, never hand-written here
+import { GATEWAY_VERSION } from "./lib/version.js";
 import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
 // NEW: Research & Reference
 import {
@@ -1560,7 +1562,7 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
   res.json({
     name: "Spraay",
     description: `Full-stack DeFi infrastructure for AI agents on Base. ${PAID_COUNT} tools for payments, swaps, bridge, payroll, invoicing, escrow, oracle, analytics, AI inference, GPU/Compute, Search/RAG, communication, scheduling, storage, KYC, auth, audit trail, tax, agent wallets & supply chain (SCTP). Agents pay per request via x402 (USDC) or MPP (pathUSD/fiat).`,
-    version: "3.8.1",
+    version: GATEWAY_VERSION,
     icon: "https://raw.githubusercontent.com/plagtech/spraay-x402-mcp/main/spraay-logo-1000x1000.png",
     homepage: "https://spraay.app",
     repository: "https://github.com/plagtech/spraay-x402-mcp",
@@ -1698,7 +1700,7 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.json({
-    name: "Spraay x402 Gateway", version: "3.8.1",
+    name: "Spraay x402 Gateway", version: GATEWAY_VERSION,
     description: "Full-stack DeFi infrastructure: AI, payments, swaps, oracle, bridge, payroll, invoicing, escrow, AI inference, analytics, communication, webhooks, XMTP, RPC, storage, scheduling, logging, KYC, auth, audit trail, tax, GPU/Compute, Search/RAG, Agent Wallets & Supply Chain (SCTP). x402 + USDC.",
     docs: "https://github.com/plagtech/spraay-x402-gateway",
     discovery: `${BASE_URL}/.well-known/x402.json`,
@@ -2016,7 +2018,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
     description: `Multi-chain batch payment protocol + universal payment gateway (x402 + MPP) with ${PAID_COUNT} paid endpoints for autonomous agents. Powered by Spraay Protocol on Base.`,
     url: BASE_URL,
     provider: { organization: "Spraay Protocol", url: "https://spraay.app" },
-    version: "3.8.1",
+    version: GATEWAY_VERSION,
     documentationUrl: "https://docs.spraay.app",
     capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
     authentication: {
@@ -2050,7 +2052,7 @@ const agentCardResponse = (_req: express.Request, res: express.Response) => {
       openapi: `${BASE_URL}/openapi.json`,
       mcp: `${BASE_URL}/.well-known/mcp/server-card.json`,
     },
-    _gateway: { provider: "spraay-x402", version: "3.8.1" },
+    _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
   });
 };
 app.get("/.well-known/agent.json", agentCardResponse);
@@ -2084,7 +2086,7 @@ solanaPayment: {
   txHeader: "X-Solana-Tx",
   discovery: `${BASE_URL}/.well-known/solana.json`,
 },
-_gateway: { provider: "spraay", version: "3.8.1", protocols: ["x402", "mpp", "solana-usdc"] },
+_gateway: { provider: "spraay", version: GATEWAY_VERSION, protocols: ["x402", "mpp", "solana-usdc"] },
   });
 });
 
@@ -2581,7 +2583,7 @@ app.get("/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "Spraay x402 Gateway",
-      version: "3.8.1",
+      version: GATEWAY_VERSION,
       description: "Pay-per-use AI, DeFi, payment, compute, and RTP primitives for autonomous agents via x402 and MPP on Base.",
       contact: { name: "Spraay", url: "https://spraay.app", email: "hello@spraay.app" },
       license: { name: "MIT" },
@@ -2652,7 +2654,7 @@ app.post("/api/v1/ai/chat", (_req, res) => res.redirect(308, "/api/v1/chat/compl
 app.get("/api/v1/analytics", (_req, res) => {
   res.json({
     gateway: "spraay-x402",
-    version: "3.8.1",
+    version: GATEWAY_VERSION,
     network: CAIP2_NETWORK,
     status: "operational",
     paidEndpoints: {
@@ -2664,7 +2666,7 @@ app.get("/api/v1/analytics", (_req, res) => {
       openapi: `${BASE_URL}/openapi.json`,
     },
     note: "This is a public overview. For per-wallet analytics, use the paid endpoints above.",
-    _gateway: { provider: "spraay-x402", version: "3.8.1" },
+    _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
     timestamp: new Date().toISOString(),
   });
 });
@@ -2680,7 +2682,7 @@ app.post("/api/v1/notify/send", (_req, res) => {
         { method: "POST", path: "/api/v1/notify/email", price: "$0.01", description: "Send transactional email" },
         { method: "POST", path: "/api/v1/notify/sms", price: "$0.02", description: "Send SMS" },
       ],
-      _gateway: { provider: "spraay-x402", version: "3.8.1" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
     });
 });
 
@@ -2695,7 +2697,7 @@ app.post("/api/v1/rpc", (_req, res) => {
         { method: "POST", path: "/api/v1/rpc/call", price: "$0.001", description: "JSON-RPC call to any supported chain" },
         { method: "GET", path: "/api/v1/rpc/chains", price: "$0.001", description: "List supported RPC chains" },
       ],
-      _gateway: { provider: "spraay-x402", version: "3.8.1" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
     });
 });
 
@@ -2710,7 +2712,7 @@ app.post("/api/v1/bridge/transfer", (_req, res) => {
       { method: "GET", path: "/api/v1/bridge/chains", price: "$0.002", description: "List supported bridge chains" },
     ],
     manifest: `${BASE_URL}/.well-known/x402.json`,
-    _gateway: { provider: "spraay-x402", version: "3.8.1" },
+    _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
     timestamp: new Date().toISOString(),
   });
 });
@@ -2930,7 +2932,7 @@ app.listen(PORT, async () => {
   await initMpp();
 const webhookWorker = startWebhookWorker(supabase!, { pollIntervalMs: 5_000, batchSize: 25 });
   process.on("SIGTERM", () => webhookWorker.stop());
-  console.log(`\n💧 Spraay x402 Gateway v3.8.1 running on port ${PORT}`);
+  console.log(`\n💧 Spraay x402 Gateway v${GATEWAY_VERSION} running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);
   console.log(`🤖 RTP Robot Task Protocol endpoints active`);

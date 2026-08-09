@@ -19,6 +19,7 @@
 import { Request, Response } from "express";
 import { ethers, isAddress, parseUnits, formatUnits, Contract, JsonRpcProvider, Wallet } from "ethers";
 import { trackRequest } from "./health.js";
+import { GATEWAY_VERSION } from "../lib/version.js";
 import { computeFuturesDb } from "../db.js";
 import {
   COMPUTE_JOBS, BATCH_DISCOUNT,
@@ -173,7 +174,7 @@ export async function computeFuturesDepositHandler(req: Request, res: Response) 
         balance: `GET /api/v1/compute-futures/balance?address=${depositor}`,
         refund: `Call refund() directly on ${FUTURES_CONTRACT}`,
       },
-      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "POST /api/v1/compute-futures/deposit" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION, endpoint: "POST /api/v1/compute-futures/deposit" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -217,7 +218,7 @@ export async function computeFuturesBalanceHandler(req: Request, res: Response) 
       discountBps: Number(discountBps),
       contract: FUTURES_CONTRACT,
       source: "on-chain",
-      _gateway: { provider: "spraay-x402", version: "3.8.1" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -368,7 +369,7 @@ export async function computeFuturesExecuteHandler(req: Request, res: Response) 
         result,
       },
       contract: FUTURES_CONTRACT,
-      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "POST /api/v1/compute-futures/execute" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION, endpoint: "POST /api/v1/compute-futures/execute" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -407,7 +408,7 @@ export async function computeFuturesHistoryHandler(req: Request, res: Response) 
       },
       usage,
       contract: FUTURES_CONTRACT,
-      _gateway: { provider: "spraay-x402", version: "3.8.1" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -459,7 +460,7 @@ export async function computeFuturesRefundHandler(req: Request, res: Response) {
         basescan: `https://basescan.org/address/${FUTURES_CONTRACT}`,
         note: "You can also call refund() directly on the contract via Basescan or any wallet. No gateway permission needed.",
       },
-      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "POST /api/v1/compute-futures/refund" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION, endpoint: "POST /api/v1/compute-futures/refund" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -523,7 +524,7 @@ export async function computeFuturesPricingHandler(req: Request, res: Response) 
         "3. POST /compute-futures/execute → run inference, cost deducted on-chain",
         "4. Call refund() on the contract anytime to withdraw unused balance",
       ],
-      _gateway: { provider: "spraay-x402", version: "3.8.1", endpoint: "GET /api/v1/compute-futures/pricing" },
+      _gateway: { provider: "spraay-x402", version: GATEWAY_VERSION, endpoint: "GET /api/v1/compute-futures/pricing" },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
