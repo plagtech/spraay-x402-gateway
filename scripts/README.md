@@ -6,6 +6,37 @@ the gateway server — they exercise the live x402 flow as a *client*.
 
 ## Files
 
+### `rtp-ext-proof.mjs`
+
+The commit gate required by `CLAUDE.md` before any commit touching `index.ts`,
+batch, escrow or robots routes. Unlike the scripts below it does **not** talk to
+the live gateway: it compiles `src/`, boots `dist/index.js` locally against a
+mock Supabase and a mock x402 facilitator (`scripts/rtp-proof/`), and exits
+nonzero on any mismatch. No network, no database, no real funds.
+
+```bash
+node scripts/rtp-ext-proof.mjs                   # the gate — exits 0 or 1
+node scripts/rtp-ext-proof.mjs --no-build        # reuse an existing dist/
+node scripts/rtp-ext-proof.mjs --verbose         # stream gateway logs
+node scripts/rtp-ext-proof.mjs --update-baseline # re-baseline (see below)
+```
+
+It asserts three blocks:
+
+| Block | What it proves |
+|-------|----------------|
+| **A** | The nine frozen NVIDIA paths still match `rtp-proof/baseline.json` on status, content type, top-level key set and every nested key path. Values are ignored; `version` values are reported, not asserted. |
+| **B** | `POST /api/v1/robots/task` validates *before* it charges: unpaid requests still get the unchanged 402 challenge, and a paid request with an invalid payload is rejected with **zero** facilitator calls. |
+| **C** | The payment gate still runs for paid routes other than `robots/task`, so the precheck cannot have leaked onto the shared chain. |
+
+Block B's evidence is the mock facilitator's call recording — reaching the
+payment gate at all is the regression being guarded against, so "no verify, no
+settle" is an assertion rather than an inference.
+
+Re-baseline **only** for an intentional, additive shape change, and commit the
+regenerated `baseline.json` in the same commit as the change that caused it.
+Never re-baseline to silence a failure you did not intend.
+
 ### `live_batch_send_smoke.py`
 
 A deterministic smoke test for the batch-payment (`batch_send`) x402 flow. It
