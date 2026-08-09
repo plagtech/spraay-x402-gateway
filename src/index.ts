@@ -89,6 +89,8 @@ import { mppMiddleware, initMpp } from "./middleware/mppMiddleware.js";
 import { solanaPaymentMiddleware } from "./middleware/solanaPaymentMiddleware.js";
 import { solanaEnrich402Middleware } from "./middleware/solanaEnrich402.js";
 import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
+// Rejects invalid robots/task payloads before the payment gate settles them
+import { robotTaskPrecheck } from "./middleware/robotTaskPrecheck.js";
 import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
 // NEW: Research & Reference
 import {
@@ -1227,6 +1229,13 @@ const FREE_ENDPOINTS = {
 const FREE_COUNT = Object.keys(FREE_ENDPOINTS).length;
 const TOTAL_COUNT = PAID_COUNT + FREE_COUNT;
 
+
+// Pay-before-validate fix for ONE route. Mounted with app.post (not app.use)
+// so it can only ever see POST /api/v1/robots/task — every other route,
+// including the frozen NVIDIA paths, reaches paymentMiddleware on exactly the
+// handler chain it does today. Requests carrying no payment proof are passed
+// through untouched, so the unpaid 402 challenge is unchanged.
+app.post("/api/v1/robots/task", robotTaskPrecheck);
 
 // Normalises inbound x402 v2 PAYMENT-SIGNATURE payloads so a spec-compliant
 // echo of our advertised accepts[] matches. Must run immediately before

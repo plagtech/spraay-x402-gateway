@@ -104,43 +104,86 @@ export async function robotRegisterHandler(req: Request, res: Response) {
 // ============================================================
 // 2. POST /api/v1/robots/task (x402: $0.05)
 // ============================================================
-export async function robotTaskHandler(req: Request, res: Response) {
-  try {
-    const { robot_id, task, parameters, callback_url, timeout_seconds } = req.body;
 
-    if (!robot_id || !task) {
-      return res.status(400).json({
+/** Result of the robots/task pre-flight checks. */
+export type RobotTaskCheck =
+  | { ok: true; robot: any }
+  | { ok: false; status: number; body: any };
+
+/**
+ * Pre-flight validation for POST /api/v1/robots/task.
+ *
+ * Split out of robotTaskHandler so the identical checks can also run
+ * *before* the x402 payment middleware settles — see
+ * middleware/robotTaskPrecheck.ts. A caller with an unusable payload
+ * should not be charged $0.05 for a dispatch that was never going to
+ * happen.
+ *
+ * Both callers share this one function so the rejection bodies can
+ * never drift apart. Returns the resolved robot on success, or the
+ * exact { status, body } the handler returned inline before.
+ */
+export async function validateRobotTaskPayload(body: any): Promise<RobotTaskCheck> {
+  const { robot_id, task } = body || {};
+
+  if (!robot_id || !task) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
         error: 'Missing required fields',
         required: ['robot_id', 'task'],
         optional: ['parameters', 'callback_url', 'timeout_seconds'],
         example_tasks: ['pick', 'place', 'scan', 'deliver', 'navigate', 'inspect']
-      });
-    }
+      }
+    };
+  }
 
-    const { data: robot, error: robotErr } = await supabase
-      .from('robots')
-      .select('*')
-      .eq('robot_id', robot_id)
-      .single();
+  const { data: robot, error: robotErr } = await supabase
+    .from('robots')
+    .select('*')
+    .eq('robot_id', robot_id)
+    .single();
 
-    if (robotErr || !robot) {
-      return res.status(404).json({ error: 'Robot not found', robot_id });
-    }
+  if (robotErr || !robot) {
+    return { ok: false, status: 404, body: { error: 'Robot not found', robot_id } };
+  }
 
-    if (robot.status !== 'online') {
-      return res.status(409).json({
+  if (robot.status !== 'online') {
+    return {
+      ok: false,
+      status: 409,
+      body: {
         error: 'Robot is not available',
         current_status: robot.status,
         hint: 'Wait for robot to come online or choose another robot'
-      });
-    }
+      }
+    };
+  }
 
-    if (!robot.capabilities.includes(task)) {
-      return res.status(400).json({
+  if (!robot.capabilities.includes(task)) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
         error: `Robot does not support task "${task}"`,
         available_capabilities: robot.capabilities
-      });
+      }
+    };
+  }
+
+  return { ok: true, robot };
+}
+
+export async function robotTaskHandler(req: Request, res: Response) {
+  try {
+    const { robot_id, task, parameters, callback_url, timeout_seconds } = req.body;
+
+    const check = await validateRobotTaskPayload(req.body);
+    if (!check.ok) {
+      return res.status(check.status).json(check.body);
     }
+    const robot = check.robot;
 
     const taskId = generateId('task');
     const escrowId = generateId('escrow');

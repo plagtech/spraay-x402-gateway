@@ -1,6 +1,6 @@
 {
   "name": "spraay-x402-gateway",
-  "version": "3.8.1",
+  "version": "3.8.2",
   "description": "Pay-per-use AI models, batch payments, and DeFi data on Base. Powered by x402 + USDC.",
   "main": "dist/index.js",
   "scripts": {

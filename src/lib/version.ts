@@ -21,7 +21,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Kept in step with package.json — only used if package.json is unreadable.
-const FALLBACK_VERSION = "3.8.1";
+const FALLBACK_VERSION = "3.8.2";
 
 function readPackageVersion(): string {
   // src/lib/version.ts and dist/lib/version.js sit at the same depth, so
