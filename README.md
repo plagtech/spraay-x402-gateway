@@ -461,21 +461,18 @@ Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settleme
 ## Ecosystem
 
 **Merged PRs:**
-- [NVIDIA NeMo Agent Toolkit #27](https://github.com/NVIDIA/NeMo-Agent-Toolkit/pull/27) — full batch/escrow/RTP toolset
-- [Google ADK #95](https://github.com/google/adk-python/pull/95) — batch payments integration
-- [AWS Strands #825](https://github.com/strands-agents/sdk-python/pull/825) — batch payments integration
-- [Block Goose #7525](https://github.com/block/goose/pull/7525)
+- [NVIDIA NeMo-Agent-Toolkit-Examples #27](https://github.com/NVIDIA/NeMo-Agent-Toolkit-Examples/pull/27) — complete payment tools (batch, escrow, RTP)
+- [Google ADK Community #95](https://github.com/google/adk-python-community/pull/95) — batch payments integration
+- [AWS Strands Agents — official docs integration](https://strandsagents.com/docs/integrations/tools/strands-spraay/) — batch payments, up to 200 recipients/tx (merged via strands-agents/docs #825)
+- [Goose #7525](https://github.com/aaif-goose/goose/pull/7525) — Spraay Batch Payments MCP extension tutorial
+- [awesome-x402 #470](https://github.com/xpaysh/awesome-x402/pull/470) — Spraay Compute & Futures listing
 - [coinbase/x402](https://github.com/coinbase/x402) — ecosystem listing
 - [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)
 - [ahmet/awesome-web3 #721](https://github.com/ahmet/awesome-web3/pull/721)
 
 **Open PRs:**
 - [Coinbase AgentKit #944](https://github.com/coinbase/agentkit/pull/944)
-- [LangChain #557](https://github.com/langchain-ai/langchain/pull/557)
-- [ElizaOS #274](https://github.com/elizaos/eliza/pull/274)
-- [CrewAI #314](https://github.com/crewAIInc/crewAI/pull/314)
-- [smolagents #1997](https://github.com/huggingface/smolagents/pull/1997)
-- BlockRun [awesome-blockrun](https://github.com/BlockRunAI/awesome-blockrun/pulls) · [awesome-OpenClaw-Money-Maker](https://github.com/BlockRunAI/awesome-OpenClaw-Money-Maker/pulls)
+- [peaq os-skills #9](https://github.com/peaqnetwork/peaq-os-skills/pull/9) — RTP skill
 
 **Open Issues:**
 - [coinbase/x402 #1569](https://github.com/coinbase/x402/issues/1569) — RTP (Robot Task Protocol) extension proposal
