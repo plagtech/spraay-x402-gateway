@@ -470,12 +470,6 @@ Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settleme
 - [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)
 - [ahmet/awesome-web3 #721](https://github.com/ahmet/awesome-web3/pull/721)
 
-**Open PRs:**
-- [Coinbase AgentKit #944](https://github.com/coinbase/agentkit/pull/944)
-- [peaq os-skills #9](https://github.com/peaqnetwork/peaq-os-skills/pull/9) — RTP skill
-
-**Open Issues:**
-- [coinbase/x402 #1569](https://github.com/coinbase/x402/issues/1569) — RTP (Robot Task Protocol) extension proposal
 
 **OpenClaw / ClawHub:**
 - **SpraayBatch plugin** — [ClawHub](https://clawhub.com) + npm; batch payments for OpenClaw agents (any ERC-20 on Base)
