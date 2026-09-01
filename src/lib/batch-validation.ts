@@ -5,7 +5,7 @@ import { validateAddress } from "./address-validation.js";
 
 const SUPPORTED_CHAINS = [
   "base", "ethereum", "arbitrum", "polygon", "bnb",
-  "avalanche", "unichain", "plasma", "bob",
+  "avalanche", "unichain", "plasma", "bob", "robinhood",
   "solana", "bittensor", "xrp", "stellar", "stacks", "bitcoin",
 ];
 const MAX_RECIPIENTS = 200;

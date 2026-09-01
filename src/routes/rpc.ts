@@ -66,6 +66,12 @@ const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     rpcUrl: "https://bsc-dataseed1.binance.org",
     type: "public",
   },
+  robinhood: {
+    name: "Robinhood Chain",
+    chainId: 4663,
+    rpcUrl: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
+    type: "public",
+  },
 };
 
 // ── Allowed JSON-RPC methods (read-only, no signing) ─────────

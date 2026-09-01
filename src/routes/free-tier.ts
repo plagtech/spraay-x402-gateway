@@ -15,7 +15,7 @@ import { validateBatchPayload } from "../lib/batch-validation.js";
 import { validateOutboundURL } from "../lib/ssrf-guard.js";
 
 // ---------------------------------------------------------------------------
-// Chain config — matches rpc.ts: Alchemy for 5 chains, public for 2
+// Chain config — matches rpc.ts: Alchemy for 5 chains, public for 3
 // Uses the same ALCHEMY_API_KEY env var your paid RPC endpoint uses.
 // ---------------------------------------------------------------------------
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "";
@@ -28,6 +28,7 @@ const EVM_CHAINS: Record<string, { name: string; chainId: number; rpcUrl: string
   optimism:  { name: "Optimism",       chainId: 10,    rpcUrl: `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,     native: "ETH",   provider: "alchemy" },
   avalanche: { name: "Avalanche C-Chain", chainId: 43114, rpcUrl: "https://api.avax.network/ext/bc/C/rpc",                    native: "AVAX",  provider: "public" },
   bsc:       { name: "BNB Chain",      chainId: 56,    rpcUrl: "https://bsc-dataseed1.binance.org",                           native: "BNB",   provider: "public" },
+  robinhood: { name: "Robinhood Chain", chainId: 4663, rpcUrl: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com", native: "ETH", provider: "public" },
 };
 
 // Reusable viem clients — created once at module load
@@ -87,15 +88,15 @@ export async function freeGasHandler(_req: Request, res: Response) {
 }
 
 // ===========================================================================
-// 2. GET /free/prices — USDC, ETH, SOL spot prices (cached 60s)
+// 2. GET /free/prices — USDC, ETH, SOL, USDG spot prices (cached 60s)
 // ===========================================================================
 export async function freePricesHandler(_req: Request, res: Response) {
   try {
     const result = await priceCache.getOrFetch("basic-prices", async () => {
-      const resp = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum,usd-coin,solana&vs_currencies=usd");
+      const resp = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum,usd-coin,solana,global-dollar&vs_currencies=usd");
       if (!resp.ok) throw new Error(`CoinGecko returned ${resp.status}`);
       const data = await resp.json();
-      return { ETH: { usd: data.ethereum?.usd ?? null }, USDC: { usd: data["usd-coin"]?.usd ?? null }, SOL: { usd: data.solana?.usd ?? null } };
+      return { ETH: { usd: data.ethereum?.usd ?? null }, USDC: { usd: data["usd-coin"]?.usd ?? null }, SOL: { usd: data.solana?.usd ?? null }, USDG: { usd: data["global-dollar"]?.usd ?? 1 } };
     }, 60_000);
 
     res.json(withRelated(
@@ -199,7 +200,7 @@ export function freeEstimateBatchHandler(req: Request, res: Response) {
   const protocolFee = amount > 0 ? amount * (BATCH_FEE_BPS / 10000) : null;
   const gasEstimates: Record<string, number> = {
     base: 0.001, ethereum: 0.50, arbitrum: 0.005, polygon: 0.005,
-    optimism: 0.005, avalanche: 0.01, bsc: 0.01,
+    optimism: 0.005, avalanche: 0.01, bsc: 0.01, robinhood: 0.005,
   };
   const perRecipientGas = gasEstimates[chain] ?? 0.005;
   const estimatedGasUSD = recipients * perRecipientGas;
