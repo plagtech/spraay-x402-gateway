@@ -1,0 +1,10 @@
+{
+  "network": "testnet",
+  "chainId": 46630,
+  "address": "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
+  "deployer": "0x75F3F4C27BB8DB5d72E82a5359674084025Fc82b",
+  "feeRecipient": "0x75F3F4C27BB8DB5d72E82a5359674084025Fc82b",
+  "feeBps": 30,
+  "tx": "0x6682ef121c2422ea91f149fa6fcf4be7e60d1a44fe73d7e7cc96b5075a85d943",
+  "deployedAt": "2026-09-02T00:14:35.874Z"
+}

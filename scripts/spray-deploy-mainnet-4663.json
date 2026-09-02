@@ -1,0 +1,10 @@
+{
+  "network": "mainnet",
+  "chainId": 4663,
+  "address": "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
+  "deployer": "0x75F3F4C27BB8DB5d72E82a5359674084025Fc82b",
+  "feeRecipient": "0x75F3F4C27BB8DB5d72E82a5359674084025Fc82b",
+  "feeBps": 30,
+  "tx": "0x34f8527cc69ddea4b0c0efcc0552b78e25c28d1bd8cef47e5081ef19624d99f3",
+  "deployedAt": "2026-09-02T00:28:08.097Z"
+}

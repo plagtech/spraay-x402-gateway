@@ -13,7 +13,7 @@
 [![BPA](https://img.shields.io/badge/BPA-1.0-green)](https://docs.spraay.app/bpa/1.0/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Batch payments for AI agents — pay up to 200 recipients in one atomic, non-custodial transaction — plus 190 pay-per-use DeFi endpoints across 15 chains.**
+**Batch payments for AI agents — pay up to 200 recipients in one atomic, non-custodial transaction — plus 190 pay-per-use DeFi endpoints across 16 chains.**
 
 The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly. Categories span batch payments, payroll, escrow, swaps, oracle, bridge, AI inference, GPU/compute, compute futures, Solana DeFi, Robot Task Protocol (RTP), agent wallets, supply chain (SCTP), research, prediction markets, stocks, and more.
 
@@ -57,6 +57,7 @@ Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-2
 |-------|----------------|
 | Base | [`0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC`](https://basescan.org/address/0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC) |
 | Unichain | `0x08fA5D1c16CD6E2a16FC0E4839f262429959E073` |
+| Robinhood Chain | [`0x08fA5D1c16CD6E2a16FC0E4839f262429959E073`](https://robinhoodchain.blockscout.com/address/0x08fA5D1c16CD6E2a16FC0E4839f262429959E073) |
 
 | Endpoint | Method | Cost |
 |----------|--------|------|
@@ -70,9 +71,9 @@ Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-2
 
 Free pre-flight: `POST /free/validate-batch` (BPA 1.0 schema validation) and `GET /free/estimate-batch` (rough cost estimate).
 
-## Supported Chains — 15 Mainnet
+## Supported Chains — 16 Mainnet
 
-Base · Ethereum · Solana · Bitcoin · Arbitrum · Polygon · BNB Chain · Avalanche · Unichain · Plasma · BOB · Bittensor · XRP Ledger · Stacks · Stellar
+Base · Ethereum · Solana · Bitcoin · Arbitrum · Polygon · BNB Chain · Avalanche · Unichain · Plasma · BOB · Robinhood Chain · Bittensor · XRP Ledger · Stacks · Stellar
 
 Canton Network is live on **testnet**. Batch payouts settle on the destination chain; x402 API payments settle in USDC on Base or Solana.
 
@@ -484,7 +485,7 @@ Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settleme
 - **MCP Server**: [github.com/plagtech/spraay-x402-mcp](https://github.com/plagtech/spraay-x402-mcp) — 160+ tools, connect any AI agent via MCP
 - **HuggingFace Space**: [huggingface.co/spaces/plagtech/Spraay-gateway](https://huggingface.co/spaces/plagtech/Spraay-gateway) — Gradio tools + MCP endpoint
 - **Docs**: [docs.spraay.app](https://docs.spraay.app) — Full endpoint catalog
-- **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI across 15 chains
+- **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI across 16 chains
 - **Live Dashboard**: [live.spraay.app](https://live.spraay.app) — real-time gateway activity
 - **Spraay Base App**: [spraay-base-dapp.vercel.app](https://spraay-base-dapp.vercel.app) — Farcaster mini app + onramp
 - **StablePay**: [stablepay.me](https://stablepay.me) — crypto payroll dashboard

@@ -67,6 +67,13 @@ const SUPPORTED_CHAINS: Record<string, ChainInfo> = {
     spraayContract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
     usdc: null,
   },
+  robinhood: {
+    chainId: 4663,
+    name: "Robinhood Chain",
+    nativeCurrency: "ETH",
+    spraayContract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
+    usdc: null, // no official USDC on Robinhood Chain; stable is USDG 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168
+  },
 };
 
 interface ChainInfo {
@@ -110,6 +117,8 @@ function resolveChain(input: string): ChainInfo | null {
     avax: "avalanche",
     op: "optimism",
     uni: "unichain",
+    rh: "robinhood",
+    "robinhood-chain": "robinhood",
   };
 
   if (aliases[lower]) return SUPPORTED_CHAINS[aliases[lower]];

@@ -1,0 +1,18 @@
+{
+  "contract": "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
+  "tx": "0x7aaf4eb23746eda87c486beb668ac1d8ea07ca6f432a2f176985bc04ceefc2df",
+  "block": 111415796,
+  "recipients": [
+    {
+      "r1": "0xB31cC47B51D6EA31f9972D5511cDE9253FdB0020",
+      "amount": "100000000000000"
+    },
+    {
+      "r2": "0x77E32f5B71111cC6deB118534C2196D76FB4edff",
+      "amount": "200000000000000"
+    }
+  ],
+  "fee": "900000000000",
+  "passed": true,
+  "at": "2026-09-02T00:15:39.930Z"
+}
