@@ -21,6 +21,7 @@ import { ethers } from "ethers";
 
 const require = createRequire(import.meta.url);
 const solc = require("solc");
+require("dotenv").config(); // DEPLOYER_PRIVATE_KEY may live in .env (gitignored)
 
 // Runtime bytecode of the verified Base deployment (exact_match on Sourcify).
 const EXPECTED_RUNTIME_KECCAK = "0x7c4b82ffe3cccab5b886d57f868de66adc3aa3aaff54460f7d207ade4d942035";
