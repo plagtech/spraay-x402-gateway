@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { GATEWAY_VERSION } from "../lib/version.js";
 
 // In-memory stats (use Redis in production)
 const stats: Record<string, number> = {
@@ -26,7 +27,7 @@ export function healthHandler(_req: Request, res: Response) {
   res.json({
     status: "healthy",
     uptime: formatUptime(uptimeSeconds),
-    version: "1.0.0",
+    version: GATEWAY_VERSION,
     services: {
       aiGateway: process.env.OPENROUTER_API_KEY ? "configured" : "needs_api_key",
       batchPayments: "ready",
