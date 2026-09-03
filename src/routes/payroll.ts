@@ -19,8 +19,16 @@ const CHAIN_ID = 8453;
 // Spraay V2 contract on Base
 const SPRAAY_V2 = "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC";
 
-// Protocol fee: 0.3%
+// Protocol fee: 0.3%, charged by the SprayContract ON TOP of the listed amounts.
+// sprayToken() pulls (sum of amounts + fee) from the sender, pays every recipient
+// exactly their listed amount, and forwards the fee to the contract feeRecipient.
+// Employees therefore always receive exactly what the payroll request lists;
+// the employer funds the fee. Must match feeBps() on the deployed contract.
 const PROTOCOL_FEE_BPS = 30;
+
+// sprayToken() gas limit = base + per-recipient (see measurement note in the handler).
+const PAYROLL_GAS_BASE = 120000;
+const PAYROLL_GAS_PER_RECIPIENT = 45000;
 
 // ============================================
 // SUPPORTED PAYROLL TOKENS (stablecoins only)
@@ -76,9 +84,13 @@ const PAYROLL_TOKENS: Record<string, PayrollToken> = {
 // ABIs
 // ============================================
 
+// SprayContract (contracts/SprayContract.sol) — the functions that actually exist
+// on the deployed bytecode. Selectors: sprayETH 0x970aa1f2, sprayToken 0xfb83b683,
+// sprayEqual 0xfdee1820. (There is no batchTransfer on this contract.)
 const SPRAAY_V2_ABI = [
-  "function batchTransfer(address token, address[] calldata recipients, uint256[] calldata amounts) external",
-  "function batchTransferETH(address[] calldata recipients, uint256[] calldata amounts) external payable",
+  "function sprayETH((address recipient, uint256 amount)[] recipients) external payable",
+  "function sprayToken(address token, (address recipient, uint256 amount)[] recipients) external",
+  "function sprayEqual(address token, address[] recipients, uint256 amountPerRecipient) external payable",
 ];
 
 const ERC20_ABI = [
@@ -217,7 +229,8 @@ export async function payrollExecuteHandler(req: Request, res: Response) {
       });
     }
 
-    // Calculate protocol fee
+    // Calculate protocol fee — same integer math as the contract:
+    // feeAmount = (totalAmount * feeBps) / 10000, paid by the sender on top.
     const protocolFee = (totalRaw * BigInt(PROTOCOL_FEE_BPS)) / 10000n;
     const totalWithFee = totalRaw + protocolFee;
 
@@ -231,15 +244,19 @@ export async function payrollExecuteHandler(req: Request, res: Response) {
       totalWithFee,
     ]);
 
-    // Batch transfer tx
-    const batchCalldata = spraayIface.encodeFunctionData("batchTransfer", [
+    // Batch payment tx: sprayToken(token, Recipient[]) carrying each employee's exact amount.
+    // The contract transfers totalWithFee from the sender (hence the approval above).
+    const batchCalldata = spraayIface.encodeFunctionData("sprayToken", [
       tokenInfo.address,
-      recipients,
-      amounts.map((a) => a.toString()),
+      recipients.map((recipient, i) => ({ recipient, amount: amounts[i] })),
     ]);
 
-    // Gas estimation (rough: ~50k base + ~30k per recipient)
-    const estimatedGas = 50000 + employees.length * 30000;
+    // Gas estimate for sprayToken(): measured on Base mainnet against USDC
+    // (eth_estimateGas, fresh recipients): 1 -> 129,085; 2 -> 158,506; 3 -> 188,528;
+    // 5 -> 246,163, i.e. ~100k base + ~29.5k per recipient. The previous
+    // 50k + 30k/recipient limit ran out of gas at 2 recipients (tx reverted at
+    // 109,295/110,000). 120k + 45k/recipient keeps a >35% margin at every size.
+    const estimatedGas = PAYROLL_GAS_BASE + employees.length * PAYROLL_GAS_PER_RECIPIENT;
 
     // Check sender balance if possible
     let balanceCheck = null;
@@ -375,8 +392,8 @@ export async function payrollEstimateHandler(req: Request, res: Response) {
       });
     }
 
-    // Gas estimation
-    const estimatedGas = 50000 + employeeCount * 30000;
+    // Gas estimation (same formula as payroll/execute, see note there)
+    const estimatedGas = PAYROLL_GAS_BASE + employeeCount * PAYROLL_GAS_PER_RECIPIENT;
 
     // Get current gas price
     let gasPriceGwei = "0.005"; // Base default

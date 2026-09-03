@@ -79,8 +79,10 @@ const SELECTORS: Record<string, { name: string; type: string }> = {
   "0xf242432a": { name: "safeTransferFrom(address,address,uint256,uint256,bytes)", type: "nft_transfer" },
   "0x2eb2c2d6": { name: "safeBatchTransferFrom(...)", type: "nft_transfer" },
 
-  // Spraay 💧
-  "0x4d3a1d47": { name: "batchTransfer(address,address[],uint256[])", type: "batch_payment" },
+  // Spraay 💧 SprayContract (contracts/SprayContract.sol)
+  "0x970aa1f2": { name: "sprayETH((address,uint256)[])", type: "batch_payment" },
+  "0xfb83b683": { name: "sprayToken(address,(address,uint256)[])", type: "batch_payment" },
+  "0xfdee1820": { name: "sprayEqual(address,address[],uint256)", type: "batch_payment" },
 
   // Common admin/misc
   "0x8456cb59": { name: "pause()", type: "admin" },

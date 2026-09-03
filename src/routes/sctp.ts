@@ -84,9 +84,10 @@ const RPC_URLS: Record<string, string> = ALCHEMY_KEY
 // Different tokens would need their own decimals — but SCTP only pays USDC for now.
 const USDC_DECIMALS = 6;
 
-// Spraay V2 batch contract ABI (matches payroll.ts) + ERC-20 minimum
+// SprayContract ABI (matches payroll.ts; see contracts/SprayContract.sol).
+// sprayToken selector 0xfb83b683 — the deployed contract has no batchTransfer.
 const SPRAAY_V2_ABI = [
-  "function batchTransfer(address token, address[] calldata recipients, uint256[] calldata amounts) external",
+  "function sprayToken(address token, (address recipient, uint256 amount)[] recipients) external",
 ];
 
 const ERC20_ABI = [
@@ -95,7 +96,9 @@ const ERC20_ABI = [
   "function allowance(address owner, address spender) external view returns (uint256)",
 ];
 
-// Protocol fee: 0.3% (matches payroll.ts)
+// Protocol fee: 0.3% (matches payroll.ts and feeBps() on the contract).
+// Charged ON TOP: sprayToken pulls (total + fee) from the sender, each supplier
+// receives exactly its listed amount, the fee goes to the contract feeRecipient.
 const PROTOCOL_FEE_BPS = 30;
 
 // ─── Lazy Supabase init ──────────────────────────────
@@ -700,7 +703,7 @@ export async function sctpPayExecuteHandler(req: Request, res: Response) {
       return res.status(500).json({ error: `Payment intent insert failed: ${insErr.message}` });
     }
 
-    // ── Calculate protocol fee and build calldata ──
+    // ── Calculate protocol fee (contract math: total * feeBps / 10000, sender pays) and build calldata ──
     const protocolFee = (totalRaw * BigInt(PROTOCOL_FEE_BPS)) / 10000n;
     const totalWithFee = totalRaw + protocolFee;
 
@@ -715,14 +718,15 @@ export async function sctpPayExecuteHandler(req: Request, res: Response) {
       spraayContract,
       totalWithFee,
     ]);
-    const batchCalldata = spraayIface.encodeFunctionData("batchTransfer", [
+    const batchCalldata = spraayIface.encodeFunctionData("sprayToken", [
       usdcAddress,
-      recipients,
-      amounts,
+      recipients.map((recipient, i) => ({ recipient, amount: amounts[i] })),
     ]);
 
-    // Rough gas estimate: 50k base + 30k per recipient
-    const estimatedGas = 50000 + recipients.length * 30000;
+    // Gas limit for sprayToken(): ~100k base + ~29.5k per recipient measured on Base
+    // (USDC, eth_estimateGas). 50k + 30k/recipient ran out of gas; 120k + 45k/recipient
+    // keeps a >35% margin. Same constants as payroll.ts.
+    const estimatedGas = 120000 + recipients.length * 45000;
 
     // ── Best-effort balance + allowance check ──
     let balanceCheck: any = null;
@@ -812,7 +816,7 @@ export async function sctpPayExecuteHandler(req: Request, res: Response) {
           value: "0x0",
           chainId,
           gasLimit: "0x" + estimatedGas.toString(16),
-          note: `Batch payment to ${recipients.length} supplier${recipients.length === 1 ? "" : "s"} via Spraay batchTransfer`,
+          note: `Batch payment to ${recipients.length} supplier${recipients.length === 1 ? "" : "s"} via Spraay sprayToken`,
         },
       },
       balanceCheck,
