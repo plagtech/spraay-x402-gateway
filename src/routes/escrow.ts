@@ -11,10 +11,6 @@ import {
 } from "ethers";
 import { trackRequest } from "./health.js";
 import { escrowDb } from "../db.js";
-// Verified payer identity for depositor defaulting — set by paymentMiddleware
-// on settlement, read here after it has run. Both are exported from
-// gateway-events.ts (see the one-line export change in the instructions).
-import { decodeSettlement, extractPayerAddress } from "../middleware/gateway-events.js";
 
 const RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const CHAIN_ID = 8453;
@@ -60,6 +56,30 @@ async function lookupEscrow(id: string) {
     }
   }
   return escrow;
+}
+
+/**
+ * Resolve the paying wallet from the request's x402 payment header.
+ *
+ * For the exact-EVM scheme the header is base64 JSON whose payload carries
+ * the EIP-3009 authorization, and `authorization.from` is the payer. By the
+ * time the route handler runs, @x402/express has already verified the
+ * signature over this exact header (payment-verified branch), so the value
+ * is trustworthy here. Non-EVM rails (Solana, MPP) don't match this shape
+ * and return null — those callers keep passing depositor explicitly.
+ */
+function payerFromPaymentHeader(req: Request): string | null {
+  const raw = req.headers["payment-signature"] ?? req.headers["x-payment"];
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
+    const from =
+      decoded?.payload?.authorization?.from ?? decoded?.authorization?.from;
+    if (typeof from === "string" && isAddress(from)) return from;
+  } catch {
+    /* not a decodable EVM payment header */
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,13 +161,13 @@ export async function escrowCreateHandler(req: Request, res: Response) {
   try {
     const body = normalizeEscrowCreateBody(req.body);
 
-    // Default a missing depositor to the wallet that paid for this call.
-    // By the time this handler runs, paymentMiddleware has settled, so the
-    // settlement receipt on the response is the authoritative identity; the
-    // request-header payer is the fallback for rails without a receipt.
+    // Default a missing depositor to the wallet paying for this call,
+    // read from the signature-verified x402 payment header. (The settlement
+    // receipt can't be used here: @x402/express settles only AFTER the
+    // handler succeeds, so no receipt exists yet at this point.)
     if (!body.depositor) {
-      const payer = decodeSettlement(res)?.payer ?? extractPayerAddress(req);
-      if (payer && isAddress(payer)) {
+      const payer = payerFromPaymentHeader(req);
+      if (payer) {
         body.depositor = payer;
       }
     }
