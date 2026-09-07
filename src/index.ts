@@ -91,6 +91,8 @@ import { solanaEnrich402Middleware } from "./middleware/solanaEnrich402.js";
 import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
 // Rejects invalid robots/task payloads before the payment gate settles them
 import { robotTaskPrecheck } from "./middleware/robotTaskPrecheck.js";
+// Rejects invalid escrow/create payloads before the payment gate settles them
+import { escrowCreatePrecheck } from "./middleware/escrowCreatePrecheck.js";
 // Gateway version — read from package.json, never hand-written here
 import { GATEWAY_VERSION } from "./lib/version.js";
 import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
@@ -1238,6 +1240,7 @@ const TOTAL_COUNT = PAID_COUNT + FREE_COUNT;
 // handler chain it does today. Requests carrying no payment proof are passed
 // through untouched, so the unpaid 402 challenge is unchanged.
 app.post("/api/v1/robots/task", robotTaskPrecheck);
+app.post("/api/v1/escrow/create", escrowCreatePrecheck);
 
 // Normalises inbound x402 v2 PAYMENT-SIGNATURE payloads so a spec-compliant
 // echo of our advertised accepts[] matches. Must run immediately before

@@ -11,6 +11,10 @@ import {
 } from "ethers";
 import { trackRequest } from "./health.js";
 import { escrowDb } from "../db.js";
+// Verified payer identity for depositor defaulting — set by paymentMiddleware
+// on settlement, read here after it has run. Both are exported from
+// gateway-events.ts (see the one-line export change in the instructions).
+import { decodeSettlement, extractPayerAddress } from "../middleware/gateway-events.js";
 
 const RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const CHAIN_ID = 8453;
@@ -58,25 +62,103 @@ async function lookupEscrow(id: string) {
   return escrow;
 }
 
-export async function escrowCreateHandler(req: Request, res: Response) {
-  try {
-    const { depositor, beneficiary, token, amount, arbiter, description, conditions, expiresIn } = req.body;
-    if (!depositor || !beneficiary || !token || !amount) {
-      return res.status(400).json({
+// ---------------------------------------------------------------------------
+// 💧 Create-body normalization + validation.
+// Exported so escrowCreatePrecheck (pre-payment) and escrowCreateHandler
+// (post-payment) share ONE definition of a valid body and can never disagree.
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize tolerated input shapes into the canonical create body:
+ *   - `conditions` given as a single string → wrapped as a one-item array
+ *     (several published integrations send it this way; previously those
+ *     conditions were silently dropped by the Array.isArray guard)
+ *   - `condition` (singular string) → accepted as an alias for `conditions`
+ * Unknown extra fields (e.g. `chain`) are left alone and ignored by the
+ * handler exactly as before. Never throws; never rejects anything the
+ * handler previously accepted.
+ */
+export function normalizeEscrowCreateBody(input: any): any {
+  const body = { ...(input ?? {}) };
+  if (typeof body.conditions === "string" && body.conditions.length > 0) {
+    body.conditions = [body.conditions];
+  }
+  if (
+    !Array.isArray(body.conditions) &&
+    typeof body.condition === "string" &&
+    body.condition.length > 0
+  ) {
+    body.conditions = [body.condition];
+  }
+  return body;
+}
+
+type EscrowCreateCheck =
+  | { ok: true }
+  | { ok: false; status: number; body: { error: string; [k: string]: any } };
+
+/**
+ * The create-body validation, verbatim from the handler. With
+ * `allowMissingDepositor` (used by the pre-payment check, where the verified
+ * payer identity does not exist yet), a missing depositor passes — but a
+ * PRESENT depositor is still fully validated.
+ */
+export function validateEscrowCreateBody(
+  body: any,
+  opts: { allowMissingDepositor?: boolean } = {}
+): EscrowCreateCheck {
+  const { depositor, beneficiary, token, amount, arbiter } = body ?? {};
+  const depositorRequired = !opts.allowMissingDepositor;
+
+  if ((depositorRequired && !depositor) || !beneficiary || !token || !amount) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
         error: "Missing required fields",
         required: { depositor: "string", beneficiary: "string", token: "string", amount: "string" },
         optional: { arbiter: "string", description: "string", conditions: "string[]", expiresIn: "number (hours, default 168)" },
+        note: "depositor may be omitted on a paid request; it then defaults to the paying wallet.",
         example: { depositor: "0xClient", beneficiary: "0xFreelancer", token: "USDC", amount: "5000.00", conditions: ["Design approved", "Dev complete"] },
-      });
+      },
+    };
+  }
+  if (depositor && !isAddress(depositor)) return { ok: false, status: 400, body: { error: "Invalid depositor address" } };
+  if (!isAddress(beneficiary)) return { ok: false, status: 400, body: { error: "Invalid beneficiary address" } };
+  if (depositor && depositor.toLowerCase() === beneficiary.toLowerCase()) {
+    return { ok: false, status: 400, body: { error: "Depositor and beneficiary cannot be the same" } };
+  }
+  if (arbiter && !isAddress(arbiter)) return { ok: false, status: 400, body: { error: "Invalid arbiter address" } };
+  const tokenInfo = resolveEscrowToken(token);
+  if (!tokenInfo) return { ok: false, status: 400, body: { error: `Unsupported token: ${token}`, supported: Object.keys(ESCROW_TOKENS) } };
+  const amountFloat = parseFloat(amount);
+  if (isNaN(amountFloat) || amountFloat <= 0) return { ok: false, status: 400, body: { error: "Amount must be positive" } };
+
+  return { ok: true };
+}
+
+export async function escrowCreateHandler(req: Request, res: Response) {
+  try {
+    const body = normalizeEscrowCreateBody(req.body);
+
+    // Default a missing depositor to the wallet that paid for this call.
+    // By the time this handler runs, paymentMiddleware has settled, so the
+    // settlement receipt on the response is the authoritative identity; the
+    // request-header payer is the fallback for rails without a receipt.
+    if (!body.depositor) {
+      const payer = decodeSettlement(res)?.payer ?? extractPayerAddress(req);
+      if (payer && isAddress(payer)) {
+        body.depositor = payer;
+      }
     }
-    if (!isAddress(depositor)) return res.status(400).json({ error: "Invalid depositor address" });
-    if (!isAddress(beneficiary)) return res.status(400).json({ error: "Invalid beneficiary address" });
-    if (depositor.toLowerCase() === beneficiary.toLowerCase()) return res.status(400).json({ error: "Depositor and beneficiary cannot be the same" });
-    if (arbiter && !isAddress(arbiter)) return res.status(400).json({ error: "Invalid arbiter address" });
-    const tokenInfo = resolveEscrowToken(token);
-    if (!tokenInfo) return res.status(400).json({ error: `Unsupported token: ${token}`, supported: Object.keys(ESCROW_TOKENS) });
-    const amountFloat = parseFloat(amount);
-    if (isNaN(amountFloat) || amountFloat <= 0) return res.status(400).json({ error: "Amount must be positive" });
+
+    const check = validateEscrowCreateBody(body);
+    if (!check.ok) {
+      return res.status(check.status).json(check.body);
+    }
+
+    const { depositor, beneficiary, token, amount, arbiter, description, conditions, expiresIn } = body;
+    const tokenInfo = resolveEscrowToken(token)!;
 
     const escrowId = generateEscrowId();
     const amountRaw = parseUnits(amount, tokenInfo.decimals);

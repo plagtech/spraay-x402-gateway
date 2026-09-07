@@ -16,7 +16,7 @@ type Settlement = {
 };
 
 // Reads the v2 receipt header, falling back to the v1 name for any legacy clients.
-function decodeSettlement(res: Response): Settlement | null {
+export function decodeSettlement(res: Response): Settlement | null {
   const h = res.getHeader("payment-response") ?? res.getHeader("x-payment-response");
   const raw = Array.isArray(h) ? h[0] : h;
   if (typeof raw !== "string" || !raw) return null;
@@ -167,7 +167,7 @@ function extractBatchSize(req: Request): number | null {
 // Best-effort EVM payer from the request. In v2 the proof lives in a base64
 // PAYMENT-SIGNATURE payload, so this usually returns null on the request side —
 // the authoritative payer comes from the settlement receipt (see row below).
-function extractPayerAddress(req: Request): string | null {
+export function extractPayerAddress(req: Request): string | null {
   const sig = req.headers["payment-signature"] ?? req.headers["x-payment"];
   if (typeof sig === "string") {
     const match = sig.match(/0x[a-fA-F0-9]{40}/);
