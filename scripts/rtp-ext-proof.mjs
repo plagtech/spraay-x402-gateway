@@ -422,8 +422,11 @@ async function main() {
     { name: "POST /api/v1/batch/execute", method: "POST", path: "/api/v1/batch/execute",
       body: { chain: "base", token: "USDC",
               payments: [{ to: "0x1111111111111111111111111111111111111111", amount: "1.00" }] } },
+    // Body must pass escrowCreatePrecheck (beneficiary, not recipient) — an
+    // invalid body is now correctly rejected BEFORE the facilitator is called,
+    // so only a valid body can prove the payment gate still runs.
     { name: "POST /api/v1/escrow/create", method: "POST", path: "/api/v1/escrow/create",
-      body: { amount: "10.00", token: "USDC", recipient: "0x1111111111111111111111111111111111111111" } },
+      body: { amount: "10.00", token: "USDC", beneficiary: "0x1111111111111111111111111111111111111111" } },
   ];
   for (const t of otherPaid) {
     const ch = await req(t.path, { method: t.method, body: t.body });
