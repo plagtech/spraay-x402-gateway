@@ -2,7 +2,7 @@
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 129 paid API endpoints (153 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides 158 paid API endpoints (190 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
@@ -23,28 +23,34 @@ Spraay provides 129 paid API endpoints (153 total) that agents call with USDC mi
 - Agent Wallets (5)
 - AI Chat & Models (2)
 - AI Inference (Intelligence) (4)
-- Batch Payments (8)
-- Bittensor (SN64) (4)
+- Batch Payments (7)
+- Bittensor (SN64) (5)
 - Communication (Email/SMS/XMTP) (9)
-- Compute (Inference Jobs) (10)
+- Compute (Inference Jobs) (8)
 - Compute Futures (Prepaid) (6)
 - Cross-Chain Bridge (2)
 - Data (1)
-- DeFi & Swaps (6)
+- DeFi & Swaps (4)
 - Discovery (1)
 - Escrow (6)
-- Free Tier (No Wallet) (13)
+- Free Tier (No Wallet) (21)
+- General (14)
 - GPU / Compute (3)
+- Gpu Direct (1)
 - Identity & Auth (5)
+- Image (3)
 - Infrastructure (RPC/Storage/Webhooks) (10)
 - Invoicing (3)
 - KYC & Compliance (4)
 - On-Chain Analytics (2)
 - Payroll (3)
+- Prediction Markets (5)
 - Price & Gas Oracle (3)
 - Research & Reference (23)
 - Robot Task Protocol (RTP) (8)
 - Search & RAG (3)
+- Solana (6)
+- Stocks (4)
 - Supply Chain (SCTP) (8)
 - Trust & Safety (1)
 

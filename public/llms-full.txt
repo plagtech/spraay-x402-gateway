@@ -1,7 +1,7 @@
 # Spraay x402 Gateway — Full Endpoint Catalog
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
-153 endpoints (129 paid + 24 free) across 27 categories.
+190 endpoints (158 paid + 32 free) across 33 categories.
 Network: Base mainnet (eip155:8453) · Asset: USDC · Pay to: 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8
 Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
@@ -20,7 +20,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## AI Chat & Models
 
-- `POST /api/v1/chat/completions` — $0.04 — OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.
+- `POST /api/v1/chat/completions` — $0.005 — OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.
   search: chat completion, LLM, AI chat, text generation, GPT, language model, OpenAI compatible, inference
 - `GET /api/v1/models` — $0.001 — List all available AI models with IDs, capabilities, and pricing. Call before chat/completions to pick the right model.
   search: list models, available models, model catalog, which models, supported models, LLM list, model pricing
@@ -38,8 +38,6 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Batch Payments
 
-- `GET /api/v1/address/safety` — free — Free address safety screen — phishing, sanctions, exploits, mixer usage, malicious contracts. Screen recipients before sending funds.
-  search: address safety, malicious address, phishing, sanctions check, wallet check, is address safe, recipient check, AML, scam address, blacklist
 - `POST /api/v1/batch/estimate` — $0.001 — Estimate gas and total USDC for a batch payment before sending. Returns per-recipient breakdown. Call before batch/execute.
   search: batch estimate, payment estimate, gas estimate, fee preview, bulk payment cost, pre-flight check, dry run
 - `POST /api/v1/batch/execute` — $0.02 — Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0.
@@ -61,6 +59,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
   search: bittensor chat, decentralized inference, permissionless LLM, SN64, TAO inference, censorship resistant AI, OpenAI compatible
 - `POST /bittensor/v1/embeddings` — $0.005 — Decentralized text embeddings via Bittensor. OpenAI-compatible embeddings endpoint for RAG pipelines, semantic search, and vector indexing without centralized providers.
   search: bittensor embeddings, decentralized embeddings, text embeddings, vector embeddings, RAG, semantic search, TAO embeddings
+- `GET /bittensor/v1/health` — free — Bittensor health
 - `POST /bittensor/v1/images/generations` — $0.05 — Decentralized text-to-image generation via the Bittensor SN19 network. OpenAI-compatible image generation endpoint for permissionless, pay-per-use AI art.
   search: bittensor images, decentralized image generation, text to image, SN19, TAO image, permissionless AI art, OpenAI compatible
 - `GET /bittensor/v1/models` — $0.001 — List decentralized AI models available via Bittensor (SN64). OpenAI-compatible model catalog. Call before bittensor/chat/completions to pick a model.
@@ -89,22 +88,18 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Compute (Inference Jobs)
 
-- `POST /api/v1/compute/batch` — varies — Submit up to 50 compute jobs in one batch (text, image, audio, embeddings) at a 10% discount. For high-throughput agent workloads and bulk processing.
+- `POST /api/v1/compute/batch` — $0.05 — Submit up to 50 compute jobs in one batch (text, image, audio, embeddings) at a 10% discount. For high-throughput agent workloads and bulk processing.
   search: batch inference, bulk compute, batch jobs, mass inference, bulk processing, compute batch, high throughput
-- `POST /api/v1/compute/embeddings` — $0.005 — 
-- `POST /api/v1/compute/estimate` — free — Free price estimation for a compute job before committing. Returns expected cost by model and input size. Call before any paid compute request to validate budget.
-  search: compute estimate, price estimate, cost preview, inference cost, estimate price, pre-flight check, budget check
-- `POST /api/v1/compute/image-generation` — $0.02-$0.08 — Text-to-image generation via 4 models on Replicate including FLUX and SDXL. For agent-generated art, marketing assets, and visual content.
+- `POST /api/v1/compute/embeddings` — $0.005 — Text embeddings for RAG, semantic search, and similarity. Vector embeddings via Chutes AI (Bittensor). BGE Large v1.5.
+- `POST /api/v1/compute/image-generation` — $0.03 — Text-to-image generation via 4 models on Replicate including FLUX and SDXL. For agent-generated art, marketing assets, and visual content.
   search: text to image, AI image generation, FLUX, SDXL, image synthesis, generate image, AI art
-- `GET /api/v1/compute/models` — free — Free discovery endpoint listing all compute models across text, image, video, speech, and embeddings with pricing. Call first to pick the right model and provider.
-  search: compute models, available models, model catalog, list models, model pricing, which models, model discovery
-- `POST /api/v1/compute/speech-to-text` — $0.02 — 
+- `POST /api/v1/compute/speech-to-text` — $0.02 — Speech to text (STT) transcription. Whisper Large V3 via Replicate. Audio transcription, speech recognition. 100+ languages.
 - `GET /api/v1/compute/status/:jobId` — $0.001 — Poll the status of a compute job by jobId (processing, succeeded, or failed) and retrieve output when complete. Call after any async compute request.
   search: compute status, job status, inference status, check job, async result, poll job, model output
-- `POST /api/v1/compute/text-inference` — $0.003-$0.10 — LLM text inference and chat completion via 11+ models across Chutes and OpenRouter (GPT-4o, Claude, Llama 3, Mistral). For agent reasoning, summarization, and code generation.
+- `POST /api/v1/compute/text-inference` — $0.03 — LLM text inference and chat completion via 11+ models across Chutes and OpenRouter (GPT-4o, Claude, Llama 3, Mistral). For agent reasoning, summarization, and code generation.
   search: LLM, chat completion, text generation, language model, AI reasoning, code generation, inference
-- `POST /api/v1/compute/text-to-speech` — $0.03-$0.05 — 
-- `POST /api/v1/compute/video-generation` — $0.40-$0.50 — Text-to-video generation via 2 models on Replicate. For agent-generated video clips, marketing content, and animated visuals.
+- `POST /api/v1/compute/text-to-speech` — $0.03 — Text to speech (TTS) and AI music generation. XTTS V2 for natural voice synthesis with cloning, MusicGen for music from text. Voice generation.
+- `POST /api/v1/compute/video-generation` — $0.50 — Text-to-video generation via 2 models on Replicate. For agent-generated video clips, marketing content, and animated visuals.
   search: text to video, AI video generation, video synthesis, generate video, AI video, video model
 
 ## Compute Futures (Prepaid)
@@ -136,7 +131,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## DeFi & Swaps
 
-- `GET /api/v1/prices` — $0.002 — Live token prices for one or many tokens, sourced from on-chain and market feeds.
+- `GET /api/v1/prices` — $0.005 — Live token prices for one or many tokens, sourced from on-chain and market feeds.
   search: token price, crypto price, live prices, price lookup, market price, get price, token value
 - `POST /api/v1/swap/execute` — $0.015 — Execute a token swap on Base via the MangoSwap router (Uniswap V3 / Aerodrome).
   search: swap tokens, exchange tokens, trade tokens, DEX swap, convert tokens, buy token, sell token
@@ -144,10 +139,6 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
   search: swap quote, best swap rate, token exchange rate, DEX aggregator, get swap price, price impact
 - `GET /api/v1/swap/tokens` — $0.001 — List tokens available for swapping on Base via Uniswap V3 / Aerodrome with addresses, symbols, and decimals. Call before swap/quote.
   search: list tokens, token list, swappable tokens, Base tokens, tradeable tokens, token discovery, ERC-20 list
-- `GET /api/v1/token/safety` — free — Free pre-trade token safety check — honeypot, sell tax, mint/blacklist, proxy risk. GoPlus-powered with Spraay severity scoring. Called before every trade.
-  search: token safety, honeypot, scam check, sell tax, rug pull, token security, is it safe, can I sell, buy tax, token risk
-- `GET /api/v1/tx/decode` — free — Free transaction decoder — plain-English summary + structured token transfers for any EVM tx. Covers swaps, transfers, approvals, wraps, NFTs, batch payments. Blockscout-powered.
-  search: decode transaction, tx decoder, explain transaction, transaction summary, what happened, parse tx, token transfers, swap decode, tx analysis
 
 ## Discovery
 
@@ -156,7 +147,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Escrow
 
-- `GET /api/v1/escrow/:id` — $0.001 — Retrieve a single escrow by ID with locked amount, parties, status, and release conditions. For real-time monitoring and release-trigger evaluation.
+- `GET /api/v1/escrow/:id` — $0.005 — Retrieve a single escrow by ID with locked amount, parties, status, and release conditions. For real-time monitoring and release-trigger evaluation.
   search: get escrow, escrow lookup, escrow details, check escrow, contract status, locked payment
 - `POST /api/v1/escrow/cancel` — $0.02 — Cancel an active escrow and return locked funds to the depositor. For dispute resolution, expired milestones, or abandoned-contract cleanup.
   search: cancel escrow, refund escrow, void contract, return funds, escrow dispute, cancel payment
@@ -171,16 +162,24 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Free Tier (No Wallet)
 
+- `GET /free` — free — Free tier catalog
 - `GET /free/agent-card` — free — Look up AI agent registration from ERC-8004 Identity Registry on Base. No payment required.
   search: ERC-8004, agent card, agent registry, agent identity, agent lookup
 - `GET /free/chain-status` — free — Block height and liveness for 7 EVM chains. No payment required.
   search: chain status, block height, chain health, network status
+- `POST /free/chat` — free — Free AI chat (open-weight models)
+- `GET /free/chat/models` — free — Free model catalog (open-weight models)
 - `GET /free/convert` — free — Convert between fiat and crypto or between native units (wei/gwei/lamports/drops). No payment required.
   search: convert, unit conversion, fiat to crypto, wei to ETH, currency convert
+- `GET /free/dex/pairs/:chain/:pair` — free — DEX pair detail by chain
+- `GET /free/dex/search` — free — DEX token pair search (DexScreener)
+- `GET /free/dex/tokens/:address` — free — All pairs for a token (DexScreener)
+- `GET /free/dex/trending` — free — Trending tokens (DexScreener boosts)
 - `GET /free/estimate-batch` — free — Rough cost estimate for batch payments by recipient count and chain. No payment required.
   search: batch estimate, rough estimate, cost preview, free estimate
 - `GET /free/gas` — free — Gas prices across 7 EVM chains (Base, Ethereum, Arbitrum, Polygon, Optimism, Avalanche, BSC). Cached 15s. No payment required.
   search: gas price, free gas, network fee, gwei, base fee
+- `GET /free/models` — free — AI model catalog — free mirror of /api/v1/models
 - `GET /free/nonce` — free — Transaction count (nonce) for any EVM address. No payment required.
   search: nonce, transaction count, tx count, pending nonce
 - `GET /free/prices` — free — USDC, ETH, SOL spot prices in USD. Cached 60s. No payment required.
@@ -198,6 +197,23 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 - `POST /free/x402-check` — free — Probe any URL to check x402 payment support, pricing, and .well-known discovery. No payment required.
   search: x402 check, x402 probe, payment check, 402 detect, x402 scan
 
+## General
+
+- `GET /` — free — Info
+- `GET /.well-known/x402.json` — free — Discovery
+- `POST /api/v1/contract/read` — $0.002 — Call any view/pure function on any EVM contract.
+- `POST /api/v1/contract/write` — $0.015 — Encode and broadcast a transaction via an agent wallet.
+- `GET /api/v1/defi/positions` — $0.02 — On-chain DeFi positions across Aave V3, Compound V3, Aerodrome on Base.
+- `GET /api/v1/portfolio/nfts` — $0.01 — Multi-chain NFT holdings with metadata.
+- `GET /api/v1/portfolio/tokens` — $0.008 — Multi-chain token portfolio (native + ERC-20) with USD values.
+- `GET /api/v1/wallet/:walletId` — $0.001 — Get agent wallet details.
+- `GET /api/v1/wallet/:walletId/addresses` — $0.001 — Get chain-specific addresses for a wallet.
+- `GET /api/v1/wallet/list` — $0.002 — List agent wallets with pagination.
+- `POST /api/v1/wallet/send-transaction` — $0.02 — Sign and broadcast a transaction from an agent wallet.
+- `POST /api/v1/wallet/sign-message` — $0.005 — Sign a message with an agent wallet.
+- `GET /health` — free — Health
+- `GET /stats` — free — Stats
+
 ## GPU / Compute
 
 - `GET /api/v1/gpu/models` — free — Free discovery endpoint listing available GPU model shortcuts (image, video, LLM, audio) with pricing. Call before gpu/run.
@@ -206,6 +222,10 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
   search: GPU inference, run AI model, image generation, video generation, model inference, Replicate, run model
 - `GET /api/v1/gpu/status/:id` — $0.005 — Poll the status of a GPU prediction job by ID and retrieve output when complete. Call after gpu/run.
   search: GPU status, prediction status, job status, check GPU job, Replicate status, inference status, poll job
+
+## Gpu Direct
+
+- `POST /api/v1/gpu-direct/run` — $0.03 — GPU inference via Spraay Direct operator — instant USDC settlement to GPU host.
 
 ## Identity & Auth
 
@@ -219,6 +239,12 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
   search: KYC, sanctions screening, OFAC, compliance check, AML, know your customer, watchlist screening, wallet screening
 - `GET /api/v1/resolve` — $0.002 — Resolve an ENS name or Base name to its wallet address (and reverse). For human-readable addresses.
   search: ENS, Basename, resolve name, name to address, ENS lookup, .eth, reverse resolve, human readable address
+
+## Image
+
+- `POST /api/v1/image/edit` — $0.05 — Image editing — img2img.
+- `POST /api/v1/image/generate` — $0.06 — Image generation — DALL-E 3 / GPT-image-2 / FLUX / SDXL.
+- `GET /api/v1/image/status/:id` — $0.001 — Image generation — poll Replicate prediction status.
 
 ## Infrastructure (RPC/Storage/Webhooks)
 
@@ -245,7 +271,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Invoicing
 
-- `GET /api/v1/invoice/:id` — $0.001 — Retrieve a single invoice by ID with payment status, recipient, amount, and on-chain settlement details. For payment verification and reconciliation.
+- `GET /api/v1/invoice/:id` — $0.01 — Retrieve a single invoice by ID with payment status, recipient, amount, and on-chain settlement details. For payment verification and reconciliation.
   search: get invoice, invoice lookup, invoice details, check payment, payment confirmation, invoice status
 - `POST /api/v1/invoice/create` — $0.05 — Create a crypto-native invoice with on-chain payment tracking in USDC on Base/Ethereum. For contractor billing, vendor payments, and AR workflows.
   search: create invoice, crypto invoice, billing, accounts receivable, payment request, invoice generation, on-chain invoice
@@ -254,7 +280,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## KYC & Compliance
 
-- `POST /api/v1/audit/log` — $0.001 — Record an immutable audit-trail entry (action, actor, resource) for compliance and accountability.
+- `POST /api/v1/audit/log` — $0.005 — Record an immutable audit-trail entry (action, actor, resource) for compliance and accountability.
   search: audit log, audit trail, compliance record, activity log, record action, accountability, immutable log
 - `GET /api/v1/audit/query` — $0.03 — Query the audit trail by actor, action, and time range for compliance reporting and investigations.
   search: query audit, audit search, compliance report, activity history, investigate actions, audit trail lookup
@@ -278,6 +304,14 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
   search: payroll, pay employees, pay contractors, salary payments, stablecoin payroll, recurring payouts, crypto payroll
 - `GET /api/v1/payroll/tokens` — $0.002 — List stablecoins supported for payroll (USDC, USDT, DAI) across Base, Ethereum and Solana. Call before payroll/execute to pick the payout token.
   search: payroll tokens, supported stablecoins, pay in USDC, salary token, payment currency, payroll assets
+
+## Prediction Markets
+
+- `GET /api/v1/markets/polymarket/events` — $0.001 — Prediction markets — Polymarket events (Gamma API).
+- `GET /api/v1/markets/polymarket/market/:conditionId` — $0.001 — Prediction markets — Polymarket market detail by condition ID.
+- `GET /api/v1/markets/polymarket/orderbook/:tokenId` — $0.001 — Prediction markets — Polymarket CLOB orderbook by token ID.
+- `GET /api/v1/markets/polymarket/trades/:conditionId` — $0.001 — Prediction markets — Polymarket recent trades by condition ID.
+- `GET /api/v1/markets/search` — $0.002 — Prediction markets — Polymarket search.
 
 ## Price & Gas Oracle
 
@@ -343,14 +377,14 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
   search: complete task, robot task done, RTP complete, report completion, finish robot task
 - `POST /api/v1/robots/deregister` — free — Remove a robot from the RTP network so it no longer receives tasks. Free.
   search: deregister robot, remove robot, offboard robot, delete robot, take robot offline
-- `GET /api/v1/robots/list` — $0.005 — 
+- `GET /api/v1/robots/list` — $0.005 — Discover RTP robots. Filter by capability, chain, price, status.
 - `GET /api/v1/robots/profile` — $0.002 — Get the full capability profile of an RTP robot — supported tasks, pricing, and location.
   search: robot profile, robot capabilities, RTP profile, robot details, what can robot do
 - `POST /api/v1/robots/register` — free — Register a robot on the Robot Task Protocol (RTP) network with its capabilities and pricing. Free to register.
   search: register robot, RTP, robot network, add robot, robot onboarding, physical robot, robotics
 - `GET /api/v1/robots/status` — $0.002 — Poll the status of a dispatched RTP robot task (pending, in-progress, complete) and retrieve results.
   search: robot task status, RTP status, task progress, check robot task, poll task
-- `POST /api/v1/robots/task` — $0.05 — 
+- `POST /api/v1/robots/task` — $0.05 — Dispatch a paid task to an RTP-registered robot. x402 payment held in escrow until completion.
 - `PATCH /api/v1/robots/update` — free — Update an RTP robot's capabilities, pricing, or availability. Free for registered operators.
   search: update robot, edit robot, change robot pricing, robot availability, modify robot
 
@@ -363,14 +397,30 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 - `POST /api/v1/search/web` — $0.02 — Web search powered by Tavily. Returns ranked URLs with snippets.
   search: web search, search the internet, google search, find URLs, web results, search engine
 
+## Solana
+
+- `GET /api/v1/solana/helius/asset` — $0.002 — Helius DAS: full metadata for a single Solana asset (SPL token or compressed NFT).
+- `GET /api/v1/solana/helius/assets-by-owner` — $0.003 — Helius DAS: list all assets (SPL tokens + NFTs) owned by a Solana wallet.
+- `GET /api/v1/solana/jupiter/quote` — $0.005 — Jupiter v6 swap quote on Solana — price, route, slippage. Solana-native.
+- `POST /api/v1/solana/jupiter/swap-tx` — $0.01 — Build unsigned Jupiter swap transaction on Solana. Client signs and submits.
+- `GET /api/v1/solana/pyth/price` — $0.005 — Pyth latest price for one feed (symbol alias or 64-char hex feed ID).
+- `GET /api/v1/solana/pyth/prices` — $0.008 — Pyth batch latest prices (up to 50 feeds, comma-separated symbols or hex IDs).
+
+## Stocks
+
+- `GET /api/v1/stocks/company` — $0.001 — Stock market — company profile (Finnhub).
+- `GET /api/v1/stocks/history` — $0.001 — Stock market — OHLC candles (Finnhub).
+- `GET /api/v1/stocks/price` — $0.001 — Stock market — real-time quote (Finnhub).
+- `GET /api/v1/stocks/search` — $0.001 — Stock market — symbol search (Finnhub).
+
 ## Supply Chain (SCTP)
 
 - `POST /api/v1/sctp/invoice` — $0.02 — Submit an invoice against an SCTP purchase order for verification and payment.
   search: submit invoice, SCTP invoice, supplier invoice, B2B invoice, trade invoice, bill against PO
 - `GET /api/v1/sctp/invoice/:id` — $0.005 — Get an SCTP invoice by ID with its verification result and payment status.
   search: invoice details, get invoice, SCTP invoice lookup, invoice status, view invoice
-- `POST /api/v1/sctp/invoice/verify` — $0.03 — 
-- `POST /api/v1/sctp/pay` — $0.10 — 
+- `POST /api/v1/sctp/invoice/verify` — $0.03 — AI-verify an invoice against its purchase order. Returns match score and flags.
+- `POST /api/v1/sctp/pay` — $0.10 — Execute supplier payment for a verified invoice via batch settlement.
 - `POST /api/v1/sctp/po` — $0.02 — Create a purchase order in SCTP with line items and currency. For B2B procurement and trade.
   search: purchase order, create PO, procurement, SCTP PO, B2B order, trade order, supply chain order
 - `GET /api/v1/sctp/po/:id` — $0.005 — Get details for an SCTP purchase order by ID.
