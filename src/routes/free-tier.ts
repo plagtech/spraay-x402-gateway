@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import { gasCache, priceCache, chainCache, resolveCache, agentCache } from "../lib/free-cache.js";
 import { validateAddress } from "../lib/address-validation.js";
 import { validateBatchPayload } from "../lib/batch-validation.js";
+import { batchGasFloor } from "./batch-payments.js";
 import { validateOutboundURL } from "../lib/ssrf-guard.js";
 
 // ---------------------------------------------------------------------------
@@ -198,12 +199,17 @@ export function freeEstimateBatchHandler(req: Request, res: Response) {
   if (recipients > BATCH_MAX_RECIPIENTS) return res.status(400).json({ error: `Max ${BATCH_MAX_RECIPIENTS} recipients per batch`, requested: recipients });
 
   const protocolFee = amount > 0 ? amount * (BATCH_FEE_BPS / 10000) : null;
-  const gasEstimates: Record<string, number> = {
-    base: 0.001, ethereum: 0.50, arbitrum: 0.005, polygon: 0.005,
-    optimism: 0.005, avalanche: 0.01, bsc: 0.01, robinhood: 0.005,
+  // Gas units from the same cold-recipient worst-case floor as the execute
+  // path (batchGasFloor), priced with rough per-chain USD-per-gas-unit
+  // constants (typical gas price × native token USD). This endpoint is free
+  // and advertises itself as rough — the paid /api/v1/batch/estimate does
+  // the live estimation.
+  const usdPerGasUnit: Record<string, number> = {
+    base: 2e-7, ethereum: 2e-5, arbitrum: 4e-7, polygon: 2e-8,
+    optimism: 4e-7, avalanche: 6e-7, bsc: 8e-7, robinhood: 4e-7,
   };
-  const perRecipientGas = gasEstimates[chain] ?? 0.005;
-  const estimatedGasUSD = recipients * perRecipientGas;
+  const gasUnits = batchGasFloor(recipients);
+  const estimatedGasUSD = gasUnits * (usdPerGasUnit[chain] ?? 4e-7);
 
   res.json(withRelated({
     estimate: {
