@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "test": "echo \"Run: curl http://localhost:3402/health\"",
     "test:guard": "ts-node --transpile-only test/duplicate-guard.test.ts",
-    "test:batch": "ts-node --project test/tsconfig.json test/batch-shape.test.ts"
+    "test:batch": "ts-node --project test/tsconfig.json test/batch-shape.test.ts",
+    "test:gas": "ts-node --project test/tsconfig.json test/batch-gas.test.ts"
   },
   "keywords": [
     "x402",

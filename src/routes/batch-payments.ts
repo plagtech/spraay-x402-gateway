@@ -262,6 +262,53 @@ export function batchFee(totalRaw: bigint): bigint {
   return (totalRaw * BigInt(SPRAAY_FEE_BPS)) / BigInt(10000);
 }
 
+// ============ Gas limit selection (Base) ============
+
+const BASE_RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+
+// Worst-case floor, used when live estimation is unavailable. A fresh
+// (zero-balance) recipient costs ~20k more per transfer than a warm one;
+// a 1-recipient sprayToken to a fresh address measures ~129k on Base.
+export const BATCH_GAS_FLOOR_BASE = 180_000;
+export const BATCH_GAS_FLOOR_PER_RECIPIENT = 50_000;
+
+export function batchGasFloor(recipientCount: number): number {
+  return BATCH_GAS_FLOOR_BASE + BATCH_GAS_FLOOR_PER_RECIPIENT * (recipientCount - 1);
+}
+
+/**
+ * Gas limit for a batch tx: eth_estimateGas on the exact transaction × 1.5,
+ * never below the floor. Static formulas go stale — the previous
+ * 50k + 65k/recipient limit funded a 1-recipient batch with 115k against a
+ * measured ~129k, so it reverted out of gas.
+ *
+ * Falls back to the floor when estimation fails: RPC error/timeout, or state
+ * that cannot estimate yet (e.g. the sender's allowance is not granted at
+ * quote time, so the simulated transfer reverts).
+ */
+export async function chooseBatchGasLimit(
+  tx: { from?: string; to: string; data: string; value?: string },
+  recipientCount: number
+): Promise<{ gasLimit: number; source: "estimate" | "floor" }> {
+  const floor = batchGasFloor(recipientCount);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
+    const estimated = await Promise.race([
+      provider.estimateGas(tx),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("estimateGas timeout")), 5000);
+      }),
+    ]);
+    const padded = Number((estimated * 3n) / 2n);
+    return { gasLimit: Math.max(padded, floor), source: "estimate" };
+  } catch {
+    return { gasLimit: floor, source: "floor" };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ============ Handlers ============
 
 /**
@@ -328,6 +375,16 @@ export async function batchPaymentHandler(req: Request, res: Response) {
       txValue = "0";
     }
 
+    const { gasLimit } = await chooseBatchGasLimit(
+      {
+        from: typeof sender === "string" && sender ? sender : undefined,
+        to: SPRAAY_CONTRACT,
+        data: calldata,
+        value: txValue,
+      },
+      onchainRecipients.length
+    );
+
     const response: any = {
       success: true,
       contract: SPRAAY_CONTRACT,
@@ -349,6 +406,7 @@ export async function batchPaymentHandler(req: Request, res: Response) {
         data: calldata,
         value: txValue,
         chainId: 8453,
+        gasLimit: "0x" + gasLimit.toString(16),
       },
     };
 
@@ -411,8 +469,30 @@ export async function batchEstimateHandler(req: Request, res: Response) {
     // Detailed estimate: same normalization + fee math as the execute path,
     // so a quote can never disagree with what execute will charge.
     if (recipients && Array.isArray(recipients) && recipients.length > 0) {
-      const { totalRaw } = resolveBatchAmounts(recipients, amounts, token.decimals);
+      const { onchainRecipients, totalRaw } = resolveBatchAmounts(recipients, amounts, token.decimals);
       const feeRaw = batchFee(totalRaw);
+
+      // Same gas-limit selection as the execute path. Encoding can throw on
+      // malformed addresses the fee quote tolerates, so fall back to the
+      // floor rather than failing a previously-valid quote.
+      let suggestedGasLimit = batchGasFloor(onchainRecipients.length);
+      try {
+        const calldata = token.isETH
+          ? sprayInterface.encodeFunctionData("sprayETH", [onchainRecipients])
+          : sprayInterface.encodeFunctionData("sprayToken", [token.address, onchainRecipients]);
+        const chosen = await chooseBatchGasLimit(
+          {
+            from: typeof req.body.sender === "string" && req.body.sender ? req.body.sender : undefined,
+            to: SPRAAY_CONTRACT,
+            data: calldata,
+            value: token.isETH ? (totalRaw + feeRaw).toString() : "0",
+          },
+          onchainRecipients.length
+        );
+        suggestedGasLimit = chosen.gasLimit;
+      } catch {
+        // keep the floor
+      }
 
       return res.json({
         success: true,
@@ -427,14 +507,14 @@ export async function batchEstimateHandler(req: Request, res: Response) {
         fee: ethers.formatUnits(feeRaw, token.decimals),
         feePercent: "0.3%",
         totalWithFee: ethers.formatUnits(totalRaw + feeRaw, token.decimals),
+        suggestedGasLimit: suggestedGasLimit.toString(),
       });
     }
 
-    // Simple format: just recipient count for gas estimation
+    // Simple format: recipient count only — no exact tx to estimate, so the
+    // value comes from the cold-recipient worst-case floor.
     const count = recipientCount || 1;
-    const baseGas = 50000;
-    const perRecipientGas = token.isETH ? 30000 : 65000;
-    const estimatedGas = baseGas + perRecipientGas * count;
+    const estimatedGas = batchGasFloor(count);
 
     return res.json({
       success: true,
@@ -445,7 +525,8 @@ export async function batchEstimateHandler(req: Request, res: Response) {
       recipientCount: count,
       feePercent: "0.3%",
       estimatedGas: estimatedGas.toString(),
-      note: "Gas estimate is approximate. Provide recipients array for exact fee calculation.",
+      suggestedGasLimit: estimatedGas.toString(),
+      note: "Conservative ceiling (cold-recipient worst case). Provide recipients array for exact fee calculation.",
     });
   } catch (err: any) {
     const status = err?.status === 400 ? 400 : 500;
