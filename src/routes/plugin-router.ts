@@ -161,7 +161,10 @@ router.get("/quote", async (req: Request, res: Response) => {
     const count = parseInt(recipientCount, 10);
     const total = parseFloat(totalAmount);
 
-    // Gas estimate matching your batch-payments.ts logic
+    // TODO(fix-batch-gas follow-up): stale static formula — measured live costs
+    // exceed it (sprayToken n=1: ~129k vs 115k funded). Display-only here, but
+    // should use batchGasFloor()/chooseBatchGasLimit() from batch-payments.ts
+    // like the execute path does since the Sep 2026 gas fix.
     const baseGas = 50000;
     const perRecipientGas = token.isETH ? 30000 : 65000;
     const estimatedGasUnits = baseGas + perRecipientGas * count;
