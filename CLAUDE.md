@@ -40,3 +40,6 @@ regenerated baseline.json in the same commit as the change that caused it.
 Never re-baseline to silence a failure you did not intend.
 
 If a task seems to require modifying these routes, STOP and ask LP first.
+## Known follow-ups
+
+See docs/FOLLOWUPS.md before starting new work (currently: the MPP middleware returns 500 for every MPP credential — pre-existing mppx result-shape mismatch, not yet fixed).
