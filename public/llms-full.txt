@@ -3,6 +3,7 @@ Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protoco
 
 190 endpoints (158 paid + 32 free) across 33 categories.
 Network: Base mainnet (eip155:8453) · Asset: USDC · Pay to: 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8
+Also accepted on every paid endpoint: USDG on Robinhood Chain (eip155:4663) · Asset: 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168 · Pay to: 0xdAA0fb4fb470AA8fb53A0c301EF9AADC89949F33 · same price, x402 exact/EIP-3009, no approval needed
 Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Agent Wallets

@@ -33,6 +33,11 @@
 import { Request, Response, NextFunction } from "express";
 import { getEndpointPrice } from "../config/pricing.js";
 import { GATEWAY_VERSION } from "../lib/version.js";
+// 💧 Robinhood USDG rail under MPP (additive): registered as the spec `evm`
+// charge method ONLY when the rail is enabled; otherwise this file behaves
+// exactly as before (single tempo method, `mppx.charge`).
+import { getRobinhoodUsdgRail, usdToUsdgUnits } from "../rails/robinhoodUsdg.js";
+import { createRobinhoodUsdgMppMethod } from "../rails/robinhoodUsdgMpp.js";
 
 // ─── Feature flag guard ───────────────────────────────────────────────
 const MPP_ENABLED = process.env.MPP_ENABLED === "true";
@@ -40,6 +45,8 @@ const MPP_ENABLED = process.env.MPP_ENABLED === "true";
 // ─── Lazy-load mppx to avoid crash if not installed yet ───────────────
 let mppxInstance: any = null;
 let mppxInitError: string | null = null;
+/** True once the Robinhood `evm/charge` method is registered alongside tempo. */
+let mppEvmRegistered = false;
 
 async function getMppx() {
   if (mppxInstance) return mppxInstance;
@@ -68,18 +75,30 @@ async function getMppx() {
 
     const account = privateKeyToAccount(walletKey as `0x${string}`);
 
-    mppxInstance = Mppx.create({
-      secretKey,
-      methods: [
-        tempo({
-          currency: PATH_USD,
-          account,
-          ...(process.env.MPP_TESTNET === "true" ? { testnet: true } : {}),
-        }),
-      ],
-    });
+    const methods: any[] = [
+      tempo({
+        currency: PATH_USD,
+        account,
+        ...(process.env.MPP_TESTNET === "true" ? { testnet: true } : {}),
+      }),
+    ];
 
-    console.log("✅ MPP: Initialized with Tempo (pathUSD) →", recipient);
+    // Robinhood USDG (evm/charge, EIP-3009) — additive, only when the rail
+    // has its facilitator key. Failure to build it never disables tempo.
+    const rail = getRobinhoodUsdgRail();
+    if (rail.enabled) {
+      try {
+        methods.push(await createRobinhoodUsdgMppMethod(rail));
+        mppEvmRegistered = true;
+      } catch (err: any) {
+        console.warn(`⚠️  MPP: could not register Robinhood USDG evm/charge method — ${err?.message || err}`);
+      }
+    }
+
+    mppxInstance = Mppx.create({ secretKey, methods });
+
+    console.log("✅ MPP: Initialized with Tempo (pathUSD) →", recipient,
+      mppEvmRegistered ? `+ evm/charge USDG on eip155:4663 → ${rail.payTo}` : "");
     return mppxInstance;
 
   } catch (err: any) {
@@ -180,10 +199,28 @@ async function handleMppPayment(
   // Convert Express request to Fetch API Request for mppx
   const fetchReq = expressToFetchRequest(req);
 
-  // Run mppx charge handler
-  const mppResponse: globalThis.Response = await mppx.charge({
-    amount: priceUSD,
-  })(fetchReq);
+  // Run mppx charge handler.
+  //   - tempo only (today's behaviour): `mppx.charge({ amount })`
+  //   - tempo + Robinhood USDG: `mppx.compose(...)` presents BOTH methods in the
+  //     402 (one WWW-Authenticate per method) and routes the credential by
+  //     method name. The tempo-only path is untouched.
+  let mppResponse: globalThis.Response;
+  if (mppEvmRegistered && typeof mppx.compose === "function") {
+    mppResponse = await mppx.compose(
+      ["tempo/charge", { amount: priceUSD }],
+      ["evm/charge", { amount: usdToUsdgUnits(Number(priceUSD)) }],
+    )(fetchReq);
+    // Forward the challenge headers so spec clients can pick either method.
+    if (mppResponse.status === 402) {
+      const wwwAuth: string[] = [];
+      mppResponse.headers.forEach((v, k) => { if (k.toLowerCase() === "www-authenticate") wwwAuth.push(v); });
+      if (wwwAuth.length) res.setHeader("WWW-Authenticate", wwwAuth.length === 1 ? wwwAuth[0] : wwwAuth);
+    }
+  } else {
+    mppResponse = await mppx.charge({
+      amount: priceUSD,
+    })(fetchReq);
+  }
 
   // If 402 — payment required, forward the MPP challenge to the agent
   if (mppResponse.status === 402) {
@@ -199,6 +236,7 @@ async function handleMppPayment(
         category,
         priceUSD: `$${priceUSD}`,
         alternativeProtocols: ["x402"],
+        ...(mppEvmRegistered ? { methods: ["tempo/charge", "evm/charge"], evm: { network: "eip155:4663", currency: "USDG", credentialTypes: ["authorization"] } } : {}),
       },
     });
     return;
