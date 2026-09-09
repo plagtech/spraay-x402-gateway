@@ -37,6 +37,44 @@ Re-baseline **only** for an intentional, additive shape change, and commit the
 regenerated `baseline.json` in the same commit as the change that caused it.
 Never re-baseline to silence a failure you did not intend.
 
+### `spray-abi-preflight.mjs`
+
+The permanent selector + gas gate for the Spraay contract on Base, extended
+with a Robinhood Chain block: it asserts the USDG token and Permit2 addresses
+on 4663 still resolve to deployed code, that USDG still reports
+`Global Dollar` / `USDG` / 6 decimals with the EIP-712 domain
+`{ name: "Global Dollar", version: "1", chainId: 4663 }` the rail signs
+against, that its EIP-3009 surface still dispatches, and (if
+`FACILITATOR_PRIVATE_KEY_ROBINHOOD` is in `.env`) how many settlements the
+relay wallet can still fund. Run before any commit touching batch/payroll/sctp
+calldata or the USDG rail:
+
+```bash
+node scripts/spray-abi-preflight.mjs      # prints "ABI PREFLIGHT: PASSED" and exits 0
+```
+
+### `robinhood-usdg-e2e.mjs`
+
+An agent-style x402 v2 client for the **USDG rail on Robinhood Chain**
+(`eip155:4663`). It fetches the 402, picks the `eip155:4663` `accepts[]`
+entry, signs an EIP-3009 `TransferWithAuthorization` with
+`TEST_PAYER_PRIVATE_KEY` from `.env` (the payer — never the facilitator or
+deployer key; never printed) and resends with `PAYMENT-SIGNATURE`. On success
+it decodes the `PAYMENT-RESPONSE` header, fetches the settlement receipt and
+prints the facilitator's gas spend and the payer/payTo USDG balance deltas.
+
+```bash
+node scripts/robinhood-usdg-e2e.mjs --gateway http://127.0.0.1:3402 --dry-run   # 402 + signing only, nothing sent
+node scripts/robinhood-usdg-e2e.mjs --gateway http://127.0.0.1:3402 --bad-sig   # expects a 402 rejection, nothing settles
+node scripts/robinhood-usdg-e2e.mjs --gateway http://127.0.0.1:3402 --value 999 # under-payment → rejected
+node scripts/robinhood-usdg-e2e.mjs --gateway http://127.0.0.1:3402             # REAL: moves USDG on mainnet
+```
+
+Flags: `--endpoint` (default `/api/v1/models`), `--method`, `--body` (JSON),
+`--gateway` (default `$GATEWAY_URL` or `http://127.0.0.1:3402`). Every
+non-dry-run invocation is a real mainnet settlement (dust-scale, ~$0.001), so
+run it only with explicit approval.
+
 ### `live_batch_send_smoke.py`
 
 A deterministic smoke test for the batch-payment (`batch_send`) x402 flow. It

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { GATEWAY_VERSION } from "../lib/version.js";
+import { getRobinhoodUsdgRail } from "../rails/robinhoodUsdg.js";
 
 // In-memory stats (use Redis in production)
 const stats: Record<string, number> = {
@@ -35,6 +36,12 @@ export function healthHandler(_req: Request, res: Response) {
     },
     network: process.env.X402_NETWORK || "eip155:84532",
     protocol: "x402",
+    // Additive: Robinhood Chain USDG rail status (enabled only when the
+    // facilitator key is present) + in-process settlement counters.
+    robinhoodUsdg: (() => {
+      const d = getRobinhoodUsdgRail().describe();
+      return { enabled: d.enabled, network: d.network, asset: d.assetSymbol, payTo: d.payTo, facilitator: d.facilitator, stats: d.stats };
+    })(),
   });
 }
 

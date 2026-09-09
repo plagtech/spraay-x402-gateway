@@ -23,6 +23,9 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const GATEWAY_URL = process.env.SPRAAY_GATEWAY_URL || "https://gateway.spraay.app";
+// Where to FETCH x402.json from (defaults to GATEWAY_URL). Lets a not-yet-deployed
+// branch regenerate from a local boot while the emitted links still point at prod.
+const FETCH_URL = process.env.DISCOVERY_FETCH_URL || GATEWAY_URL;
 const OUT_DIR = process.env.DISCOVERY_OUT_DIR || "public";
 
 // Pretty labels for x402.json category slugs.
@@ -61,7 +64,7 @@ const label = (slug) =>
   String(slug).replace(/(^|-)([a-z])/g, (_, s, c) => (s ? " " : "") + c.toUpperCase());
 
 async function main() {
-  const res = await fetch(`${GATEWAY_URL}/.well-known/x402.json`, {
+  const res = await fetch(`${FETCH_URL}/.well-known/x402.json`, {
     headers: { accept: "application/json" },
   });
   if (!res.ok) throw new Error(`x402.json fetch failed: ${res.status} ${res.statusText}`);
@@ -71,6 +74,11 @@ async function main() {
   const payTo = disc.payTo || process.env.PAY_TO_ADDRESS || "";
   const network = disc.network || "eip155:8453";
   const facilitator = disc.facilitator || "Coinbase CDP";
+  // Robinhood Chain USDG rail (advertised by the gateway under robinhoodPayment).
+  const rh = disc.robinhoodPayment || null;
+  const rhLine = rh
+    ? `- Robinhood Chain rail: USDG (${rh.asset}) also accepted on Robinhood Chain (${rh.network}, chainId ${rh.chainId}) via the same x402 \`exact\` scheme, EIP-3009 transferWithAuthorization — no approval step, payer needs no ETH. Pay to: ${rh.payTo}. EIP-712 domain: name "${rh.eip712Domain?.name}", version "${rh.eip712Domain?.version}". Details: ${GATEWAY_URL}/.well-known/x402.json (robinhoodPayment)`
+    : "";
 
   const rows = resources.map((r) => {
     let path = r.resource;
@@ -113,11 +121,11 @@ Spraay provides ${paidCount} paid API endpoints (${total} total) that agents cal
 - Pay to: ${payTo}
 - Facilitator: ${String(facilitator).includes("coinbase") ? "Coinbase CDP" : facilitator}
 - Solana rail: USDC payments also accepted on Solana — see ${GATEWAY_URL}/.well-known/solana.json
-
+${rhLine ? rhLine + "\n" : ""}
 ## Getting started
-1. Fund an agent wallet with USDC on Base
+1. Fund an agent wallet with USDC on Base${rh ? " (or USDG on Robinhood Chain)" : ""}
 2. Send a request to any endpoint
-3. Receive 402 Payment Required with x402 payment terms
+3. Receive 402 Payment Required with x402 payment terms${rh ? " — accepts[] lists Base USDC, Solana USDC and Robinhood USDG entries; pick one" : ""}
 4. Retry with the x402 payment header
 5. Receive 200 with your data
 
@@ -148,7 +156,7 @@ Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protoco
 
 ${total} endpoints (${paidCount} paid + ${freeCount} free) across ${catSlugs.length} categories.
 Network: Base mainnet (${network}) · Asset: USDC · Pay to: ${payTo}
-Source of truth: ${GATEWAY_URL}/.well-known/x402.json
+${rh ? `Also accepted on every paid endpoint: USDG on Robinhood Chain (${rh.network}) · Asset: ${rh.asset} · Pay to: ${rh.payTo} · same price, x402 exact/EIP-3009, no approval needed\n` : ""}Source of truth: ${GATEWAY_URL}/.well-known/x402.json
 
 `;
   for (const slug of catSlugs) {

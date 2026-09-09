@@ -36,6 +36,7 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 |--------|---------|
 | **x402 on Base** (default) | USDC micropayments on Base mainnet (`eip155:8453`), facilitated by Coinbase CDP. No API keys. |
 | **x402 on Solana** | USDC (SPL) on Solana mainnet-beta via the `X-Solana-Tx` header. Discovery: `/.well-known/solana.json` |
+| **x402 on Robinhood Chain** | USDG (Global Dollar, `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`) on Robinhood Chain (`eip155:4663`) — same x402 v2 `exact` scheme and EIP-3009 wire format as Base, same USD prices, on every paid endpoint. No approval step, payer needs no ETH; the gateway's own facilitator relays `transferWithAuthorization`. Discovery: `/.well-known/x402.json` → `robinhoodPayment`. Also exposed under MPP as `evm/charge`. |
 | **Subscription (Stripe)** | API-key access, no wallet needed. **Starter $29/mo** (1,000 calls/day) · **Pro $99/mo** (10,000 calls/day). All paid endpoints included. [Sign up](https://spraay.app/#pricing) |
 | **MPP** | Multi-Party Payments — `tempo` and `stripe-spt` methods, pathUSD on the Tempo network. [Spec](https://mpp.dev) |
 
@@ -43,8 +44,8 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 
 1. Client sends request to a gateway endpoint
 2. Gateway returns `402 Payment Required` with USDC amount + payment details
-3. Client signs a USDC micropayment (Base or Solana)
-4. Gateway validates payment via the Coinbase CDP facilitator
+3. Client signs a USDC micropayment (Base or Solana) — or a USDG one on Robinhood Chain
+4. Gateway validates payment via the Coinbase CDP facilitator (Base/Solana) or its in-process facilitator (Robinhood Chain)
 5. Gateway returns requested data
 
 ---
@@ -411,8 +412,8 @@ Dictionary (define, synonyms, phonetics) · Academic papers via OpenAlex 250M+ (
 
 - **Runtime**: Node.js / Express / TypeScript
 - **Protocols**: x402 with Bazaar discovery + [RTP 1.0](https://github.com/plagtech/rtp-spec) + [BPA 1.0](https://docs.spraay.app/bpa/1.0/) + MPP
-- **Facilitator**: Coinbase CDP
-- **Settlement**: USDC on Base mainnet + Solana mainnet-beta
+- **Facilitator**: Coinbase CDP (Base, Solana) · in-process EIP-3009 relay for Robinhood Chain (`src/rails/robinhoodUsdg.ts`)
+- **Settlement**: USDC on Base mainnet + Solana mainnet-beta · USDG on Robinhood Chain (4663)
 - **AI Providers**: BlockRun (`@blockrun/llm` — x402 wallet auth), OpenRouter (API key), Chutes (Bittensor)
 - **Database**: Supabase (Postgres) — persistent storage for escrow, invoices, webhooks, cron, auth, KYC, audit, tax, logs, robots, robot_tasks
 - **Hosting**: Railway
@@ -439,6 +440,9 @@ Dictionary (define, synonyms, phonetics) · Academic papers via OpenAlex 250M+ (
 | `REPLICATE_API_TOKEN` | Yes | Replicate API token for GPU inference |
 | `ANTHROPIC_API_KEY` | No | Anthropic key for AI inference classification |
 | `PORT` | No | Server port (default: 3402) |
+| `FACILITATOR_PRIVATE_KEY_ROBINHOOD` | No | Dedicated relay wallet (ETH on Robinhood Chain 4663) that settles USDG payments. Absent → the rail is still advertised but every USDG payment answers `rail_not_enabled` (never a crash). Never the deployer key. |
+| `ROBINHOOD_PAY_TO_ADDRESS` | No | Revenue wallet for USDG settlements (default: `0xdAA0fb4fb470AA8fb53A0c301EF9AADC89949F33`) |
+| `ROBINHOOD_RPC_URL` | No | Robinhood Chain RPC (default: `https://rpc.mainnet.chain.robinhood.com`; Alchemy recommended in production) |
 
 Additional provider keys (email, SMS, Solana, stocks, Stripe subscriptions, Bittensor/Chutes, and more) are documented in `.env.example` — treat that file as the authoritative list.
 

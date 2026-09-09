@@ -7,6 +7,8 @@ import { ExactSvmScheme } from "@x402/svm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { facilitator as coinbaseFacilitator } from "@coinbase/x402";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
+// 💧 Robinhood Chain (4663) USDG rail — in-process EIP-3009 facilitator (additive; see src/rails/robinhoodUsdg.ts)
+import { getRobinhoodUsdgRail, robinhoodUsdgMoneyParser, ROBINHOOD_NETWORK, ROBINHOOD_CHAIN_ID, USDG as ROBINHOOD_USDG } from "./rails/robinhoodUsdg.js";
 import { xrpBatchHandler, xrpEstimateHandler, xrpInfoHandler } from "./routes/xrp-batch.js";
 import { aiChatHandler, aiModelsHandler } from "./routes/ai-gateway.js";
 import { batchPaymentHandler, batchEstimateHandler } from "./routes/batch-payments.js";
@@ -171,8 +173,16 @@ const facilitatorClient = IS_MAINNET
   ? new HTTPFacilitatorClient(coinbaseFacilitator)
   : new HTTPFacilitatorClient({ url: (FACILITATOR_URL || "https://x402.org/facilitator") as `${string}://${string}` });
 
-const server = new x402ResourceServer(facilitatorClient).register(CAIP2_NETWORK, new ExactEvmScheme());
+// Robinhood USDG rail: a second, in-process facilitator client. The CDP/x402.org
+// client stays FIRST (precedence for every kind it supports), so Base/Solana
+// verification and settlement are routed exactly as before. The rail client
+// only ever declares eip155:4663.
+const robinhoodRail = getRobinhoodUsdgRail();
+const server = new x402ResourceServer([facilitatorClient, robinhoodRail.facilitatorClient]).register(CAIP2_NETWORK, new ExactEvmScheme());
 server.register(SOLANA_NETWORK, new ExactSvmScheme());
+// Separate ExactEvmScheme instance for 4663 so the Base instance is untouched;
+// its money parser maps "$0.001" → 1000 raw USDG + the verified EIP-712 domain.
+server.register(ROBINHOOD_NETWORK, new ExactEvmScheme().registerMoneyParser(robinhoodUsdgMoneyParser));
 server.registerExtension(bazaarResourceServerExtension);
 app.use(enrich402Middleware);
 app.use(solanaEnrich402Middleware);
@@ -1196,6 +1206,24 @@ const paidRoutes = {
 
 const PAID_COUNT = Object.keys(paidRoutes).length;
 
+// ── Robinhood USDG rail: ADDITIVE accepts[] entry on every paid route ──────
+// Appended (never inserted) after the existing Base + Solana entries, at the
+// same USD price as the route's Base entry, paying to the Spraay revenue
+// wallet on 4663. Existing entries are not touched, so the first EVM entry a
+// client sees is still Base USDC and every frozen NVIDIA 402 keeps its shape
+// (an extra element of an already-present array shape adds no key paths).
+const ROBINHOOD_PAY_TO = robinhoodRail.payTo;
+let robinhoodAcceptsAdded = 0;
+for (const cfg of Object.values(paidRoutes) as any[]) {
+  const accepts: any[] | undefined = cfg?.accepts;
+  if (!Array.isArray(accepts) || accepts.some((a) => a?.network === ROBINHOOD_NETWORK)) continue;
+  const base = accepts.find((a) => a?.network === CAIP2_NETWORK) ?? accepts[0];
+  if (!base || typeof base.price !== "string") continue;
+  accepts.push({ scheme: "exact", price: base.price, network: ROBINHOOD_NETWORK, payTo: ROBINHOOD_PAY_TO });
+  robinhoodAcceptsAdded++;
+}
+console.log(`💧 Robinhood USDG rail: ${robinhoodAcceptsAdded}/${PAID_COUNT} paid routes also accept USDG on ${ROBINHOOD_NETWORK} → ${ROBINHOOD_PAY_TO}`);
+
 const FREE_ENDPOINTS = {
   "GET /": "Info",
   "GET /health": "Health",
@@ -1554,7 +1582,27 @@ app.get("/.well-known/x402.json", (_req, res) => {
       txHeader: "X-Solana-Tx",
       discovery: `${BASE_URL}/.well-known/solana.json`,
     },
-    supportedChains: ["base", "solana"],
+    // Robinhood Chain USDG rail (additive). Same x402 v2 `exact` scheme and
+    // EIP-3009 wire format as Base USDC — only network/asset/payTo differ.
+    robinhoodPayment: {
+      enabled: robinhoodRail.enabled,
+      chain: "robinhood",
+      chainId: ROBINHOOD_CHAIN_ID,
+      network: ROBINHOOD_NETWORK,
+      scheme: "exact",
+      assetTransferMethod: "eip3009",
+      asset: ROBINHOOD_USDG.address,
+      assetSymbol: ROBINHOOD_USDG.symbol,
+      eip712Domain: { name: ROBINHOOD_USDG.name, version: ROBINHOOD_USDG.version, chainId: ROBINHOOD_CHAIN_ID, verifyingContract: ROBINHOOD_USDG.address },
+      decimals: ROBINHOOD_USDG.decimals,
+      payTo: ROBINHOOD_PAY_TO,
+      facilitator: "in-process (gateway relays transferWithAuthorization)",
+      rpc: "https://rpc.mainnet.chain.robinhood.com",
+      explorer: "https://robinhoodchain.blockscout.com",
+      approvalRequired: false,
+      docs: "https://docs.spraay.app/#robinhood-usdg",
+    },
+    supportedChains: ["base", "solana", "robinhood"],
     updatedAt: new Date().toISOString(),
   });
 });
@@ -1903,6 +1951,10 @@ app.get("/", (_req, res) => {
         network: CAIP2_NETWORK,
         facilitator: IS_MAINNET ? "https://api.cdp.coinbase.com/platform/v2/x402" : FACILITATOR_URL,
         token: "USDC",
+        // Additive: further x402 networks accepted on every paid route.
+        additionalNetworks: [
+          { network: ROBINHOOD_NETWORK, chain: "robinhood", chainId: ROBINHOOD_CHAIN_ID, token: ROBINHOOD_USDG.symbol, asset: ROBINHOOD_USDG.address, payTo: ROBINHOOD_PAY_TO, status: robinhoodRail.enabled ? "active" : "disabled", facilitator: "in-process" },
+        ],
       },
       mpp: {
         status: process.env.MPP_ENABLED === "true" ? "active" : "disabled",
@@ -1992,6 +2044,19 @@ app.get("/.well-known/mpp.json", (_req, res) => {
         currencyName: "pathUSD",
         recipient: PAY_TO,
         network: "tempo",
+      },
+      // Additive: MPP `evm` charge method (draft-evm-charge-00) on Robinhood Chain,
+      // credential type "authorization" (EIP-3009). Same settlement engine as x402.
+      evm: {
+        chainId: ROBINHOOD_CHAIN_ID,
+        network: "robinhood",
+        currency: ROBINHOOD_USDG.address,
+        currencyName: ROBINHOOD_USDG.symbol,
+        decimals: ROBINHOOD_USDG.decimals,
+        recipient: ROBINHOOD_PAY_TO,
+        credentialTypes: ["authorization"],
+        status: process.env.MPP_ENABLED === "true" && robinhoodRail.enabled ? "active" : "disabled",
+        spec: "https://github.com/tempoxyz/mpp-specs/blob/main/specs/methods/evm/draft-evm-charge-00.md",
       },
     },
     endpoints: {

@@ -76,5 +76,60 @@ for (const n of [1, 2, 10]) {
     console.log(`sprayETH  n=${n}: estimateGas FAILED (${e.shortMessage || e.message})`);
   }
 }
-console.log(selOk ? "ABI PREFLIGHT: PASSED" : "ABI PREFLIGHT: FAILED");
-process.exit(selOk ? 0 : 1);
+// ── (D) Robinhood Chain (4663) USDG rail preflight ─────────────────────────
+// The rail (src/rails/robinhoodUsdg.ts) settles USDG via EIP-3009. Assert the
+// addresses it depends on still resolve to deployed code and that the token's
+// EIP-712 domain still matches the constants the verifier signs against.
+// Permit2 is NOT used by the rail but is verified here too (task guard 3).
+const RH_RPC = env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
+const RH_USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+const RH_PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+let rhOk = true;
+try {
+  const rh = new ethers.JsonRpcProvider(RH_RPC, 4663, { staticNetwork: true });
+  const usdgCode = await rh.getCode(RH_USDG);
+  const permit2Code = await rh.getCode(RH_PERMIT2);
+  console.log(`robinhood USDG    ${RH_USDG}: ${usdgCode === "0x" ? "*** NO CODE ***" : `code ${usdgCode.length / 2 - 1} bytes`}`);
+  console.log(`robinhood Permit2 ${RH_PERMIT2}: ${permit2Code === "0x" ? "*** NO CODE ***" : `code ${permit2Code.length / 2 - 1} bytes`}`);
+  if (usdgCode === "0x" || permit2Code === "0x") rhOk = false;
+
+  const usdg = new ethers.Contract(RH_USDG, [
+    "function name() view returns (string)", "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)", "function DOMAIN_SEPARATOR() view returns (bytes32)",
+    "function balanceOf(address) view returns (uint256)",
+  ], rh);
+  const [name, symbol, decimals, ds] = await Promise.all([usdg.name(), usdg.symbol(), usdg.decimals(), usdg.DOMAIN_SEPARATOR()]);
+  const expectedDs = ethers.TypedDataEncoder.hashDomain({ name: "Global Dollar", version: "1", chainId: 4663, verifyingContract: RH_USDG });
+  const domainOk = ds.toLowerCase() === expectedDs.toLowerCase();
+  console.log(`robinhood USDG identity: ${name} (${symbol}) decimals=${decimals} | EIP-712 domain {Global Dollar, 1, 4663} ${domainOk ? "MATCHES" : "*** MISMATCH ***"}`);
+  if (symbol !== "USDG" || Number(decimals) !== 6 || !domainOk) rhOk = false;
+
+  // Selectors the rail encodes must exist in the token implementation. USDG is an
+  // EIP-1967 proxy; probe the live dispatch with eth_call instead of a bytecode grep.
+  const iface = new ethers.Interface([
+    "function authorizationState(address,bytes32) view returns (bool)",
+  ]);
+  try {
+    await rh.call({ to: RH_USDG, data: iface.encodeFunctionData("authorizationState", [ethers.ZeroAddress, ethers.ZeroHash]) });
+    console.log("robinhood USDG authorizationState(): dispatches (EIP-3009 surface present)");
+  } catch (e) {
+    console.log(`robinhood USDG authorizationState(): *** FAILED *** (${e.shortMessage || e.message})`);
+    rhOk = false;
+  }
+
+  if (env.FACILITATOR_PRIVATE_KEY_ROBINHOOD) {
+    const fac = new ethers.Wallet(env.FACILITATOR_PRIVATE_KEY_ROBINHOOD);
+    const [ethBal, fee] = await Promise.all([rh.getBalance(fac.address), rh.getFeeData()]);
+    const perSettle = 150000n * (fee.gasPrice ?? 0n);
+    console.log(`robinhood facilitator ${fac.address}: ${ethers.formatEther(ethBal)} ETH (~${perSettle > 0n ? ethBal / perSettle : "?"} settlements at 150k gas × ${fee.gasPrice} wei)`);
+  } else {
+    console.log("robinhood facilitator: FACILITATOR_PRIVATE_KEY_ROBINHOOD not set (rail advertised but disabled)");
+  }
+} catch (e) {
+  console.log(`robinhood preflight FAILED: ${e.shortMessage || e.message}`);
+  rhOk = false;
+}
+
+const allOk = selOk && rhOk;
+console.log(allOk ? "ABI PREFLIGHT: PASSED" : `ABI PREFLIGHT: FAILED${selOk ? "" : " (Base selectors)"}${rhOk ? "" : " (Robinhood USDG)"}`);
+process.exit(allOk ? 0 : 1);
