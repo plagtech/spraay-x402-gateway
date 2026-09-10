@@ -5,9 +5,9 @@
 # Spraay x402 Gateway
 
 [![Live](https://img.shields.io/badge/status-live-brightgreen)](https://gateway.spraay.app)
-[![Version](https://img.shields.io/badge/version-3.8.1-blue)](https://gateway.spraay.app)
+[![Version](https://img.shields.io/badge/version-3.8.2-blue)](https://gateway.spraay.app)
 [![Endpoints](https://img.shields.io/badge/endpoints-190-blueviolet)](https://gateway.spraay.app)
-[![Chains](https://img.shields.io/badge/chains-15%20mainnet-9cf)](https://gateway.spraay.app/api/v1/tokens)
+[![Chains](https://img.shields.io/badge/chains-16%20mainnet-9cf)](https://gateway.spraay.app/api/v1/tokens)
 [![x402](https://img.shields.io/badge/protocol-x402-orange)](https://x402.org)
 [![RTP](https://img.shields.io/badge/RTP-1.0-green)](https://github.com/plagtech/rtp-spec)
 [![BPA](https://img.shields.io/badge/BPA-1.0-green)](https://docs.spraay.app/bpa/1.0/)
@@ -18,6 +18,7 @@
 The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly. Categories span batch payments, payroll, escrow, swaps, oracle, bridge, AI inference, GPU/compute, compute futures, Solana DeFi, Robot Task Protocol (RTP), agent wallets, supply chain (SCTP), research, prediction markets, stocks, and more.
 
 - **Gateway**: [gateway.spraay.app](https://gateway.spraay.app)
+- **Solana Gateway**: [gateway-solana.spraay.app](https://gateway-solana.spraay.app)
 - **Docs**: [docs.spraay.app](https://docs.spraay.app)
 - **Live Dashboard**: [live.spraay.app](https://live.spraay.app)
 - **MCP Server**: [Smithery](https://smithery.ai/server/@plagtech/spraay-x402-mcp) · [GitHub](https://github.com/plagtech/spraay-x402-mcp) — 160+ tools
@@ -36,9 +37,9 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 |--------|---------|
 | **x402 on Base** (default) | USDC micropayments on Base mainnet (`eip155:8453`), facilitated by Coinbase CDP. No API keys. |
 | **x402 on Solana** | USDC (SPL) on Solana mainnet-beta via the `X-Solana-Tx` header. Discovery: `/.well-known/solana.json` |
-| **x402 on Robinhood Chain** | USDG (Global Dollar, `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`) on Robinhood Chain (`eip155:4663`) — same x402 v2 `exact` scheme and EIP-3009 wire format as Base, same USD prices, on every paid endpoint. No approval step, payer needs no ETH; the gateway's own facilitator relays `transferWithAuthorization`. Discovery: `/.well-known/x402.json` → `robinhoodPayment`. Also exposed under MPP as `evm/charge`. |
+| **x402 on Robinhood Chain** | USDG (Global Dollar, `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`) on Robinhood Chain (`eip155:4663`) — same x402 v2 `exact` scheme and EIP-3009 wire format as Base, same USD prices, on every paid endpoint. No approval step, payer needs no ETH; the gateway's own facilitator relays `transferWithAuthorization`. Discovery: `/.well-known/x402.json` → `robinhoodPayment`. |
 | **Subscription (Stripe)** | API-key access, no wallet needed. **Starter $29/mo** (1,000 calls/day) · **Pro $99/mo** (10,000 calls/day). All paid endpoints included. [Sign up](https://spraay.app/#pricing) |
-| **MPP** | Multi-Party Payments — `tempo` and `stripe-spt` methods, pathUSD on the Tempo network. [Spec](https://mpp.dev) |
+| **MPP** 🚧 *under construction* | Machine Payments Protocol (Tempo + Stripe). The `tempo` (pathUSD) and `evm/charge` (USDG on Robinhood Chain, EIP-3009) methods are wired up, but the gateway does not yet emit the `WWW-Authenticate: Payment` challenge on its 402s, so MPP clients can't discover or complete payment. **Use x402 — it's live on all three chains.** [Spec](https://mpp.dev) |
 
 ## How x402 Works
 
@@ -47,6 +48,10 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 3. Client signs a USDC micropayment (Base or Solana) — or a USDG one on Robinhood Chain
 4. Gateway validates payment via the Coinbase CDP facilitator (Base/Solana) or its in-process facilitator (Robinhood Chain)
 5. Gateway returns requested data
+
+> **Note:** `/.well-known/mpp.json` currently advertises MPP as active. That reflects
+> configuration, not a working payment path — see Ways to Pay. MPP discovery is under
+> construction and the manifest will be corrected when the challenge flow ships.
 
 ---
 
@@ -57,8 +62,16 @@ Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-2
 | Chain | Batch contract |
 |-------|----------------|
 | Base | [`0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC`](https://basescan.org/address/0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC) |
+| Ethereum | `0x15E7aEDa45094DD2E9E746FcA1C726cAd7aE58b3` |
+| Arbitrum | `0x5be43aA67804aD84fcb890d0AE5F257fb1674302` |
+| Polygon | `0x6d2453ab7416c99aeDCA47CF552695be5789D7ff` |
+| BNB Chain | `0x3093a2951FB77b3beDfB8BA20De645F7413432C1` |
+| Avalanche | `0x6A41Fb5F5CfE632f9446b548980dA6cE2d75afcC` |
 | Unichain | `0x08fA5D1c16CD6E2a16FC0E4839f262429959E073` |
+| Plasma | `0x08fA5D1c16CD6E2a16FC0E4839f262429959E073` |
+| BOB | `0xEc8599026AE70898391a71c96AA82d4840C2e973` |
 | Robinhood Chain | [`0x08fA5D1c16CD6E2a16FC0E4839f262429959E073`](https://robinhoodchain.blockscout.com/address/0x08fA5D1c16CD6E2a16FC0E4839f262429959E073) |
+| Stacks | `ST7431QK2YMPP3SQYJXZ3GTB6MJVGF07N2EV9R1F.spraay-batch` |
 
 | Endpoint | Method | Cost |
 |----------|--------|------|
@@ -76,7 +89,7 @@ Free pre-flight: `POST /free/validate-batch` (BPA 1.0 schema validation) and `GE
 
 Base · Ethereum · Solana · Bitcoin · Arbitrum · Polygon · BNB Chain · Avalanche · Unichain · Plasma · BOB · Robinhood Chain · Bittensor · XRP Ledger · Stacks · Stellar
 
-Canton Network is live on **testnet**. Batch payouts settle on the destination chain; x402 API payments settle in USDC on Base or Solana.
+Canton Network is live on **testnet**. Batch payouts settle on the destination chain; x402 API payments settle in USDC on Base or Solana, or USDG on Robinhood Chain.
 
 ---
 
@@ -411,7 +424,7 @@ Dictionary (define, synonyms, phonetics) · Academic papers via OpenAlex 250M+ (
 ## Tech Stack
 
 - **Runtime**: Node.js / Express / TypeScript
-- **Protocols**: x402 with Bazaar discovery + [RTP 1.0](https://github.com/plagtech/rtp-spec) + [BPA 1.0](https://docs.spraay.app/bpa/1.0/) + MPP
+- **Protocols**: x402 with Bazaar discovery + [RTP 1.0](https://github.com/plagtech/rtp-spec) + [BPA 1.0](https://docs.spraay.app/bpa/1.0/) · MPP 🚧 under construction
 - **Facilitator**: Coinbase CDP (Base, Solana) · in-process EIP-3009 relay for Robinhood Chain (`src/rails/robinhoodUsdg.ts`)
 - **Settlement**: USDC on Base mainnet + Solana mainnet-beta · USDG on Robinhood Chain (4663)
 - **AI Providers**: BlockRun (`@blockrun/llm` — x402 wallet auth), OpenRouter (API key), Chutes (Bittensor)
@@ -443,6 +456,7 @@ Dictionary (define, synonyms, phonetics) · Academic papers via OpenAlex 250M+ (
 | `FACILITATOR_PRIVATE_KEY_ROBINHOOD` | No | Dedicated relay wallet (ETH on Robinhood Chain 4663) that settles USDG payments. Absent → the rail is still advertised but every USDG payment answers `rail_not_enabled` (never a crash). Never the deployer key. |
 | `ROBINHOOD_PAY_TO_ADDRESS` | No | Revenue wallet for USDG settlements (default: `0xdAA0fb4fb470AA8fb53A0c301EF9AADC89949F33`) |
 | `ROBINHOOD_RPC_URL` | No | Robinhood Chain RPC (default: `https://rpc.mainnet.chain.robinhood.com`; Alchemy recommended in production) |
+| `MPP_ENABLED` | No | 🚧 Under construction. `"true"` activates the MPP middleware, but the challenge flow is incomplete — leave unset unless developing MPP support. |
 
 Additional provider keys (email, SMS, Solana, stocks, Stripe subscriptions, Bittensor/Chutes, and more) are documented in `.env.example` — treat that file as the authoritative list.
 
