@@ -4,8 +4,11 @@
  * Three layers of protection against runaway agent loops:
  *   1. Rate limiter  — caps calls per API key per endpoint per time window
  *   2. Duplicate detection — rejects identical PAID submissions within a cooldown.
- *      Keyed by payer + payload (or an explicit idempotency_key). Unpaid x402/MPP
- *      probes (no payment header) are ignored so the two-leg flow isn't blocked.
+ *      Keyed by payer + ROUTE + payload (or an explicit idempotency_key). Route is
+ *      part of the key so the documented quote→pay sequence (estimate then execute
+ *      with the same body) is never treated as a duplicate — only a repeat of the
+ *      SAME call is. Unpaid x402/MPP probes (no payment header) are ignored so the
+ *      two-leg flow isn't blocked.
  *   3. Webhook cooldown — prevents rapid-fire callback delivery to the same URL
  *
  * NON-BREAKING: All middleware is additive. If no API key is present (free tier),
@@ -201,22 +204,30 @@ function getPayerKey(req: Request): string {
   return `${getClientKey(req)}::${senderStr}`;
 }
 
-// Build the dedupe key: payer + (explicit idempotency_key | payment payload).
-// Returns "" when there is nothing payment-relevant to dedupe on.
+// Build the dedupe key: payer + route + (explicit idempotency_key | payment
+// payload). Returns "" when there is nothing payment-relevant to dedupe on.
+//
+// The ROUTE is part of the key deliberately: /batch/estimate and /batch/execute
+// (likewise payroll) take the same payment-relevant body by design — a quote IS
+// the same batch — so a route-less key made the documented estimate→execute
+// sequence collide with itself and 409. Scoping by route keeps every real
+// duplicate blocked (same call, same payer, same payload, inside the window)
+// while the quote→pay pair, which is two different calls, always passes.
 function buildDedupeKey(req: Request, fields: string[]): string {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const payer = getPayerKey(req);
+  const route = (req.baseUrl || "") + req.path;
 
   // An explicit idempotency_key is the caller's own dedupe token — honor it
   // verbatim instead of hashing the payload. Same payer + same key = duplicate;
   // a different key is always treated as a distinct request.
   const idem = body.idempotency_key;
   if (typeof idem === "string" && idem.length > 0) {
-    return crypto.createHash("sha256").update(`${payer}|idem:${idem}`).digest("hex");
+    return crypto.createHash("sha256").update(`${payer}|route:${route}|idem:${idem}`).digest("hex");
   }
 
-  // Otherwise hash the payer together with the payment-relevant fields.
-  const parts: string[] = [payer];
+  // Otherwise hash the payer and route together with the payment-relevant fields.
+  const parts: string[] = [payer, `route:${route}`];
   for (const field of fields) {
     const val = body[field];
     if (val !== undefined) {
@@ -225,7 +236,7 @@ function buildDedupeKey(req: Request, fields: string[]): string {
   }
 
   // No payment-relevant fields found — skip dedup (it's probably not a payment).
-  if (parts.length <= 1) return "";
+  if (parts.length <= 2) return "";
 
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
 }
