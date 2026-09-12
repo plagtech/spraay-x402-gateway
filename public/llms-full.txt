@@ -39,9 +39,9 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Batch Payments
 
-- `POST /api/v1/batch/estimate` — $0.001 — Estimate gas and total USDC for a batch payment before sending. Returns per-recipient breakdown. Call before batch/execute.
+- `POST /api/v1/batch/estimate` — $0.001 — Estimate gas, protocol fee and total for a batch payment before sending. Runs the same amount and fee math as batch/execute, so a quote cannot disagree with what execute charges. Units: amounts[] are RAW base units (USDC has 6 decimals, so "1500000" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a DECIMAL string (unlike execute's transaction.gasLimit, which is hex). Call before batch/execute.
   search: batch estimate, payment estimate, gas estimate, fee preview, bulk payment cost, pre-flight check, dry run
-- `POST /api/v1/batch/execute` — $0.02 — Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0.
+- `POST /api/v1/batch/execute` — $0.02 — Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0. Units: amounts[] are RAW base units (USDC has 6 decimals, so "1500000" = $1.50); batch.totalAmount/fee/totalWithFee are human-decimal strings; approvalRequired.amount is RAW base units - pass it verbatim as the ERC-20 allowance - while approvalRequired.amountFormatted is the human-decimal form; transaction.gasLimit is hex.
   search: batch payment, bulk payout, mass payout, send to many wallets, airdrop, disbursement, multi-send, pay many recipients
 - `POST /api/v1/stellar/batch` — $0.02 — Send batch payments to many recipients in one transaction on the Stellar network.
   search: Stellar batch, XLM payments, batch Stellar, mass Stellar payout, Stellar disbursement, send XLM to many, lumens
