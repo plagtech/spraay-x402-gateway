@@ -7,13 +7,13 @@
 [![Live](https://img.shields.io/badge/status-live-brightgreen)](https://gateway.spraay.app)
 [![Version](https://img.shields.io/badge/version-3.8.2-blue)](https://gateway.spraay.app)
 [![Endpoints](https://img.shields.io/badge/endpoints-190-blueviolet)](https://gateway.spraay.app)
-[![Chains](https://img.shields.io/badge/chains-16%20mainnet-9cf)](https://gateway.spraay.app/api/v1/tokens)
+[![Chains](https://img.shields.io/badge/chains-17%20mainnet-9cf)](https://gateway.spraay.app/api/v1/tokens)
 [![x402](https://img.shields.io/badge/protocol-x402-orange)](https://x402.org)
 [![RTP](https://img.shields.io/badge/RTP-1.0-green)](https://github.com/plagtech/rtp-spec)
 [![BPA](https://img.shields.io/badge/BPA-1.0-green)](https://docs.spraay.app/bpa/1.0/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Batch payments for AI agents — pay up to 200 recipients in one atomic, non-custodial transaction — plus 190 pay-per-use DeFi endpoints across 16 chains.**
+**Batch payments for AI agents — pay up to 200 recipients in one atomic, non-custodial transaction — plus 190 pay-per-use DeFi endpoints across 17 chains.**
 
 The Spraay x402 Gateway is a payment-gated API server where every endpoint costs USDC micropayments via the [x402 protocol](https://x402.org). No API keys. No accounts. Agents pay per request and get data back instantly. Categories span batch payments, payroll, escrow, swaps, oracle, bridge, AI inference, GPU/compute, compute futures, Solana DeFi, Robot Task Protocol (RTP), agent wallets, supply chain (SCTP), research, prediction markets, stocks, and more.
 
@@ -57,11 +57,23 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 
 ## 💧 Batch Payments — Core Primitive
 
-Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-20 + native ETH. Implements the open **[BPA 1.0](https://docs.spraay.app/bpa/1.0/)** spec (Batch Payments for Agents). Protocol fee: **0.3%** (30 bps).
+Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-20 + native ETH (Base); USDC (peaq). Implements the open **[BPA 1.0](https://docs.spraay.app/bpa/1.0/)** spec (Batch Payments for Agents). Protocol fee: **0.3%** (30 bps).
+
+### Settlement chains — where `/api/v1/batch/execute` can send
+
+Pick one with the optional `chain` field; it defaults to `base`, and any other value is rejected.
+
+| Chain | Batch contract | `chain` value | Assets |
+|-------|----------------|---------------|--------|
+| Base | [`0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC`](https://basescan.org/address/0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC) | `"base"` (default) | Any ERC-20 + native ETH |
+| peaq | [`0x08fA5D1c16CD6E2a16FC0E4839f262429959E073`](https://peaq.subscan.io/account/0x08fA5D1c16CD6E2a16FC0E4839f262429959E073) | `"peaq"` | USDC `0xbbA6…3d10` |
+
+### Contract deployments — not gateway-settled
+
+The batch contract is deployed on more chains than the gateway will settle on. A chain moves into the table above only once its runtime bytecode has been verified byte-identical to the Base deployment — a shared deploy address is not evidence of that on its own. Until then the contract is callable directly, but `/api/v1/batch/execute` will not build a transaction for it.
 
 | Chain | Batch contract |
 |-------|----------------|
-| Base | [`0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC`](https://basescan.org/address/0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC) |
 | Ethereum | `0x15E7aEDa45094DD2E9E746FcA1C726cAd7aE58b3` |
 | Arbitrum | `0x5be43aA67804aD84fcb890d0AE5F257fb1674302` |
 | Polygon | `0x6d2453ab7416c99aeDCA47CF552695be5789D7ff` |
@@ -72,6 +84,8 @@ Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-2
 | BOB | `0xEc8599026AE70898391a71c96AA82d4840C2e973` |
 | Robinhood Chain | [`0x08fA5D1c16CD6E2a16FC0E4839f262429959E073`](https://robinhoodchain.blockscout.com/address/0x08fA5D1c16CD6E2a16FC0E4839f262429959E073) |
 | Stacks | `ST7431QK2YMPP3SQYJXZ3GTB6MJVGF07N2EV9R1F.spraay-batch` |
+
+`POST /free/validate-batch` accepts every chain in both tables — it answers "is this payload well-formed for a chain we know", not "can the gateway settle it". `GET /free/estimate-batch` answers the second question: `estimate.supported` and `estimate.supportedChains` are the authoritative settleability markers.
 
 | Endpoint | Method | Cost |
 |----------|--------|------|
@@ -85,9 +99,9 @@ Pay up to **200 recipients** in one atomic, non-custodial transaction. Any ERC-2
 
 Free pre-flight: `POST /free/validate-batch` (BPA 1.0 schema validation) and `GET /free/estimate-batch` (rough cost estimate).
 
-## Supported Chains — 16 Mainnet
+## Supported Chains — 17 Mainnet
 
-Base · Ethereum · Solana · Bitcoin · Arbitrum · Polygon · BNB Chain · Avalanche · Unichain · Plasma · BOB · Robinhood Chain · Bittensor · XRP Ledger · Stacks · Stellar
+Base · Ethereum · Solana · Bitcoin · Arbitrum · Polygon · BNB Chain · Avalanche · Unichain · Plasma · BOB · Robinhood Chain · peaq · Bittensor · XRP Ledger · Stacks · Stellar
 
 Canton Network is live on **testnet**. Batch payouts settle on the destination chain; x402 API payments settle in USDC on Base or Solana, or USDG on Robinhood Chain.
 
@@ -388,9 +402,9 @@ Dictionary (define, synonyms, phonetics) · Academic papers via OpenAlex 250M+ (
 | `GET /.well-known/x402.json` | Bazaar discovery manifest |
 | `GET /api/v1/tokens` | Supported tokens & chains |
 | `GET /free` | Free tier catalog |
-| `GET /free/gas` | Gas prices — 7 EVM chains (cached 15s) |
+| `GET /free/gas` | Gas prices — 9 EVM chains (cached 15s) |
 | `GET /free/prices` | USDC/ETH/SOL spot prices (cached 60s) |
-| `GET /free/chain-status` | Block height & liveness — 7 EVM chains |
+| `GET /free/chain-status` | Block height & liveness — 9 EVM chains |
 | `GET /free/nonce` | EVM nonce / tx count |
 | `GET /free/validate-address` | Multi-chain address validation (EVM, Solana, XRP, Stellar) |
 | `POST /free/validate-batch` | BPA 1.0 payload schema validation |
@@ -503,7 +517,7 @@ Verify the live x402 batch-payment flow (402 challenge → EIP-3009 → settleme
 - **MCP Server**: [github.com/plagtech/spraay-x402-mcp](https://github.com/plagtech/spraay-x402-mcp) — 160+ tools, connect any AI agent via MCP
 - **HuggingFace Space**: [huggingface.co/spaces/plagtech/Spraay-gateway](https://huggingface.co/spaces/plagtech/Spraay-gateway) — Gradio tools + MCP endpoint
 - **Docs**: [docs.spraay.app](https://docs.spraay.app) — Full endpoint catalog
-- **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI across 16 chains
+- **Spraay App**: [spraay.app](https://spraay.app) — batch payments UI across 17 chains
 - **Live Dashboard**: [live.spraay.app](https://live.spraay.app) — real-time gateway activity
 - **Spraay Base App**: [spraay-base-dapp.vercel.app](https://spraay-base-dapp.vercel.app) — Farcaster mini app + onramp
 - **StablePay**: [stablepay.me](https://stablepay.me) — crypto payroll dashboard
