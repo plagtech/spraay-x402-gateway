@@ -60,6 +60,8 @@
         ".estimate.protocolFeeBps",
         ".estimate.protocolFeeUSD",
         ".estimate.recipients",
+        ".estimate.supported",
+        ".estimate.supportedChains",
         ".estimate.totalAmount",
         ".timestamp"
       ],

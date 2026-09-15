@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import { gasCache, priceCache, chainCache, resolveCache, agentCache } from "../lib/free-cache.js";
 import { validateAddress } from "../lib/address-validation.js";
 import { validateBatchPayload } from "../lib/batch-validation.js";
-import { batchGasFloor } from "./batch-payments.js";
+import { batchGasFloor, SETTLEMENT_CHAIN_KEYS } from "./batch-payments.js";
 import { validateOutboundURL } from "../lib/ssrf-guard.js";
 
 // ---------------------------------------------------------------------------
@@ -233,6 +233,14 @@ export function freeEstimateBatchHandler(req: Request, res: Response) {
       estimatedTotalCostUSD: protocolFee ? Math.round((protocolFee + estimatedGasUSD) * 10000) / 10000 : null,
       precision: "rough — use /api/v1/batch/estimate for live quote",
       bpaVersion: "1.0",
+      // Additive, and the fix for this endpoint quoting ANY string it was handed
+      // (chain=notachain used to get a straight-faced quote). `supported` means
+      // "a batch can actually settle here" — the same hard allowlist
+      // /api/v1/batch/execute enforces. The status code is deliberately
+      // unchanged: this is an NVIDIA-frozen path, so an unsupported chain still
+      // answers 200, now carrying an honest flag.
+      supported: SETTLEMENT_CHAIN_KEYS.includes(chain),
+      supportedChains: SETTLEMENT_CHAIN_KEYS,
     },
     timestamp: Date.now(),
   }, [
