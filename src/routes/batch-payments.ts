@@ -4,11 +4,23 @@ import { trackRequest } from "./health.js";
 
 // ============ Contract ============
 
-const SPRAAY_CONTRACT = "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC";
 export const SPRAAY_FEE_BPS = 30; // 0.3% flat for everything
 
-// ============ Popular Tokens (Base Mainnet) ============
-// Convenience lookup — any ERC-20 address works, these are just shortcuts
+// ============ Settlement chains ============
+//
+// HARD ALLOWLIST. A chain is settleable here ONLY after its SprayContract
+// runtime bytecode has been verified byte-identical to the Base deployment.
+//
+// The canonical address 0x08fA5D1c...E073 also exists on Unichain, Plasma,
+// Robinhood Chain and BOB, and those chains appear in the *advertising*
+// surfaces (validate-batch, chain-status, /api/v1/tokens, bridge). They are
+// deliberately NOT here: a shared deploy address never implies shared runtime
+// bytecode, and each chain gets its own verification ceremony before batches
+// can settle on it.
+//
+// peaq (3338) qualified on 2026-09-15: Sourcify exact_match on creation and
+// runtime, runtime keccak 0x7c4b82ffe3cccab5b886d57f868de66adc3aa3aaff54460f7d207ade4d942035
+// — byte-identical to Base 0x1646452F...5eEC — feeBps 30, unpaused.
 
 interface TokenInfo {
   address: string;
@@ -16,38 +28,95 @@ interface TokenInfo {
   decimals: number;
 }
 
-const BASE_TOKENS: Record<string, TokenInfo> = {
-  USDC: {
-    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    symbol: "USDC",
-    decimals: 6,
+interface SettlementChain {
+  key: string;
+  name: string;
+  chainId: number;
+  contract: string;
+  rpcUrl: string;
+  /** Native-currency symbol, or null where native spraying is not enabled yet. */
+  nativeSymbol: string | null;
+  tokens: Record<string, TokenInfo>;
+  /** Reverse lookup: lowercased token address → symbol. Built at module load. */
+  addressToSymbol: Record<string, string>;
+}
+
+export const DEFAULT_BATCH_CHAIN = "base";
+
+const BASE_RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+// peaq's quicknode*.peaq.xyz endpoints rate-limit at 15 req/s (JSON-RPC -32007),
+// and this module calls eth_estimateGas once per paid request. publicnode is the
+// default; set PEAQ_RPC_URL to https://quicknode3.peaq.xyz to switch.
+const PEAQ_RPC_URL = process.env.PEAQ_RPC_URL || "https://peaq-rpc.publicnode.com";
+
+const SETTLEMENT_CHAINS: Record<string, SettlementChain> = {
+  base: {
+    key: "base",
+    name: "Base",
+    chainId: 8453,
+    contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC",
+    rpcUrl: BASE_RPC_URL,
+    nativeSymbol: "ETH",
+    // Convenience lookup — any ERC-20 address works, these are just shortcuts.
+    tokens: {
+      USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", symbol: "USDC", decimals: 6 },
+      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", symbol: "USDT", decimals: 6 },
+      EURC: { address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", symbol: "EURC", decimals: 6 },
+      DAI:  { address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", symbol: "DAI",  decimals: 18 },
+      WETH: { address: "0x4200000000000000000000000000000000000006", symbol: "WETH", decimals: 18 },
+    },
+    addressToSymbol: {},
   },
-  USDT: {
-    address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
-    symbol: "USDT",
-    decimals: 6,
-  },
-  EURC: {
-    address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
-    symbol: "EURC",
-    decimals: 6,
-  },
-  DAI: {
-    address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
-    symbol: "DAI",
-    decimals: 18,
-  },
-  WETH: {
-    address: "0x4200000000000000000000000000000000000006",
-    symbol: "WETH",
-    decimals: 18,
+  peaq: {
+    key: "peaq",
+    name: "peaq",
+    chainId: 3338,
+    contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073",
+    rpcUrl: PEAQ_RPC_URL,
+    // Native PEAQ spraying is not enabled in v1 — USDC only until each further
+    // asset is dust-proven on this chain. sprayETH itself is proven on peaq.
+    nativeSymbol: null,
+    tokens: {
+      // Circle-bridged USDC, 6 decimals — read on-chain, not from docs.
+      USDC: { address: "0xbbA60da06c2c5424f03f7434542280FCAd453d10", symbol: "USDC", decimals: 6 },
+      // USDT 0xf4D9235269a96aaDaFc9aDAe454a0618eBE37949 (6dp) exists and reports
+      // symbol "USDT", but no dust proof has exercised it. Deferred.
+    },
+    addressToSymbol: {},
   },
 };
 
-// Reverse lookup: address → symbol
-const ADDRESS_TO_SYMBOL: Record<string, string> = {};
-for (const [symbol, info] of Object.entries(BASE_TOKENS)) {
-  ADDRESS_TO_SYMBOL[info.address.toLowerCase()] = symbol;
+for (const chain of Object.values(SETTLEMENT_CHAINS)) {
+  for (const [symbol, info] of Object.entries(chain.tokens)) {
+    chain.addressToSymbol[info.address.toLowerCase()] = symbol;
+  }
+}
+
+/** Settleable chain slugs, in declaration order. */
+export const SETTLEMENT_CHAIN_KEYS = Object.keys(SETTLEMENT_CHAINS);
+
+/**
+ * Message for an unresolvable token symbol.
+ *
+ * Base's wording is pinned to the exact pre-peaq literal: /api/v1/batch/execute
+ * is an NVIDIA-frozen path and a request that omits `chain` must answer
+ * byte-identically to before. Other chains derive theirs from the token map.
+ */
+function unknownTokenError(tokenInput: string, chain: SettlementChain): string {
+  if (chain.key === "base") {
+    return `Unknown token "${tokenInput}". Use a symbol (USDC, USDT, DAI, EURC, ETH) or a token contract address.`;
+  }
+  const symbols = [...Object.keys(chain.tokens), ...(chain.nativeSymbol ? [chain.nativeSymbol] : [])];
+  return `Unknown token "${tokenInput}" on ${chain.name}. Use a symbol (${symbols.join(", ")}) or a token contract address.`;
+}
+
+/** Resolve a caller-supplied chain slug against the allowlist. null = rejected. */
+function resolveSettlementChain(input: unknown): SettlementChain | null {
+  if (input === undefined || input === null || input === "") {
+    return SETTLEMENT_CHAINS[DEFAULT_BATCH_CHAIN];
+  }
+  if (typeof input !== "string") return null;
+  return SETTLEMENT_CHAINS[input.trim().toLowerCase()] ?? null;
 }
 
 // ============ ABI ============
@@ -104,27 +173,28 @@ const sprayInterface = new ethers.Interface(SPRAAY_ABI);
 // ============ Token Resolution ============
 
 /**
- * Resolve token input to address + decimals + symbol
- * Accepts: symbol ("USDC"), address ("0x..."), or "ETH" for native
+ * Resolve token input to address + decimals + symbol, within one settlement chain.
+ * Accepts: symbol ("USDC"), address ("0x..."), or the chain's native symbol
+ * ("ETH" on Base) for a native spray.
  */
-function resolveToken(tokenInput: string): {
+function resolveToken(tokenInput: string, chain: SettlementChain): {
   address: string;
   decimals: number;
   symbol: string;
   isETH: boolean;
 } {
-  if (!tokenInput || tokenInput.toUpperCase() === "ETH") {
+  if (chain.nativeSymbol && (!tokenInput || tokenInput.toUpperCase() === chain.nativeSymbol)) {
     return {
       address: ethers.ZeroAddress,
       decimals: 18,
-      symbol: "ETH",
+      symbol: chain.nativeSymbol,
       isETH: true,
     };
   }
 
   // Check by symbol
   const upper = tokenInput.toUpperCase();
-  const known = BASE_TOKENS[upper];
+  const known = chain.tokens[upper];
   if (known) {
     return {
       address: known.address,
@@ -136,8 +206,8 @@ function resolveToken(tokenInput: string): {
 
   // Check by address
   if (tokenInput.startsWith("0x") && tokenInput.length === 42) {
-    const sym = ADDRESS_TO_SYMBOL[tokenInput.toLowerCase()] || "ERC20";
-    const knownByAddr = Object.values(BASE_TOKENS).find(
+    const sym = chain.addressToSymbol[tokenInput.toLowerCase()] || "ERC20";
+    const knownByAddr = Object.values(chain.tokens).find(
       (t) => t.address.toLowerCase() === tokenInput.toLowerCase()
     );
     return {
@@ -262,9 +332,7 @@ export function batchFee(totalRaw: bigint): bigint {
   return (totalRaw * BigInt(SPRAAY_FEE_BPS)) / BigInt(10000);
 }
 
-// ============ Gas limit selection (Base) ============
-
-const BASE_RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+// ============ Gas limit selection ============
 
 // Worst-case floor, used when live estimation is unavailable. A fresh
 // (zero-balance) recipient costs ~20k more per transfer than a warm one;
@@ -285,15 +353,19 @@ export function batchGasFloor(recipientCount: number): number {
  * Falls back to the floor when estimation fails: RPC error/timeout, or state
  * that cannot estimate yet (e.g. the sender's allowance is not granted at
  * quote time, so the simulated transfer reverts).
+ *
+ * `rpcUrl` selects the settlement chain to estimate against; it defaults to
+ * Base so existing callers are unaffected.
  */
 export async function chooseBatchGasLimit(
   tx: { from?: string; to: string; data: string; value?: string },
-  recipientCount: number
+  recipientCount: number,
+  rpcUrl: string = BASE_RPC_URL
 ): Promise<{ gasLimit: number; source: "estimate" | "floor" }> {
   const floor = batchGasFloor(recipientCount);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
     const estimated = await Promise.race([
       provider.estimateGas(tx),
       new Promise<never>((_, reject) => {
@@ -323,15 +395,17 @@ export async function chooseBatchGasLimit(
  *     { "address": "0x123...", "amount": "10.00" },
  *     { "address": "0x456...", "amount": "25.50" }
  *   ],
- *   "sender": "0xYour..."   // for approval encoding
+ *   "sender": "0xYour...",  // for approval encoding
+ *   "chain": "base" | "peaq" // optional, defaults to "base"
  * }
  *
  * Token defaults to USDC if not provided (backward compatible).
+ * Omitting "chain" reproduces the pre-peaq response exactly.
  */
 export async function batchPaymentHandler(req: Request, res: Response) {
   trackRequest("/api/v1/batch/execute");
   try {
-    const { token: tokenInput = "USDC", recipients, amounts, sender } = req.body;
+    const { token: tokenInput = "USDC", recipients, amounts, sender, chain: chainInput } = req.body;
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
       return res.status(400).json({ error: "recipients array required" });
@@ -340,12 +414,19 @@ export async function batchPaymentHandler(req: Request, res: Response) {
       return res.status(400).json({ error: "Maximum 200 recipients" });
     }
 
-    // Resolve token
-    const token = resolveToken(tokenInput);
-    if (!token.isETH && !token.address) {
+    // Resolve settlement chain against the hard allowlist
+    const chain = resolveSettlementChain(chainInput);
+    if (!chain) {
       return res.status(400).json({
-        error: `Unknown token "${tokenInput}". Use a symbol (USDC, USDT, DAI, EURC, ETH) or a token contract address.`,
+        error: `Unsupported settlement chain "${chainInput}". Batches can settle on: ${SETTLEMENT_CHAIN_KEYS.join(", ")}.`,
+        supportedChains: SETTLEMENT_CHAIN_KEYS,
       });
+    }
+
+    // Resolve token
+    const token = resolveToken(tokenInput, chain);
+    if (!token.isETH && !token.address) {
+      return res.status(400).json({ error: unknownTokenError(tokenInput, chain) });
     }
 
     // Normalize both accepted body shapes into raw base units (see resolveBatchAmounts).
@@ -378,16 +459,17 @@ export async function batchPaymentHandler(req: Request, res: Response) {
     const { gasLimit } = await chooseBatchGasLimit(
       {
         from: typeof sender === "string" && sender ? sender : undefined,
-        to: SPRAAY_CONTRACT,
+        to: chain.contract,
         data: calldata,
         value: txValue,
       },
-      onchainRecipients.length
+      onchainRecipients.length,
+      chain.rpcUrl
     );
 
     const response: any = {
       success: true,
-      contract: SPRAAY_CONTRACT,
+      contract: chain.contract,
       token: {
         symbol: token.symbol,
         address: token.address,
@@ -402,10 +484,10 @@ export async function batchPaymentHandler(req: Request, res: Response) {
         totalWithFee: ethers.formatUnits(totalWithFee, token.decimals),
       },
       transaction: {
-        to: SPRAAY_CONTRACT,
+        to: chain.contract,
         data: calldata,
         value: txValue,
-        chainId: 8453,
+        chainId: chain.chainId,
         gasLimit: "0x" + gasLimit.toString(16),
       },
     };
@@ -414,7 +496,7 @@ export async function batchPaymentHandler(req: Request, res: Response) {
     if (!token.isETH) {
       response.approvalRequired = {
         token: token.address,
-        spender: SPRAAY_CONTRACT,
+        spender: chain.contract,
         amount: totalWithFee.toString(),
         amountFormatted: ethers.formatUnits(totalWithFee, token.decimals),
       };
@@ -425,10 +507,10 @@ export async function batchPaymentHandler(req: Request, res: Response) {
       const webhook = await req.webhookCallback('batch.created', {
         recipient_count: recipients.length,
         token: token.symbol,
-        chain: 'base',
+        chain: chain.key,
         total_amount: ethers.formatUnits(totalRaw, token.decimals),
         total_with_fee: ethers.formatUnits(totalWithFee, token.decimals),
-        contract: SPRAAY_CONTRACT,
+        contract: chain.contract,
       });
       response.webhook = webhook;
     }
@@ -461,10 +543,20 @@ export async function batchPaymentHandler(req: Request, res: Response) {
 export async function batchEstimateHandler(req: Request, res: Response) {
   trackRequest("/api/v1/batch/estimate");
   try {
-    const { token: tokenInput = "USDC", recipients, amounts, recipientCount } = req.body;
+    const { token: tokenInput = "USDC", recipients, amounts, recipientCount, chain: chainInput } = req.body;
+
+    // Resolve settlement chain against the same hard allowlist as execute, so a
+    // quote can never be produced for a chain execute would refuse.
+    const chain = resolveSettlementChain(chainInput);
+    if (!chain) {
+      return res.status(400).json({
+        error: `Unsupported settlement chain "${chainInput}". Batches can settle on: ${SETTLEMENT_CHAIN_KEYS.join(", ")}.`,
+        supportedChains: SETTLEMENT_CHAIN_KEYS,
+      });
+    }
 
     // Resolve token
-    const token = resolveToken(tokenInput);
+    const token = resolveToken(tokenInput, chain);
 
     // Detailed estimate: same normalization + fee math as the execute path,
     // so a quote can never disagree with what execute will charge.
@@ -483,11 +575,12 @@ export async function batchEstimateHandler(req: Request, res: Response) {
         const chosen = await chooseBatchGasLimit(
           {
             from: typeof req.body.sender === "string" && req.body.sender ? req.body.sender : undefined,
-            to: SPRAAY_CONTRACT,
+            to: chain.contract,
             data: calldata,
             value: token.isETH ? (totalRaw + feeRaw).toString() : "0",
           },
-          onchainRecipients.length
+          onchainRecipients.length,
+          chain.rpcUrl
         );
         suggestedGasLimit = chosen.gasLimit;
       } catch {

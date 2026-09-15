@@ -72,6 +72,14 @@ const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     rpcUrl: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
     type: "public",
   },
+  peaq: {
+    name: "peaq",
+    chainId: 3338,
+    // quicknode*.peaq.xyz rate-limits at 15 req/s (JSON-RPC -32007), so publicnode
+    // is the default. Override with PEAQ_RPC_URL=https://quicknode3.peaq.xyz.
+    rpcUrl: process.env.PEAQ_RPC_URL || "https://peaq-rpc.publicnode.com",
+    type: "public",
+  },
 };
 
 // ── Allowed JSON-RPC methods (read-only, no signing) ─────────

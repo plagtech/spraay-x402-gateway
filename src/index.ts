@@ -115,6 +115,7 @@ import {
   freeNonceHandler, freeValidateAddressHandler, freeValidateBatchHandler,
   freeEstimateBatchHandler, freeResolveHandler, freeAgentCardHandler,
   freeX402CheckHandler, freeConvertHandler, freeTimestampHandler, freeUuidHandler,
+  EVM_CHAIN_COUNT, EVM_CHAIN_NAMES,
 } from "./routes/free-tier.js";
 import { tokenSafetyHandler } from "./routes/tokenSafety.js";
 import { addressSafetyHandler } from "./routes/addressSafety.js";
@@ -1237,9 +1238,9 @@ const FREE_ENDPOINTS = {
   "POST /api/v1/robots/deregister": "Remove Robot (RTP)",
   "GET /bittensor/v1/health": "Bittensor health",
   "GET /free": "Free tier catalog",
-  "GET /free/gas": "Gas prices — 7 EVM chains via Alchemy (cached 15s)",
+  "GET /free/gas": `Gas prices — ${EVM_CHAIN_COUNT} EVM chains via Alchemy (cached 15s)`,
   "GET /free/prices": "USDC/ETH/SOL spot prices (cached 60s)",
-  "GET /free/chain-status": "Block height & liveness — 7 EVM chains (cached 30s)",
+  "GET /free/chain-status": `Block height & liveness — ${EVM_CHAIN_COUNT} EVM chains (cached 30s)`,
   "GET /free/nonce": "EVM nonce / tx count for address",
   "GET /free/validate-address": "Multi-chain address checksum validation",
   "POST /free/validate-batch": "BPA 1.0 payload schema validation",
@@ -1292,9 +1293,9 @@ app.get("/api/v1/tx/decode", txDecodeHandler);
 // gateway serves appears exactly once and the count can never drift.
 // ════════════════════════════════════════════════════════════
 const MANIFEST_META = [
-      { resource: `${BASE_URL}/free/gas`,            method: "GET",  price: "free", category: "free-tier", description: "Gas prices across 7 EVM chains (Base, Ethereum, Arbitrum, Polygon, Optimism, Avalanche, BSC). Cached 15s. No payment required.", searchTerms: ["gas price","free gas","network fee","gwei","base fee"] },
+      { resource: `${BASE_URL}/free/gas`,            method: "GET",  price: "free", category: "free-tier", description: `Gas prices across ${EVM_CHAIN_COUNT} EVM chains (${EVM_CHAIN_NAMES}). Cached 15s. No payment required.`, searchTerms: ["gas price","free gas","network fee","gwei","base fee"] },
       { resource: `${BASE_URL}/free/prices`,         method: "GET",  price: "free", category: "free-tier", description: "USDC, ETH, SOL spot prices in USD. Cached 60s. No payment required.", searchTerms: ["token price","free price","ETH price","SOL price","spot price"] },
-      { resource: `${BASE_URL}/free/chain-status`,   method: "GET",  price: "free", category: "free-tier", description: "Block height and liveness for 7 EVM chains. No payment required.", searchTerms: ["chain status","block height","chain health","network status"] },
+      { resource: `${BASE_URL}/free/chain-status`,   method: "GET",  price: "free", category: "free-tier", description: `Block height and liveness for ${EVM_CHAIN_COUNT} EVM chains. No payment required.`, searchTerms: ["chain status","block height","chain health","network status"] },
       { resource: `${BASE_URL}/free/nonce`,          method: "GET",  price: "free", category: "free-tier", description: "Transaction count (nonce) for any EVM address. No payment required.", searchTerms: ["nonce","transaction count","tx count","pending nonce"] },
       { resource: `${BASE_URL}/free/validate-address`, method: "GET", price: "free", category: "free-tier", description: "Validate blockchain address format for EVM, Solana, XRP, Stellar. Pure checksum. No payment required.", searchTerms: ["validate address","address check","checksum","verify address"] },
       { resource: `${BASE_URL}/free/validate-batch`, method: "POST", price: "free", category: "free-tier", description: "Validate a BPA 1.0 batch payment payload (schema only, no cost data). No payment required.", searchTerms: ["validate batch","BPA validation","schema check","batch preflight"] },
@@ -1307,8 +1308,8 @@ const MANIFEST_META = [
       { resource: `${BASE_URL}/free/uuid`,           method: "GET",  price: "free", category: "free-tier", description: "Generate UUID v4 identifiers (up to 100). No payment required.", searchTerms: ["uuid","unique id","generate id","uuid v4"] },
       { resource: `${BASE_URL}/api/v1/chat/completions`, method: "POST", price: "$0.005", category: "ai", description: "OpenAI-compatible chat completions across 200+ models (BlockRun + OpenRouter). Streaming, function calling, vision.", searchTerms: ["chat completion","LLM","AI chat","text generation","GPT","language model","OpenAI compatible","inference"] },
       { resource: `${BASE_URL}/api/v1/models`, method: "GET", price: "$0.001", category: "ai", description: "List all available AI models with IDs, capabilities, and pricing. Call before chat/completions to pick the right model.", searchTerms: ["list models","available models","model catalog","which models","supported models","LLM list","model pricing"] },
-      { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.02", category: "payments", description: "Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0. Units: amounts[] are RAW base units (USDC has 6 decimals, so \"1500000\" = $1.50); batch.totalAmount/fee/totalWithFee are human-decimal strings; approvalRequired.amount is RAW base units - pass it verbatim as the ERC-20 allowance - while approvalRequired.amountFormatted is the human-decimal form; transaction.gasLimit is hex.", searchTerms: ["batch payment","bulk payout","mass payout","send to many wallets","airdrop","disbursement","multi-send","pay many recipients"], spec: "https://docs.spraay.app/bpa/1.0/" },
-      { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", category: "payments", description: "Estimate gas, protocol fee and total for a batch payment before sending. Runs the same amount and fee math as batch/execute, so a quote cannot disagree with what execute charges. Units: amounts[] are RAW base units (USDC has 6 decimals, so \"1500000\" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a DECIMAL string (unlike execute's transaction.gasLimit, which is hex). Call before batch/execute.", searchTerms: ["batch estimate","payment estimate","gas estimate","fee preview","bulk payment cost","pre-flight check","dry run"] },
+      { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.02", category: "payments", description: "Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0. Units: amounts[] are RAW base units (USDC has 6 decimals, so \"1500000\" = $1.50); batch.totalAmount/fee/totalWithFee are human-decimal strings; approvalRequired.amount is RAW base units - pass it verbatim as the ERC-20 allowance - while approvalRequired.amountFormatted is the human-decimal form; transaction.gasLimit is hex. Settles on Base (default) or peaq via the optional \"chain\" field; other chains are rejected.", searchTerms: ["batch payment","bulk payout","mass payout","send to many wallets","airdrop","disbursement","multi-send","pay many recipients","peaq"], spec: "https://docs.spraay.app/bpa/1.0/" },
+      { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", category: "payments", description: "Estimate gas, protocol fee and total for a batch payment before sending. Runs the same amount and fee math as batch/execute, so a quote cannot disagree with what execute charges. Units: amounts[] are RAW base units (USDC has 6 decimals, so \"1500000\" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a DECIMAL string (unlike execute's transaction.gasLimit, which is hex). Accepts the same optional \"chain\" field as batch/execute (base or peaq). Call before batch/execute.", searchTerms: ["batch estimate","payment estimate","gas estimate","fee preview","bulk payment cost","pre-flight check","dry run"] },
       { resource: `${BASE_URL}/api/v1/swap/quote`, method: "GET", price: "$0.008", category: "defi", description: "Get a token swap quote across Uniswap V3, Aerodrome and other DEXes on Base.", searchTerms: ["swap quote","best swap rate","token exchange rate","DEX aggregator","get swap price","price impact"] },
       { resource: `${BASE_URL}/api/v1/swap/tokens`, method: "GET", price: "$0.001", category: "defi", description: "List tokens available for swapping on Base via Uniswap V3 / Aerodrome with addresses, symbols, and decimals. Call before swap/quote.", searchTerms: ["list tokens","token list","swappable tokens","Base tokens","tradeable tokens","token discovery","ERC-20 list"] },
       { resource: `${BASE_URL}/api/v1/swap/execute`, method: "POST", price: "$0.015", category: "defi", description: "Execute a token swap on Base via the MangoSwap router (Uniswap V3 / Aerodrome).", searchTerms: ["swap tokens","exchange tokens","trade tokens","DEX swap","convert tokens","buy token","sell token"] },
@@ -1986,7 +1987,7 @@ app.get("/api/v1/tokens", (_req, res) => {
       USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }, DAI: { address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals: 18 },
       EURC: { address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6 }, WETH: { address: "0x4200000000000000000000000000000000000006", decimals: 18 },
     },
-    chains: { base: { chainId: 8453, contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC", status: "live" }, unichain: { chainId: 130, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" }, robinhood: { chainId: 4663, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" } },
+    chains: { base: { chainId: 8453, contract: "0x1646452F98E36A3c9Cfc3eDD8868221E207B5eEC", status: "live" }, unichain: { chainId: 130, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" }, robinhood: { chainId: 4663, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" }, peaq: { chainId: 3338, contract: "0x08fA5D1c16CD6E2a16FC0E4839f262429959E073", status: "live" } },
   });
 });
 
@@ -2169,12 +2170,13 @@ app.get("/openapi.json", (_req, res) => {
       queryParams: [],
       outputProps: { models: { type: "array" }, count: { type: "number" } } },
     // ---- PAYMENTS ----
-    { method: "post", path: "/api/v1/batch/execute", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch USDC payments on Base (amounts[] in RAW base units)",
+    { method: "post", path: "/api/v1/batch/execute", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch USDC payments on Base or peaq (amounts[] in RAW base units)",
       inputProps: {
-        token: { type: "string", description: "Symbol (USDC, USDT, EURC, DAI, WETH), an ERC-20 address, or ETH for native. Defaults to USDC." },
+        token: { type: "string", description: "Symbol (Base: USDC, USDT, EURC, DAI, WETH, or ETH for native; peaq: USDC), an ERC-20 address on the chosen chain, or ETH for native. Defaults to USDC." },
         recipients: { type: "array", description: "Recipient addresses, parallel to amounts[]. Max 200." },
         amounts: { type: "array", description: "RAW base units as integer strings, parallel to recipients[]. NOT human decimals: USDC has 6 decimals, so \"1500000\" = $1.50." },
         sender: { type: "string", description: "Payer address. Used to estimate gas against real allowance state." },
+        chain: { type: "string", description: "Settlement chain: \"base\" (default) or \"peaq\". Any other value is rejected — a chain is settleable only once its contract bytecode has been verified byte-identical to Base. Omitting this field behaves exactly as before peaq was added." },
       }, required: ["token", "recipients", "amounts", "sender"],
       outputProps: {
         success: { type: "boolean" },
@@ -2191,6 +2193,7 @@ app.get("/openapi.json", (_req, res) => {
         amounts: { type: "array", description: "RAW base units as integer strings, parallel to recipients[] — identical semantics to batch/execute. USDC 6dp: \"1500000\" = $1.50." },
         sender: { type: "string", description: "Optional payer address, used to sharpen the gas estimate." },
         recipientCount: { type: "number", description: "Count-only form: number of recipients, when exact amounts are not known yet. Returns a worst-case gas ceiling and no totals." },
+        chain: { type: "string", description: "Settlement chain: \"base\" (default) or \"peaq\". Same allowlist batch/execute enforces, so a quote can never be produced for a chain execute would refuse." },
       },
       outputProps: {
         success: { type: "boolean" },

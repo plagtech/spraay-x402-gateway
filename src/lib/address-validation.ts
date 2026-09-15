@@ -29,7 +29,7 @@ export interface AddressResult {
 
 const EVM_CHAIN_ALIASES = [
   "evm", "ethereum", "base", "arbitrum", "polygon",
-  "bnb", "bsc", "avalanche", "optimism", "unichain", "plasma", "bob", "robinhood",
+  "bnb", "bsc", "avalanche", "optimism", "unichain", "plasma", "bob", "robinhood", "peaq",
 ];
 
 export function validateAddress(address: string, chain?: string): AddressResult {

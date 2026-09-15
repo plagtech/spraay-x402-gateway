@@ -16,7 +16,7 @@ import { batchGasFloor } from "./batch-payments.js";
 import { validateOutboundURL } from "../lib/ssrf-guard.js";
 
 // ---------------------------------------------------------------------------
-// Chain config — matches rpc.ts: Alchemy for 5 chains, public for 3
+// Chain config — matches rpc.ts: Alchemy for 5 chains, public for 4
 // Uses the same ALCHEMY_API_KEY env var your paid RPC endpoint uses.
 // ---------------------------------------------------------------------------
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "";
@@ -30,7 +30,19 @@ const EVM_CHAINS: Record<string, { name: string; chainId: number; rpcUrl: string
   avalanche: { name: "Avalanche C-Chain", chainId: 43114, rpcUrl: "https://api.avax.network/ext/bc/C/rpc",                    native: "AVAX",  provider: "public" },
   bsc:       { name: "BNB Chain",      chainId: 56,    rpcUrl: "https://bsc-dataseed1.binance.org",                           native: "BNB",   provider: "public" },
   robinhood: { name: "Robinhood Chain", chainId: 4663, rpcUrl: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com", native: "ETH", provider: "public" },
+  // quicknode*.peaq.xyz rate-limits at 15 req/s (JSON-RPC -32007) — publicnode is
+  // the default. Override with PEAQ_RPC_URL=https://quicknode3.peaq.xyz.
+  peaq:      { name: "peaq",           chainId: 3338,  rpcUrl: process.env.PEAQ_RPC_URL || "https://peaq-rpc.publicnode.com",          native: "PEAQ",  provider: "public" },
 };
+
+/**
+ * Live count of the EVM chains this module serves. Derived, not written out, so
+ * the prose in the catalogue and the discovery manifest cannot drift the next
+ * time a chain is added — the "7 EVM chains" strings had been stale since
+ * Robinhood Chain made it 8.
+ */
+export const EVM_CHAIN_COUNT = Object.keys(EVM_CHAINS).length;
+export const EVM_CHAIN_NAMES = Object.values(EVM_CHAINS).map((c) => c.name).join(", ");
 
 // Reusable viem clients — created once at module load
 // Skip Alchemy chains if key is missing (same guard as rpc.ts)
@@ -61,7 +73,7 @@ function withRelated(data: any, related: any[]) {
 }
 
 // ===========================================================================
-// 1. GET /free/gas — gas prices across 7 EVM chains (cached 15s)
+// 1. GET /free/gas — gas prices across every EVM chain in EVM_CHAINS (cached 15s)
 // ===========================================================================
 export async function freeGasHandler(_req: Request, res: Response) {
   try {
@@ -206,7 +218,8 @@ export function freeEstimateBatchHandler(req: Request, res: Response) {
   // the live estimation.
   const usdPerGasUnit: Record<string, number> = {
     base: 2e-7, ethereum: 2e-5, arbitrum: 4e-7, polygon: 2e-8,
-    optimism: 4e-7, avalanche: 6e-7, bsc: 8e-7, robinhood: 4e-7,
+    // peaq: 100 gwei × PEAQ ≈ $0.0249 (measured 2026-09-15).
+    optimism: 4e-7, avalanche: 6e-7, bsc: 8e-7, robinhood: 4e-7, peaq: 2.5e-6,
   };
   const gasUnits = batchGasFloor(recipients);
   const estimatedGasUSD = gasUnits * (usdPerGasUnit[chain] ?? 4e-7);
@@ -448,9 +461,9 @@ export function freeCatalogHandler(_req: Request, res: Response) {
     version: "1.0.0",
     endpoints: {
       "GET /free":              "Free tier catalog",
-      "GET /free/gas":          "Gas prices across 7 EVM chains",
+      "GET /free/gas":          `Gas prices across ${EVM_CHAIN_COUNT} EVM chains`,
       "GET /free/prices":       "USDC/ETH/SOL spot prices",
-      "GET /free/chain-status": "Block height & liveness — 7 EVM chains",
+      "GET /free/chain-status": `Block height & liveness — ${EVM_CHAIN_COUNT} EVM chains`,
       "GET /free/nonce":        "Transaction count for an EVM address",
       "GET /free/validate-address": "Multi-chain address validation",
       "POST /free/validate-batch":  "BPA 1.0 payload schema validation",
