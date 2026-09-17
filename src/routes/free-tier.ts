@@ -14,6 +14,7 @@ import { validateAddress } from "../lib/address-validation.js";
 import { validateBatchPayload } from "../lib/batch-validation.js";
 import { batchGasFloor, SETTLEMENT_CHAIN_KEYS } from "./batch-payments.js";
 import { validateOutboundURL } from "../lib/ssrf-guard.js";
+import { SYMBOL_TO_CG_ID } from "../lib/coingecko-ids.js";
 
 // ---------------------------------------------------------------------------
 // Chain config — matches rpc.ts: Alchemy for 5 chains, public for 4
@@ -102,9 +103,103 @@ export async function freeGasHandler(_req: Request, res: Response) {
 
 // ===========================================================================
 // 2. GET /free/prices — USDC, ETH, SOL, USDG spot prices (cached 60s)
+//
+// Optional `?token=` / `?tokens=` ADD symbols on top of those four; they
+// never filter. See parseRequestedTokens + freePricesHandler below for why.
 // ===========================================================================
-export async function freePricesHandler(_req: Request, res: Response) {
+
+/**
+ * The four symbols /free/prices has always returned. This set is the frozen
+ * part of the response (NVIDIA compat block) and is ALWAYS present, whatever
+ * the caller asks for — see freePricesHandler.
+ */
+const FREE_PRICE_BASE_IDS: Record<string, string> = {
+  ETH: "ethereum",
+  USDC: "usd-coin",
+  SOL: "solana",
+  USDG: "global-dollar",
+};
+
+/**
+ * Symbols `?token=`/`?tokens=` can resolve: the shared CoinGecko table plus
+ * the base four (USDG is not in the shared table, and the base spellings must
+ * win regardless of what the shared table maps them to).
+ */
+const FREE_PRICE_IDS: Record<string, string> = { ...SYMBOL_TO_CG_ID, ...FREE_PRICE_BASE_IDS };
+
+/** Requested symbols beyond the base four are capped — the ids go into a URL. */
+const MAX_REQUESTED_TOKENS = 25;
+
+/** Symbol shape guard. Ids sent to CoinGecko come from FREE_PRICE_IDS, never
+ *  from the raw query, so this is belt-and-braces rather than the only check. */
+const SYMBOL_RE = /^[A-Za-z0-9._-]{1,20}$/;
+
+/**
+ * Collect the symbols a caller asked for from `?tokens=` and/or `?token=`.
+ *
+ * Both spellings are accepted and unioned: `?tokens=` is what the merged
+ * NVIDIA NeMo example sends (comma- or space-separated, see its `price` tool)
+ * and `?token=` is the singular form other callers reach for. Repeated params
+ * (`?token=ETH&token=BTC`) arrive as an array, so those are flattened too.
+ *
+ * Returns uppercased, de-duplicated, shape-checked symbols, capped at
+ * MAX_REQUESTED_TOKENS. An absent or unparseable param yields [] — which is
+ * what keeps the no-param response byte-identical to what it has always been.
+ */
+function parseRequestedTokens(req: Request): string[] {
+  const raw = [req.query.tokens, req.query.token].flatMap((v) =>
+    Array.isArray(v) ? v : v === undefined ? [] : [v],
+  );
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    for (const piece of entry.split(/[,\s]+/)) {
+      if (!SYMBOL_RE.test(piece)) continue;
+      const sym = piece.toUpperCase();
+      if (!out.includes(sym)) out.push(sym);
+      if (out.length >= MAX_REQUESTED_TOKENS) return out;
+    }
+  }
+  return out;
+}
+
+/**
+ * Spot USD for symbols outside the base four, in one CoinGecko call.
+ *
+ * NEVER throws and never rejects: /free/prices is a frozen path, so a failure
+ * out here must not turn its 200 into a 500. A symbol that can't be priced
+ * comes back null, which the handler reports as `{ usd: null }`.
+ */
+async function fetchExtraPrices(symbols: string[]): Promise<Record<string, number | null>> {
+  // Keyed on the symbol set, not the id set: two symbols can share one id
+  // (WETH and ETH both map to "ethereum"), and the cached value is keyed by
+  // symbol, so an id-keyed entry would answer the wrong question.
+  const cacheKey = `extra-prices:${[...symbols].sort().join(",")}`;
   try {
+    return await priceCache.getOrFetch(cacheKey, async () => {
+      const ids = [...new Set(symbols.map((s) => FREE_PRICE_IDS[s]))].join(",");
+      const resp = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (!resp.ok) throw new Error(`CoinGecko returned ${resp.status}`);
+      const data = await resp.json();
+      const out: Record<string, number | null> = {};
+      for (const s of symbols) out[s] = data[FREE_PRICE_IDS[s]]?.usd ?? null;
+      return out;
+    }, 60_000);
+  } catch (err: any) {
+    console.warn(`[FREE] extra price lookup failed for ${symbols.join(",")}: ${err?.message}`);
+    const out: Record<string, number | null> = {};
+    for (const s of symbols) out[s] = null;
+    return out;
+  }
+}
+
+export async function freePricesHandler(req: Request, res: Response) {
+  try {
+    // Unchanged: same cache key, same single call, same four symbols, so a
+    // no-param request is byte-for-byte what it was before (frozen path).
     const result = await priceCache.getOrFetch("basic-prices", async () => {
       const resp = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum,usd-coin,solana,global-dollar&vs_currencies=usd");
       if (!resp.ok) throw new Error(`CoinGecko returned ${resp.status}`);
@@ -112,8 +207,39 @@ export async function freePricesHandler(_req: Request, res: Response) {
       return { ETH: { usd: data.ethereum?.usd ?? null }, USDC: { usd: data["usd-coin"]?.usd ?? null }, SOL: { usd: data.solana?.usd ?? null }, USDG: { usd: data["global-dollar"]?.usd ?? 1 } };
     }, 60_000);
 
+    // `?token=`/`?tokens=` are PURELY ADDITIVE: they add symbols to the
+    // response, they never filter the base four out. That is deliberate —
+    // `?token=ETH` and `?tokens=ETH,USDC,SOL` (what the NVIDIA example sends)
+    // have always returned all four, and a filtering param would delete keys
+    // those callers already read. So the response can only ever gain keys.
+    const requested = parseRequestedTokens(req);
+    const extras = requested.filter((s) => !(s in result));
+
+    const prices: Record<string, any> = { ...result };
+    const unknown: string[] = [];
+
+    if (extras.length > 0) {
+      const resolvable = extras.filter((s) => FREE_PRICE_IDS[s]);
+      for (const s of extras) if (!FREE_PRICE_IDS[s]) unknown.push(s);
+
+      if (resolvable.length > 0) {
+        const fetched = await fetchExtraPrices(resolvable);
+        for (const s of resolvable) prices[s] = { usd: fetched[s] ?? null };
+      }
+      // A symbol we don't recognise is still echoed back with a null price,
+      // so a caller reading prices[sym] always finds the key it asked for
+      // rather than undefined. `unknown` says WHY it is null (unrecognised
+      // symbol) as opposed to a price lookup that came back empty.
+      for (const s of unknown) prices[s] = { usd: null };
+    }
+
+    const body: Record<string, any> = { prices, timestamp: Date.now(), cached: true, ttl: "60s" };
+    // Emitted only when there IS an unknown symbol, so no existing caller —
+    // and no frozen-path baseline — ever sees a new top-level key.
+    if (unknown.length > 0) body.unknown = unknown;
+
     res.json(withRelated(
-      { prices: result, timestamp: Date.now(), cached: true, ttl: "60s" },
+      body,
       [{ endpoint: "GET /api/v1/oracle/prices", price: "$0.008", desc: "Full price feed — 100+ tokens" },
        { endpoint: "GET /api/v1/solana/pyth/prices", price: "$0.008", desc: "Pyth oracle batch prices" },
        { endpoint: "GET /api/v1/oracle/fx", price: "$0.008", desc: "Stablecoin FX rates" }],
