@@ -113,6 +113,24 @@ export function normalizeEscrowCreateBody(input: any): any {
   return body;
 }
 
+/**
+ * The canonical POST /api/v1/escrow/create request body example.
+ *
+ * Exported because it is served from TWO places that must never disagree:
+ * the "Missing required fields" 400 below, and the `_spraay.example_request`
+ * block that enrich402 injects into this route's 402 challenge. The 402 copy
+ * used to be a hand-written `{ payer, payee, releaseCondition, releaseAt }`
+ * that matched no field this route has ever accepted — an agent that built a
+ * body from it got a 400 on every single field. One const, one spelling.
+ */
+export const ESCROW_CREATE_EXAMPLE = {
+  depositor: "0xClient",
+  beneficiary: "0xFreelancer",
+  token: "USDC",
+  amount: "5000.00",
+  conditions: ["Design approved", "Dev complete"],
+};
+
 type EscrowCreateCheck =
   | { ok: true }
   | { ok: false; status: number; body: { error: string; [k: string]: any } };
@@ -139,7 +157,7 @@ export function validateEscrowCreateBody(
         required: { depositor: "string", beneficiary: "string", token: "string", amount: "string" },
         optional: { arbiter: "string", description: "string", conditions: "string[]", expiresIn: "number (hours, default 168)" },
         note: "depositor may be omitted on a paid request; it then defaults to the paying wallet.",
-        example: { depositor: "0xClient", beneficiary: "0xFreelancer", token: "USDC", amount: "5000.00", conditions: ["Design approved", "Dev complete"] },
+        example: ESCROW_CREATE_EXAMPLE,
       },
     };
   }

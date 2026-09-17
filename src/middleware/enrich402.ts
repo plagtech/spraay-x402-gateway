@@ -24,6 +24,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { GATEWAY_VERSION } from "../lib/version.js";
+import { ESCROW_CREATE_EXAMPLE } from "../routes/escrow.js";
 
 // ============================================
 // ENRICHMENT MAP
@@ -367,8 +368,13 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
   // ============================================
   "POST /api/v1/escrow/create": {
     description: "Create an on-chain escrow contract with release conditions. Supports time-lock, multisig release, and dispute resolution.",
-    example_request: { payer: "0x...", payee: "0x...", amount: "1000000000", releaseCondition: "timelock", releaseAt: "2026-05-01" },
-    example_response: { escrowId: "esc_xyz", address: "0x...", status: "created" },
+    // Canonical body, imported from the route that validates it — see
+    // ESCROW_CREATE_EXAMPLE. Do not inline a second copy here.
+    example_request: ESCROW_CREATE_EXAMPLE,
+    // Matches what escrowCreateHandler actually returns: a top-level status
+    // plus the escrow object under `escrow`, whose id is `escrow.id`. The old
+    // `{ escrowId, address }` shape was never emitted by this route.
+    example_response: { status: "created", escrow: { id: "ESC-A1B2C3D4E5F6", status: "created" } },
     related_endpoints: [
       { method: "POST", path: "/api/v1/escrow/fund", price: "$0.02", why: "Fund the escrow after creation" },
       { method: "POST", path: "/api/v1/escrow/release", price: "$0.08", why: "Release funds when conditions met" },
