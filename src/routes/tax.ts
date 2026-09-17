@@ -17,6 +17,7 @@
 
 import { Request, Response } from "express";
 import { taxDb, supabase } from "../db.js";
+import { SYMBOL_TO_CG_ID } from "../lib/coingecko-ids.js";
 
 // ── Config ─────────────────────────────────────────────────
 
@@ -30,39 +31,9 @@ const MAX_TRANSACTIONS = 500;
 const HISTORY_WINDOW_DAYS = 365;
 const HISTORY_WINDOW_MS = HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-// Symbol → CoinGecko coin id. Add more as needed; unknown symbols
-// fall through to a default-zero with a warning attached to the tx.
-const SYMBOL_TO_CG_ID: Record<string, string> = {
-  ETH: "ethereum",
-  WETH: "ethereum", // wrapped ETH tracks ETH 1:1 for tax purposes
-  BTC: "bitcoin",
-  WBTC: "wrapped-bitcoin",
-  CBBTC: "coinbase-wrapped-btc",
-  SOL: "solana",
-  MATIC: "matic-network",
-  POL: "polygon-ecosystem-token",
-  BNB: "binancecoin",
-  AVAX: "avalanche-2",
-  XRP: "ripple",
-  ARB: "arbitrum",
-  OP: "optimism",
-  LINK: "chainlink",
-  UNI: "uniswap",
-  AAVE: "aave",
-  CRV: "curve-dao-token",
-  MKR: "maker",
-  LDO: "lido-dao",
-  PEPE: "pepe",
-  SHIB: "shiba-inu",
-  DOGE: "dogecoin",
-  TAO: "bittensor",
-  TRUMP: "official-trump",
-  USDC: "usd-coin",
-  USDT: "tether",
-  DAI: "dai",
-  PYUSD: "paypal-usd",
-  EURC: "euro-coin",
-};
+// Symbol → CoinGecko coin id lives in lib/coingecko-ids.ts — shared with
+// /free/prices so the two can never disagree. Unknown symbols still fall
+// through to a default-zero with a warning attached to the tx.
 
 // Stablecoins assumed to be $1.00 — skip the API call.
 const STABLES = new Set(["USDC", "USDT", "DAI", "PYUSD"]);
