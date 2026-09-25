@@ -187,3 +187,41 @@ out of scope on purpose. Live model list used as evidence: `GET /bittensor/v1/mo
 - **Fix outline:** decide whether 403 means "the gateway's key lacks access" for each provider
   (then 503) or a content/policy refusal of the caller's request (then pass through). Add a
   revoked-key marker next to `UPSTREAM_CREDITS_MARKER`.
+
+### Chutes account balance is unmonitored; paid Bittensor went down at $0.00
+
+- **Found:** 2026-09-25, Phase 2 smoke after `a34edd2`. Paid `POST /bittensor/v1/chat/completions`
+  returned 503 because Chutes answered 402 "Quota exceeded and account balance is $0.0". **Every**
+  paid Bittensor chat call failed the same way until LP funded the account the same evening (retry:
+  200, tx `0x100367ccde950660df1ad23b5621a4c29c882cecc10a5711dbc8b6faeee6ae74`). Nobody was charged
+  (≥400 → x402 cancels settlement).
+- **Gap:** the gateway has no view of the Chutes (`CHUTES_API_KEY`) balance. The
+  `[SPRAAY_UPSTREAM_CREDITS_EXHAUSTED]` marker fires only after a paying caller has already hit
+  the empty account. The free `GET /bittensor/v1/health` checks only `/models`, which probably
+  doesn't need credit, so it would likely read `ok` with an empty account. That last point was
+  **not verified**: health was not captured while the balance was $0.
+- **Fix outline:** same shape as the `/health` OpenRouter item above. Add a cached balance check
+  if Chutes exposes one (confirm in their API docs first), shown as a new additive field. Add
+  Chutes to whatever alert is set up on the credits marker. Until then, a manual check before
+  any demo or partner run.
+
+### Upstream error bodies still reach callers outside the inference handlers
+
+- **Fixed in `e368a04`:** `/api/v1/chat/completions` (OpenRouter + BlockRun) and every
+  `/bittensor/v1/*` route, including the free health endpoint, now send a generic message +
+  `upstream_status` and log the full upstream body. That fix was prompted by Chutes' 402 text
+  sending callers the gateway's Chutes deposit address and its $0 balance.
+- **Still forwarding upstream text verbatim:**
+  - `/api/v1/compute/*`: `src/services/compute-router.ts` throws `` `Chutes error ${status}: ${body}` ``
+    (`:63`), `` `OpenRouter error …` `` (`:87`), `` `Chutes embeddings error …` `` (`:128`),
+    `` `Replicate error …` `` (`:175`, `:326`). `src/routes/compute.ts` returns them as
+    `details: err.message` (`:61`, `:100`, `:137`, `:174`, `:207`, `:238`, `:351`, `:375`, `:441`).
+  - **`/free/chat`** (free, open to anyone): `src/routes/free/chat.ts` returns
+    `res.status(resp.status).json({ error: "Upstream API error", detail: errText })` at two sites
+    (`:106`, `:140`). That is the full OpenRouter body **and** the upstream status passed
+    through unchanged, so an OpenRouter 402 reaches a free-tier caller as 402.
+- **Fix outline:** reuse `providerErrorMessage()` / `upstream_status` from
+  `src/lib/upstream-errors.ts` and log the body. For `/free/chat` also map the status through
+  `upstreamFailureStatus()`. `compute-router` could throw a typed error like `UpstreamHttpError`
+  in `src/routes/bittensor-dropin.ts`. None of these routes are frozen, but run the nine-path
+  proof anyway (shared middleware chain).
