@@ -27,6 +27,25 @@
 // ============================================
 
 import { Request, Response } from "express";
+import { upstreamFailureStatus, markUpstreamError, logCreditsExhausted } from "../lib/upstream-errors.js";
+import type { ListedModel } from "../lib/bittensor-model.js";
+
+// A provider answered with a non-2xx status. Carries the status so callers map
+// on the code, never on the upstream body text.
+export class UpstreamHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "UpstreamHttpError";
+  }
+}
+
+// The provider has no API key configured on this gateway.
+export class ProviderNotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderNotConfiguredError";
+  }
+}
 
 // ============================================
 // PROVIDER REGISTRY
@@ -136,7 +155,7 @@ async function proxyToProvider(
 ): Promise<{ response: globalThis.Response; provider: Provider }> {
   const apiKey = provider.getApiKey();
   if (!apiKey) {
-    throw new Error(`${provider.name} (SN${provider.subnet}) not configured`);
+    throw new ProviderNotConfiguredError(`${provider.name} (SN${provider.subnet}) not configured`);
   }
 
   const url = `${provider.baseUrl}${path}`;
@@ -153,12 +172,33 @@ async function proxyToProvider(
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => "");
-    throw new Error(
-      `${provider.name} returned ${response.status}: ${errBody.slice(0, 300)}`
+    throw new UpstreamHttpError(
+      `${provider.name} returned ${response.status}: ${errBody.slice(0, 300)}`,
+      response.status
     );
   }
 
   return { response, provider };
+}
+
+// Chat models from Chutes (SN64), for resolving the published example model.
+export async function listBittensorChatModels(): Promise<ListedModel[]> {
+  const { response } = await proxyToProvider(providers.chutes, "/models", "GET", undefined, false);
+  const data = (await response.json()) as any;
+  return Array.isArray(data?.data) ? data.data : [];
+}
+
+// Status for a failed chat completion, decided by the upstream status code.
+// 429 keeps its existing pass-through; provider failures (401 gateway key
+// rejected, 402 credits, 404 model gone, 5xx) map via upstreamFailureStatus;
+// anything else, including network errors, stays 502 as before.
+export function bittensorChatErrorStatus(err: unknown): number {
+  if (err instanceof ProviderNotConfiguredError) return 503;
+  if (err instanceof UpstreamHttpError) {
+    if (err.status === 429) return err.status;
+    return upstreamFailureStatus(err.status) ?? 502;
+  }
+  return 502;
 }
 
 // ============================================
@@ -322,13 +362,11 @@ export async function dropinChatHandler(req: Request, res: Response) {
     const message = (err as Error).message;
 
     // Return errors in OpenAI error format
-    const status = message.includes("not configured")
-      ? 503
-      : message.includes("429")
-        ? 429
-        : message.includes("401")
-          ? 401
-          : 502;
+    const status = bittensorChatErrorStatus(err);
+    if (err instanceof UpstreamHttpError) {
+      if (err.status === 402) logCreditsExhausted("Chutes AI", message);
+      markUpstreamError(res);
+    }
 
     res.status(status).json({
       error: {

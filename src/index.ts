@@ -69,7 +69,8 @@ import { healthHandler, statsHandler } from "./routes/health.js";
 // NEW: Supply Chain Task Protocol (Category 18)
 import { sctpSupplierCreateHandler, sctpSupplierGetHandler, sctpPoCreateHandler, sctpPoGetHandler, sctpInvoiceSubmitHandler, sctpInvoiceGetHandler, sctpInvoiceVerifyHandler, sctpPayExecuteHandler } from "./routes/sctp.js";
 // NEW: Bittensor Drop-in API (Category 19)
-import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler } from "./routes/bittensor-dropin.js";
+import { dropinModelsHandler, dropinChatHandler, dropinImageHandler, dropinEmbeddingsHandler, dropinHealthHandler, listBittensorChatModels } from "./routes/bittensor-dropin.js";
+import { bindBittensorModel, resolveBittensorModel } from "./lib/bittensor-model.js";
 // NEW: Compute Services
 import {
   textInferenceHandler, imageGenerationHandler, videoGenerationHandler,
@@ -949,12 +950,12 @@ const paidRoutes = {
       "GET /bittensor/v1/models": {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "List all AI models on Bittensor. OpenAI /v1/models compatible. Drop-in: just change base_url to gateway.spraay.app/bittensor/v1", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ output: { example: { object: "list", data: [{ id: "deepseek-ai/DeepSeek-R1-0528", object: "model" }] }, schema: { properties: { object: { type: "string" }, data: { type: "array" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ output: { example: { object: "list", data: [bindBittensorModel({ id: "", object: "model" }, "id")] }, schema: { properties: { object: { type: "string" }, data: { type: "array" } } } } }) },
       },
       "POST /bittensor/v1/chat/completions": {
         accepts: [{ scheme: "exact", price: "$0.03", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.03", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Chat completions via Bittensor decentralized AI. Fully OpenAI-compatible. 43+ models (DeepSeek, Qwen, Llama, Mistral). Streaming, function calling, TEE-verified. Drop-in: just change base_url.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { model: "deepseek-ai/DeepSeek-V3-0324", messages: [{ role: "user", content: "What is decentralized AI?" }], max_tokens: 256 }, inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" }, max_tokens: { type: "number" }, temperature: { type: "number" }, stream: { type: "boolean" }, tools: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { id: "chatcmpl-abc", choices: [{ message: { role: "assistant", content: "..." } }], usage: { total_tokens: 57 } }, schema: { properties: { choices: { type: "array" }, usage: { type: "object" } } } } }) },
+        extensions: { ...declareDiscoveryExtension({ input: bindBittensorModel({ model: "", messages: [{ role: "user", content: "What is decentralized AI?" }], max_tokens: 256 }), inputSchema: { properties: { model: { type: "string" }, messages: { type: "array" }, max_tokens: { type: "number" }, temperature: { type: "number" }, stream: { type: "boolean" }, tools: { type: "array" } }, required: ["model", "messages"] }, bodyType: "json", output: { example: { id: "chatcmpl-abc", choices: [{ message: { role: "assistant", content: "..." } }], usage: { total_tokens: 57 } }, schema: { properties: { choices: { type: "array" }, usage: { type: "object" } } } } }) },
       },
       "POST /bittensor/v1/images/generations": {
         accepts: [{ scheme: "exact", price: "$0.05", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.05", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -3030,6 +3031,8 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 app.listen(PORT, async () => {
   await initMpp();
+  // Non-blocking: checks the published Bittensor example model against the live list.
+  void resolveBittensorModel(listBittensorChatModels);
 const webhookWorker = startWebhookWorker(supabase!, { pollIntervalMs: 5_000, batchSize: 25 });
   process.on("SIGTERM", () => webhookWorker.stop());
   console.log(`\n💧 Spraay x402 Gateway v${GATEWAY_VERSION} running on port ${PORT}`);

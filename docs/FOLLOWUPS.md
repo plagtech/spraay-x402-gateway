@@ -106,3 +106,84 @@ careful pass together rather than drive-by edits.
 - **Fix outline:** identify the 2 endpoints documented as paid cards but absent from the paid
   manifest (or vice versa), then decide per endpoint whether the card or the manifest is wrong.
   Do not simply retype the hero to 190/158 — that hides whichever of the two is a real gap.
+
+## Inference upstream — left over from the `fix/inference-upstream` session (2026-09-25)
+
+That session fixed three things: the dead Bittensor example model, upstream provider failures
+coming back as 402, and the missing credits marker. The items below are related but were kept
+out of scope on purpose. Live model list used as evidence: `GET /bittensor/v1/models` paid
+2026-09-25, tx `0x20459545e60467d5655fa7c636268a429df0b2aa6f552bbfdf4c15ef04a74e48`
+(14 Chutes models; saved at `..\oracle-spraay-verify\captures\f2_gw0_bittensor_models.json`).
+
+### No alerting path for exhausted provider credits — only a log marker
+
+- **Found:** 2026-09-25, Oracle notebook verify (F2): paid `/api/v1/chat/completions` failed with
+  OpenRouter "Insufficient credits", and nothing told anyone.
+- **Now:** every upstream "out of credit" failure logs at error level with the marker
+  **`[SPRAAY_UPSTREAM_CREDITS_EXHAUSTED]`** (`src/lib/upstream-errors.ts`). It fires on OpenRouter
+  402, Chutes 402, and BlockRun `PaymentError`. The gateway has no operator alerting path
+  (`/api/v1/notify/*` and `/api/v1/webhook/*` are paid customer features; `gateway-events` is
+  Supabase analytics), so the marker is the whole deliverable.
+- **Fix outline:** add a Railway log alert (or any log drain) matching the marker. If the gateway
+  gets an ops channel later, call it from `logCreditsExhausted()`. That is the single choke point.
+
+### `/health` reports the AI gateway "configured" even when the OpenRouter account has no credit
+
+- **Where:** `src/routes/health.ts:33`: `aiGateway: process.env.OPENROUTER_API_KEY ? "configured" : "needs_api_key"`.
+  It only checks that the key is present. During the F2 outage `/health` showed nothing wrong.
+- **Fix outline:** add a cached (e.g. 5 min) credit check against OpenRouter's key-info
+  endpoint. Confirm the current path and response fields in OpenRouter's docs first; it reports
+  the key's usage and limit. Surface it as a new additive field (e.g.
+  `aiGatewayCredits: "ok" | "low" | "exhausted" | "unknown"`). Don't change the existing
+  `aiGateway` value; `/health` consumers may match on it.
+
+### Flat-price margin exposure on caller-chosen models
+
+- **Where:** `POST /bittensor/v1/chat/completions` charges a flat **$0.03** whatever `model` or
+  `max_tokens` the caller sends (`src/index.ts` paidRoutes). The handler forwards the body
+  unchanged (`src/routes/bittensor-dropin.ts`).
+- **Exposure:** the live list's `pricing` runs from `prompt 0.0245 / completion 0.0978`
+  (`unsloth/Mistral-Nemo-Instruct-2407-TEE`) to `prompt 3 / completion 15`
+  (`moonshotai/Kimi-K3-TEE`, 1M context). If those are USD per million tokens (Chutes'
+  usual unit, not verified here), a Kimi-K3 call with about 2,000 output tokens already costs
+  the full $0.03, and a long-context or large-`max_tokens` call costs many times the price.
+  `POST /api/v1/chat/completions` has the same shape at a flat **$0.005** across 200+
+  OpenRouter models.
+- **Why it was left:** pricing changes were out of scope for that session.
+- **Fix outline — needs a pricing decision:** one of (a) cap `max_tokens` per model tier,
+  (b) an allowlist of models the flat price covers, (c) per-model or dynamic pricing. Any
+  of these changes what a 402 quotes, so check the frozen-path rules even though these two
+  routes are not frozen.
+
+### `/compute/*` catalog: every Chutes chat model id is gone from the live list
+
+- **Where:** `src/config/compute-models.ts`. None of the 11 Chutes chat ids (the
+  `deepseek-ai/DeepSeek-*`, `meta-llama/*`, `mistralai/*`, `Qwen/Qwen3-*` entries, including
+  `deepseek-ai/DeepSeek-V3-0324` at `:41`) is in the 2026-09-25 live list. The nearest match is
+  `Qwen/Qwen3-32B`, which is listed only as `Qwen/Qwen3-32B-TEE`. `/api/v1/compute/text-inference`
+  and `/api/v1/compute-futures/execute` therefore most likely fail upstream for every Chutes model.
+  On `text-inference` those failures surface as 502 (`src/routes/compute.ts:61`), so x402
+  callers are not charged. The `compute-futures` error path was not checked.
+- **Fix outline:** re-map the catalog to live ids. Then consider validating it at startup the
+  way `src/lib/bittensor-model.ts` does, so a retired id is logged instead of silently
+  failing. Check `compute-futures` too: it bills from the prepaid balance, not x402, so
+  confirm a failed job does not debit it.
+
+### `seed-bazaar.mjs:185` still seeds the dead `deepseek-ai/DeepSeek-V3-0324`
+
+- Not runtime code. It's a one-off script that seeds an external bazaar. Update the example body
+  (to `deepseek-ai/DeepSeek-V3.2-TEE`) before the next time it is run. Whatever an earlier run
+  already seeded externally is not fixed by any gateway deploy.
+
+### Upstream 403 still passes through; a rejected gateway key logs no marker
+
+- **Done in that session:** an upstream **401** from OpenRouter, Chutes or BlockRun (the
+  gateway's own key or wallet auth was rejected) now returns 503, tagged as an upstream error
+  (`upstreamFailureStatus()` in `src/lib/upstream-errors.ts`).
+- **Left:** an upstream **403** still passes through from OpenRouter
+  (`src/routes/ai-gateway.ts`), and still maps to 502 on Bittensor. A 401 logs only the
+  generic handler error line, with no distinct marker, so a revoked key is not grep-able the
+  way exhausted credits are.
+- **Fix outline:** decide whether 403 means "the gateway's key lacks access" for each provider
+  (then 503) or a content/policy refusal of the caller's request (then pass through). Add a
+  revoked-key marker next to `UPSTREAM_CREDITS_MARKER`.

@@ -25,6 +25,7 @@
 import { Request, Response, NextFunction } from "express";
 import { GATEWAY_VERSION } from "../lib/version.js";
 import { ESCROW_CREATE_EXAMPLE } from "../routes/escrow.js";
+import { bindBittensorModel } from "../lib/bittensor-model.js";
 
 // ============================================
 // ENRICHMENT MAP
@@ -84,10 +85,10 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
   // ============================================
   "POST /bittensor/v1/chat/completions": {
     description: "Decentralized AI inference via Bittensor SN64 (Chutes AI). OpenAI-compatible drop-in. No API key management — pay per call with USDC.",
-    example_request: {
-      model: "chutesai/Llama-3.1-Nemotron-70B-Instruct",
+    example_request: bindBittensorModel({
+      model: "",
       messages: [{ role: "user", content: "What is Bittensor?" }],
-    },
+    }),
     example_response: {
       id: "chatcmpl-bt-xyz",
       choices: [{ message: { role: "assistant", content: "Bittensor is a decentralized AI network..." } }],
@@ -99,7 +100,7 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
   },
   "GET /bittensor/v1/models": {
     description: "List available Bittensor models (Chutes AI SN64). OpenAI-compatible response format.",
-    example_response: { object: "list", data: [{ id: "chutesai/Llama-3.1-Nemotron-70B-Instruct", object: "model" }] },
+    example_response: { object: "list", data: [bindBittensorModel({ id: "", object: "model" }, "id")] },
     related_endpoints: [
       { method: "POST", path: "/bittensor/v1/chat/completions", price: "$0.03", why: "Run inference on any listed Bittensor model" },
       { method: "GET", path: "/api/v1/models", price: "$0.001", why: "See centralized models for fallback" },
@@ -968,6 +969,12 @@ export function enrich402Middleware(req: Request, res: Response, next: NextFunct
   res.json = function (body: any): Response {
     // Only enrich if this is a 402 response
     if (res.statusCode !== 402) {
+      return originalJson(body);
+    }
+
+    // A handler that tagged its response as an upstream-provider error is not
+    // an x402 challenge — never dress it up as one (src/lib/upstream-errors.ts).
+    if (res.locals?.upstreamError) {
       return originalJson(body);
     }
 
