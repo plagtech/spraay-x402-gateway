@@ -27,14 +27,16 @@
 // ============================================
 
 import { Request, Response } from "express";
-import { upstreamFailureStatus, markUpstreamError, logCreditsExhausted } from "../lib/upstream-errors.js";
+import { upstreamFailureStatus, markUpstreamError, logCreditsExhausted, providerErrorMessage } from "../lib/upstream-errors.js";
 import type { ListedModel } from "../lib/bittensor-model.js";
 
 // A provider answered with a non-2xx status. Carries the status so callers map
-// on the code, never on the upstream body text.
+// on the code, never on the upstream body text. The full body is kept for the
+// server log (console.error prints it as an own property) and never sent to a
+// caller — see publicErrorMessage().
 export class UpstreamHttpError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+  constructor(readonly provider: string, readonly status: number, readonly body: string) {
+    super(`${provider} returned ${status}: ${body.slice(0, 300)}`);
     this.name = "UpstreamHttpError";
   }
 }
@@ -172,10 +174,7 @@ async function proxyToProvider(
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => "");
-    throw new UpstreamHttpError(
-      `${provider.name} returned ${response.status}: ${errBody.slice(0, 300)}`,
-      response.status
-    );
+    throw new UpstreamHttpError(provider.name, response.status, errBody);
   }
 
   return { response, provider };
@@ -186,6 +185,22 @@ export async function listBittensorChatModels(): Promise<ListedModel[]> {
   const { response } = await proxyToProvider(providers.chutes, "/models", "GET", undefined, false);
   const data = (await response.json()) as any;
   return Array.isArray(data?.data) ? data.data : [];
+}
+
+// Caller-facing text for a failed provider call. Upstream bodies can carry the
+// gateway's account state (Chutes: "account balance is $0.0, send tao to
+// <deposit address>"), so they are replaced by a generic message; our own
+// errors (not configured, network) keep their text.
+export function publicErrorMessage(err: unknown): string {
+  if (err instanceof UpstreamHttpError) {
+    return `${err.provider} returned ${err.status}: ${providerErrorMessage(err.status)}`;
+  }
+  return (err as Error).message;
+}
+
+// Additive `upstream_status` field for error bodies, when there was one.
+function upstreamStatusField(err: unknown): { upstream_status?: number } {
+  return err instanceof UpstreamHttpError ? { upstream_status: err.status } : {};
 }
 
 // Status for a failed chat completion, decided by the upstream status code.
@@ -249,7 +264,8 @@ export async function dropinModelsHandler(req: Request, res: Response) {
           }
         }
       } catch (err) {
-        errors.push(`${provider.name}: ${(err as Error).message}`);
+        console.error("[bittensor-dropin] models provider error:", err);
+        errors.push(err instanceof UpstreamHttpError ? publicErrorMessage(err) : `${provider.name}: ${publicErrorMessage(err)}`);
       }
     }
 
@@ -359,20 +375,20 @@ export async function dropinChatHandler(req: Request, res: Response) {
     res.json(addSpraayMeta(data, provider, latencyMs, { model }));
   } catch (err) {
     console.error("[bittensor-dropin] chat error:", err);
-    const message = (err as Error).message;
 
     // Return errors in OpenAI error format
     const status = bittensorChatErrorStatus(err);
     if (err instanceof UpstreamHttpError) {
-      if (err.status === 402) logCreditsExhausted("Chutes AI", message);
+      if (err.status === 402) logCreditsExhausted(err.provider, err.body);
       markUpstreamError(res);
     }
 
     res.status(status).json({
       error: {
-        message: `Bittensor inference error: ${message}`,
+        message: `Bittensor inference error: ${publicErrorMessage(err)}`,
         type: status === 429 ? "rate_limit_error" : "server_error",
         code: status === 429 ? "rate_limit_exceeded" : "provider_error",
+        ...upstreamStatusField(err),
       },
     });
   }
@@ -412,14 +428,14 @@ export async function dropinImageHandler(req: Request, res: Response) {
     res.json(addSpraayMeta(data, provider, latencyMs, { type: "image" }));
   } catch (err) {
     console.error("[bittensor-dropin] image error:", err);
-    const message = (err as Error).message;
-    const status = message.includes("not configured") ? 503 : 502;
+    const status = err instanceof ProviderNotConfiguredError ? 503 : 502;
 
     res.status(status).json({
       error: {
-        message: `Image generation error: ${message}`,
+        message: `Image generation error: ${publicErrorMessage(err)}`,
         type: "server_error",
         code: "provider_error",
+        ...upstreamStatusField(err),
       },
     });
   }
@@ -470,14 +486,14 @@ export async function dropinEmbeddingsHandler(req: Request, res: Response) {
     res.json(addSpraayMeta(data, provider, latencyMs, { type: "embedding" }));
   } catch (err) {
     console.error("[bittensor-dropin] embeddings error:", err);
-    const message = (err as Error).message;
-    const status = message.includes("not configured") ? 503 : 502;
+    const status = err instanceof ProviderNotConfiguredError ? 503 : 502;
 
     res.status(status).json({
       error: {
-        message: `Embeddings error: ${message}`,
+        message: `Embeddings error: ${publicErrorMessage(err)}`,
         type: "server_error",
         code: "provider_error",
+        ...upstreamStatusField(err),
       },
     });
   }
@@ -508,11 +524,14 @@ export async function dropinHealthHandler(_req: Request, res: Response) {
         models: data?.data?.length || 0,
       };
     } catch (err) {
+      // Free endpoint: the upstream body goes to the log only.
+      console.error("[bittensor-dropin] health provider error:", err);
       status[id] = {
         status: "error",
         subnet: provider.subnet,
         name: provider.name,
-        error: (err as Error).message,
+        error: publicErrorMessage(err),
+        ...upstreamStatusField(err),
       };
     }
   }

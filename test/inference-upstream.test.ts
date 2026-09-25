@@ -89,16 +89,16 @@ async function main() {
   console.log("\nbittensorChatErrorStatus");
   const { UpstreamHttpError, ProviderNotConfiguredError, bittensorChatErrorStatus } = dropin;
   await test("404 whose body mentions 429 and 401 → 502 (was 429 by text match)", () => {
-    const err = new UpstreamHttpError('Chutes AI returned 404: {"detail":"model 429-401 not found"}', 404);
+    const err = new UpstreamHttpError("Chutes AI", 404, '{"detail":"model 429-401 not found"}');
     assert.strictEqual(bittensorChatErrorStatus(err), 502);
   });
   await test("402 → 503, 5xx → 502, 503 → 503", () => {
-    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 402)), 503);
-    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 500)), 502);
-    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 503)), 503);
+    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 402, "")), 503);
+    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 500, "")), 502);
+    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 503, "")), 503);
   });
   await test("429 keeps its pass-through", () => {
-    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 429)), 429);
+    assert.strictEqual(bittensorChatErrorStatus(new UpstreamHttpError("x", 429, "")), 429);
   });
   await test("not configured → 503; network error → 502", () => {
     assert.strictEqual(bittensorChatErrorStatus(new ProviderNotConfiguredError("Chutes AI (SN64) not configured")), 503);
@@ -109,12 +109,16 @@ async function main() {
   const realFetch = globalThis.fetch;
   const chatReq = (m: string) => ({ body: { model: m, messages: [{ role: "user", content: "hi" }] } }) as any;
   try {
-    await test("upstream 404 model not found → 502 with provider message, tagged upstream", async () => {
+    await test("upstream 404 model not found → 502, generic message + upstream_status, body only in the log", async () => {
       globalThis.fetch = (async () => new Response('{"detail":"model not found: deepseek-ai/DeepSeek-V3-0324"}', { status: 404 })) as any;
       const res = fakeRes();
-      await captureErrors(() => dropin.dropinChatHandler(chatReq("deepseek-ai/DeepSeek-V3-0324"), res));
+      const lines = await captureErrors(() => dropin.dropinChatHandler(chatReq("deepseek-ai/DeepSeek-V3-0324"), res));
       assert.strictEqual(res.statusCode, 502);
-      assert.match(res.body.error.message, /model not found: deepseek-ai\/DeepSeek-V3-0324/);
+      assert.strictEqual(res.body.error.message, "Bittensor inference error: Chutes AI returned 404: The AI provider does not serve this model. Check the model id against the models list.");
+      assert.strictEqual(res.body.error.upstream_status, 404);
+      assert.strictEqual(res.body.error.code, "provider_error");
+      assert.ok(!JSON.stringify(res.body).includes("model not found"), "upstream body not forwarded");
+      assert.ok(lines.some((l) => l.includes("model not found: deepseek-ai/DeepSeek-V3-0324")), "upstream body logged");
       assert.strictEqual(res.locals.upstreamError, true);
     });
     await test("upstream 402 → 503 and logs the credits marker", async () => {
@@ -134,15 +138,16 @@ async function main() {
   const orReq = { body: { model: "openai/gpt-5.5", messages: [{ role: "user", content: "hi" }] } } as any;
   const upstream = (status: number, data: any) => async () => { throw Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data } }); };
   try {
-    await test("upstream 402 insufficient credits → 503, provider message kept, marker logged", async () => {
-      const data = { error: { message: "Insufficient credits. Add more using https://openrouter.ai/settings/credits", code: 402 } };
+    await test("upstream 402 insufficient credits → 503, generic message, full body + marker logged", async () => {
+      const data = { error: { message: "Insufficient credits. Add more using https://openrouter.ai/settings/credits", code: 402, metadata: { limit_source: "openrouter_credits" } } };
       (axios as any).post = upstream(402, data);
       const res = fakeRes();
       const lines = await captureErrors(() => aiChatHandler(orReq, res));
       assert.strictEqual(res.statusCode, 503);
-      assert.deepStrictEqual(res.body, { error: "AI completion failed", details: data.error, upstream_status: 402 });
+      assert.deepStrictEqual(res.body, { error: "AI completion failed", details: "The AI provider is temporarily unavailable. Retry later.", upstream_status: 402 });
       assert.strictEqual(res.locals.upstreamError, true);
       assert.ok(lines.some((l) => l.includes(UPSTREAM_CREDITS_MARKER)), "credits marker logged");
+      assert.ok(lines.some((l) => l.includes('"limit_source":"openrouter_credits"')), "full upstream body logged, nested fields intact");
     });
     await test("upstream 404 → 502, no credits marker", async () => {
       (axios as any).post = upstream(404, { error: { message: "No endpoints found", code: 404 } });
@@ -162,12 +167,17 @@ async function main() {
       await captureErrors(() => aiChatHandler(orReq, res));
       assert.strictEqual(res.statusCode, 503);
     });
-    await test("upstream 400 unchanged: passes through with the original body shape", async () => {
+    await test("upstream 400 keeps its status; generic message + upstream_status, body only in the log", async () => {
       (axios as any).post = upstream(400, { error: { message: "bad param" } });
       const res = fakeRes();
-      await captureErrors(() => aiChatHandler(orReq, res));
+      const lines = await captureErrors(() => aiChatHandler(orReq, res));
       assert.strictEqual(res.statusCode, 400);
-      assert.deepStrictEqual(res.body, { error: "AI completion failed", details: { message: "bad param" } });
+      assert.deepStrictEqual(res.body, {
+        error: "AI completion failed",
+        details: "The AI provider rejected the request as invalid. Check the model id and request parameters.",
+        upstream_status: 400,
+      });
+      assert.ok(lines.some((l) => l.includes("bad param")), "upstream body logged");
       assert.strictEqual(res.locals.upstreamError, undefined);
     });
     await test("no upstream response (network error) unchanged: 500", async () => {
@@ -212,7 +222,8 @@ async function main() {
       const ch = fakeRes();
       await captureErrors(() => dropin.dropinChatHandler(chatReq("deepseek-ai/DeepSeek-V3.2-TEE"), ch));
       assert.strictEqual(ch.statusCode, 503);
-      assert.match(ch.body.error.message, /Invalid token/);
+      assert.strictEqual(ch.body.error.upstream_status, 401);
+      assert.ok(!JSON.stringify(ch.body).includes("Invalid token"), "upstream body not forwarded");
       assert.strictEqual(ch.locals.upstreamError, true);
 
       blockrun.LLMClient.prototype.chatCompletion = async () => { throw new blockrun.APIError("Unauthorized", 401); };
@@ -220,7 +231,41 @@ async function main() {
       await captureErrors(() => aiChatHandler({ body: { ...orReq.body, provider: "blockrun" } } as any, br));
       assert.strictEqual(br.statusCode, 503);
       assert.strictEqual(br.body.error, "BlockRun AI completion failed");
+      assert.strictEqual(br.body.upstream_status, 401);
+      assert.strictEqual(br.body.details, "The AI provider is temporarily unavailable. Retry later.");
       assert.strictEqual(br.locals.upstreamError, true);
+    });
+
+    await test("Chutes account state (deposit address, $0 balance) never reaches a caller — only the log", async () => {
+      const deposit = "5CqrYioFvEENaByQGHkeaYhETPNZAFA7FQ7DJpDfBJ4hbNiB";
+      const upstreamBody = JSON.stringify({ detail: { message: `Quota exceeded and account balance is $0.0, please pay with fiat or send tao to ${deposit}` } });
+      globalThis.fetch = (async () => new Response(upstreamBody, { status: 402 })) as any;
+      const leaks = (body: unknown) => { const s = JSON.stringify(body); return s.includes(deposit) || s.includes("account balance"); };
+
+      const chat = fakeRes();
+      const lines = await captureErrors(async () => {
+        await dropin.dropinChatHandler(chatReq("deepseek-ai/DeepSeek-V3.2-TEE"), chat);
+      });
+      assert.strictEqual(chat.statusCode, 503);
+      assert.strictEqual(chat.body.error.upstream_status, 402);
+      assert.ok(!leaks(chat.body), "chat body leaks account state");
+      assert.ok(lines.some((l) => l.includes(deposit)), "full upstream body in the server log");
+
+      const img = fakeRes(), emb = fakeRes(), models = fakeRes(), health = fakeRes();
+      await captureErrors(async () => {
+        await dropin.dropinImageHandler({ body: { prompt: "p" } } as any, img);
+        await dropin.dropinEmbeddingsHandler({ body: { input: "x", model: "deepseek-ai/x" } } as any, emb);
+        await dropin.dropinModelsHandler({} as any, models);
+        await dropin.dropinHealthHandler({} as any, health);
+      });
+      for (const [name, r] of [["images", img], ["embeddings", emb], ["models", models], ["health", health]] as const) {
+        assert.ok(!leaks(r.body), `${name} body leaks account state: ${JSON.stringify(r.body)}`);
+      }
+      assert.strictEqual(emb.statusCode, 502);
+      assert.strictEqual(emb.body.error.upstream_status, 402);
+      assert.strictEqual(models.statusCode, 200);
+      assert.deepStrictEqual(models.body._warnings, ["Chutes AI returned 402: The AI provider is temporarily unavailable. Retry later."]);
+      assert.strictEqual(health.body.providers.chutes.upstream_status, 402);
     });
   } finally {
     (axios as any).post = realPost;

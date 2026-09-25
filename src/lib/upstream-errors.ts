@@ -35,6 +35,26 @@ export function upstreamFailureStatus(upstreamStatus: number): 502 | 503 | null 
 }
 
 /**
+ * The message a caller sees for an upstream provider error. Upstream bodies
+ * are never forwarded: they can carry the gateway's account state (Chutes'
+ * "account balance is $0.0, send tao to <deposit address>"). The full body
+ * goes to the server log only; the caller gets this plus `upstream_status`.
+ */
+export function providerErrorMessage(upstreamStatus: number | undefined): string {
+  if (upstreamStatus === 400 || upstreamStatus === 422) {
+    return "The AI provider rejected the request as invalid. Check the model id and request parameters.";
+  }
+  if (upstreamStatus === 404) return "The AI provider does not serve this model. Check the model id against the models list.";
+  if (upstreamStatus === 403) return "The AI provider refused this request.";
+  if (upstreamStatus === 429) return "The AI provider is rate-limiting requests. Retry shortly.";
+  if (upstreamStatus === 401 || upstreamStatus === 402 || upstreamStatus === 503) {
+    return "The AI provider is temporarily unavailable. Retry later.";
+  }
+  if (upstreamStatus !== undefined && upstreamStatus >= 500) return "The AI provider returned an error. Retry later.";
+  return "The AI provider could not complete the request.";
+}
+
+/**
  * Tags the response as an upstream-provider error so enrich402Middleware never
  * dresses it up as an x402 payment challenge.
  */

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import axios from "axios";
 import { trackRequest } from "./health";
-import { upstreamFailureStatus, markUpstreamError, logCreditsExhausted } from "../lib/upstream-errors.js";
+import { upstreamFailureStatus, markUpstreamError, logCreditsExhausted, providerErrorMessage } from "../lib/upstream-errors.js";
 
 // ── Provider: OpenRouter (API key auth) ──────────────────────────────
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -176,7 +176,8 @@ export async function aiChatHandler(req: Request, res: Response) {
       } catch (blockrunError: any) {
         console.error(
           "[AI Gateway] BlockRun error:",
-          blockrunError?.message || blockrunError
+          blockrunError?.message || blockrunError,
+          ...(blockrunError?.response !== undefined ? ["| upstream body:", blockrunError.response] : [])
         );
 
         // The gateway's own BlockRun wallet could not pay upstream. That is a
@@ -194,13 +195,17 @@ export async function aiChatHandler(req: Request, res: Response) {
 
         // BlockRun rejected the gateway's own wallet auth — a provider outage,
         // not the caller's credentials → 503, never 401.
-        const blockrunStatus = blockrunError?.statusCode === 401 ? 503 : 500;
+        const upstreamStatus: number | undefined =
+          typeof blockrunError?.statusCode === "number" ? blockrunError.statusCode : undefined;
+        const blockrunStatus = upstreamStatus === 401 ? 503 : 500;
         if (blockrunStatus === 503) markUpstreamError(res);
 
+        // Upstream text stays in the server log above; the caller gets a generic message.
         return res.status(blockrunStatus).json({
           error: "BlockRun AI completion failed",
-          details: blockrunError?.message || "Unknown error",
+          details: providerErrorMessage(upstreamStatus),
           suggestion: "Try provider: 'openrouter' as fallback",
+          ...(upstreamStatus !== undefined ? { upstream_status: upstreamStatus } : {}),
         });
       }
     }
@@ -242,10 +247,15 @@ export async function aiChatHandler(req: Request, res: Response) {
       },
     });
   } catch (error: any) {
-    console.error("AI chat error:", error?.response?.data || error.message);
+    // Full upstream body, server log only (JSON so nested metadata isn't elided).
+    console.error(
+      "AI chat error:",
+      error?.response ? `upstream ${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message
+    );
 
-    // Upstream 401/402/404/5xx is a provider failure → 502/503 with the provider's
-    // message, never pass-through (an upstream 402 would read as an x402 challenge).
+    // Upstream 401/402/404/5xx is a provider failure → 502/503, never
+    // pass-through (an upstream 402 would read as an x402 challenge). The
+    // upstream body is logged above and never forwarded to the caller.
     const upstreamStatus: number | undefined = error?.response?.status;
     const mapped = upstreamStatus ? upstreamFailureStatus(upstreamStatus) : null;
     if (upstreamStatus && mapped) {
@@ -253,14 +263,23 @@ export async function aiChatHandler(req: Request, res: Response) {
       markUpstreamError(res);
       return res.status(mapped).json({
         error: "AI completion failed",
-        details: error?.response?.data?.error || error.message,
+        details: providerErrorMessage(upstreamStatus),
         upstream_status: upstreamStatus,
       });
     }
 
-    return res.status(upstreamStatus || 500).json({
+    // Other upstream statuses (400, 429, …) keep their status; no response at
+    // all (network error) stays 500 with our own error text.
+    if (upstreamStatus) {
+      return res.status(upstreamStatus).json({
+        error: "AI completion failed",
+        details: providerErrorMessage(upstreamStatus),
+        upstream_status: upstreamStatus,
+      });
+    }
+    return res.status(500).json({
       error: "AI completion failed",
-      details: error?.response?.data?.error || error.message,
+      details: error.message,
     });
   }
 }
