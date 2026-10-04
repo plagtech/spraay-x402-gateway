@@ -16,6 +16,54 @@ function generateId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 }
 
+// Opt-in per-robot secret for update/deregister. Only the sha256 hash is
+// stored (robots.update_secret_hash); the plaintext is never persisted or
+// logged. Robots registered without update_secret have no hash and skip the
+// check entirely, so they behave exactly as before.
+function hashSecret(secret: string): string {
+  return crypto.createHash('sha256').update(secret).digest('hex');
+}
+
+/**
+ * Returns null when the caller may modify the robot, else the response to
+ * send. A missing robot passes through so the route's own not-found path
+ * answers as it always has; a failed lookup answers with that same
+ * not-found body rather than skipping the check.
+ */
+async function checkRobotSecret(
+  req: Request, robotId: string, notFoundBody: any
+): Promise<{ status: number; body: any } | null> {
+  // select('*') rather than the one column, so a missing column can never
+  // turn into a lookup error for robots that have no secret.
+  const { data: current, error } = await supabase
+    .from('robots')
+    .select('*')
+    .eq('robot_id', robotId)
+    .maybeSingle();
+
+  if (error) return { status: 404, body: notFoundBody };
+  if (!current?.update_secret_hash) return null;
+
+  const presented = req.get('x-robot-secret');
+  if (!presented) {
+    return {
+      status: 401,
+      body: {
+        error: 'Robot update secret required',
+        robot_id: robotId,
+        hint: 'This robot was registered with an update_secret. Send it in the X-Robot-Secret header.'
+      }
+    };
+  }
+
+  const a = Buffer.from(hashSecret(presented), 'hex');
+  const b = Buffer.from(String(current.update_secret_hash), 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return { status: 403, body: { error: 'Invalid robot update secret', robot_id: robotId } };
+  }
+  return null;
+}
+
 // ============================================================
 // 1. POST /api/v1/robots/register (FREE)
 // ============================================================
@@ -24,7 +72,7 @@ export async function robotRegisterHandler(req: Request, res: Response) {
     const {
       name, description, capabilities, price_per_task,
       currency, chain, payment_address,
-      connection, tags, metadata
+      connection, tags, metadata, update_secret
     } = req.body;
 
     if (!name || !capabilities || !Array.isArray(capabilities) || !payment_address || !connection) {
@@ -40,6 +88,14 @@ export async function robotRegisterHandler(req: Request, res: Response) {
           payment_address: '0xYourWallet',
           connection: { type: 'webhook', webhookUrl: 'https://yourserver.com/rtp/task' }
         }
+      });
+    }
+
+    if (update_secret !== undefined &&
+        (typeof update_secret !== 'string' || update_secret.length < 32 || update_secret.length > 256)) {
+      return res.status(400).json({
+        error: 'Invalid update_secret',
+        hint: 'Optional string of 32-256 characters. Store it: it cannot be retrieved later.'
       });
     }
 
@@ -63,7 +119,9 @@ export async function robotRegisterHandler(req: Request, res: Response) {
         connection_config: connConfig,
         tags: tags || [],
         metadata: metadata || {},
-        status: 'online'
+        status: 'online',
+        // Key only present when a secret was given, so a no-secret insert is unchanged
+        ...(update_secret ? { update_secret_hash: hashSecret(update_secret) } : {})
       })
       .select()
       .single();
@@ -497,6 +555,9 @@ export async function robotUpdateHandler(req: Request, res: Response) {
       });
     }
 
+    const denied = await checkRobotSecret(req, robot_id, { error: 'Robot not found or update failed', robot_id });
+    if (denied) return res.status(denied.status).json(denied.body);
+
     const allowed: Record<string, string> = {
       name: 'name',
       description: 'description',
@@ -576,6 +637,9 @@ export async function robotDeregisterHandler(req: Request, res: Response) {
     if (!robot_id) {
       return res.status(400).json({ error: 'Missing required field: robot_id' });
     }
+
+    const denied = await checkRobotSecret(req, robot_id, { error: 'Robot not found', robot_id });
+    if (denied) return res.status(denied.status).json(denied.body);
 
     const { count } = await supabase
       .from('robot_tasks')
