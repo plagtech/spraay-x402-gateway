@@ -24,6 +24,12 @@ export interface SolanaVerifyResult {
   sender: string | null;
   slot: number | null;
   blockTime: number | null;
+  /**
+   * Canonical signature as reported by the chain (tx.transaction.signatures[0]).
+   * Set on success. The single-use guard keys on THIS, never on the raw header
+   * string, so two spellings of one transaction can't be claimed twice.
+   */
+  signature?: string;
   error?: string;
 }
 
@@ -91,19 +97,28 @@ export class SolanaVerifier {
         };
       }
 
-      // 3. Check age
-      if (tx.blockTime) {
-        const ageSeconds = Math.floor(Date.now() / 1000) - tx.blockTime;
-        if (ageSeconds > this.maxTxAgeSeconds) {
-          return {
-            verified: false,
-            amount: null,
-            sender: null,
-            slot: tx.slot ?? null,
-            blockTime: tx.blockTime ?? null,
-            error: `Transaction too old: ${ageSeconds}s (max ${this.maxTxAgeSeconds}s)`,
-          };
-        }
+      // 3. Check age. A transaction with no blockTime cannot be age-checked,
+      //    so it is rejected rather than waved through.
+      if (!tx.blockTime) {
+        return {
+          verified: false,
+          amount: null,
+          sender: null,
+          slot: tx.slot ?? null,
+          blockTime: null,
+          error: "Transaction block time unavailable — cannot verify age",
+        };
+      }
+      const ageSeconds = Math.floor(Date.now() / 1000) - tx.blockTime;
+      if (ageSeconds > this.maxTxAgeSeconds) {
+        return {
+          verified: false,
+          amount: null,
+          sender: null,
+          slot: tx.slot ?? null,
+          blockTime: tx.blockTime ?? null,
+          error: `Transaction too old: ${ageSeconds}s (max ${this.maxTxAgeSeconds}s)`,
+        };
       }
 
       // 4. Find the SPL USDC transfer to our address
@@ -140,6 +155,7 @@ export class SolanaVerifier {
         sender: transfer.sender,
         slot: tx.slot ?? null,
         blockTime: tx.blockTime ?? null,
+        signature: tx.transaction.signatures[0],
       };
     } catch (err: any) {
       return {

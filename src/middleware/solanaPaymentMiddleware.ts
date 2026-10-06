@@ -29,6 +29,46 @@ function getVerifier(): SolanaVerifier {
   return verifier;
 }
 
+// ----- single-use guard --------------------------------------------------- //
+//
+// A Solana transfer signature is public the moment it lands on-chain, and the
+// verifier only proves the transfer happened recently. Without this guard the
+// same signature unlocks every request it is replayed on for maxTxAgeSeconds.
+//
+// The guard is one INSERT into a table whose primary key is the signature. The
+// database decides atomically: the first request wins, every later (or
+// parallel) request gets a unique violation. There is deliberately no
+// "select, then insert" — that would let concurrent replays through.
+//
+// Fail closed: if the store is unreachable or not configured, the payment is
+// NOT accepted. Nothing is consumed in that case, so the client can retry the
+// same signature inside the age window.
+
+const USED_SIGNATURES_TABLE = "solana_used_signatures";
+const PG_UNIQUE_VIOLATION = "23505";
+
+type ClaimResult = "claimed" | "already_used" | "unavailable";
+
+async function claimSignature(row: {
+  signature: string;
+  method: string;
+  path: string;
+  payer_address: string | null;
+  amount_usdc: number | null;
+}): Promise<ClaimResult> {
+  if (!supabase) return "unavailable";
+  try {
+    const { error } = await supabase.from(USED_SIGNATURES_TABLE).insert(row);
+    if (!error) return "claimed";
+    if (error.code === PG_UNIQUE_VIOLATION) return "already_used";
+    console.error("[solana-pay] Signature store error:", error.code, error.message);
+    return "unavailable";
+  } catch (err: any) {
+    console.error("[solana-pay] Signature store unreachable:", err?.message);
+    return "unavailable";
+  }
+}
+
 // ----- middleware --------------------------------------------------------- //
 
 export function solanaPaymentMiddleware(
@@ -68,8 +108,39 @@ export function solanaPaymentMiddleware(
   // Run async verification
   const sv = getVerifier();
   sv.verifyPayment(txSignature, requiredAmount)
-    .then((result) => {
+    .then(async (result) => {
       if (result.verified) {
+        // Single use: claim the signature before the request is treated as paid.
+        const claim = await claimSignature({
+          signature: result.signature || txSignature,
+          method: req.method,
+          path: req.path,
+          payer_address: result.sender,
+          amount_usdc: result.amount,
+        });
+
+        if (claim === "already_used") {
+          console.warn(`[solana-pay] ❌ ${req.method} ${req.path}: signature already used`);
+          res.status(402).json({
+            error: "Solana payment verification failed",
+            detail: "Transaction signature already used — each payment covers one request",
+            chain: "solana",
+            required_amount: endpointPrice.price,
+            receive_address: SOLANA_RECEIVE_ADDRESS,
+            usdc_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          });
+          return;
+        }
+
+        if (claim === "unavailable") {
+          res.status(503).json({
+            error: "Solana payment rail temporarily unavailable",
+            detail: "Payment could not be recorded, so it was not consumed. Retry with the same signature.",
+            chain: "solana",
+          });
+          return;
+        }
+
         // ✅ Solana payment confirmed
         (req as any).solanaPaid = true;
         (req as any).solanaTxSignature = txSignature;
