@@ -2,6 +2,24 @@
 
 Known issues that are deliberately NOT fixed in the change that found them. Pick one up as its own task.
 
+## HIGHEST PRIORITY — frozen `/free/prices` returns 500 when CoinGecko rate-limits a cold cache
+
+- **Found:** 2026-10-08, cron scheduler Phase 3 (step 9 nine-path production check).
+- **Symptom:** `GET /free/prices` answers `500 {"error":"Failed to fetch prices","detail":"CoinGecko returned 429"}`
+  whenever the 60 s price cache is cold and CoinGecko is rate-limiting. Intermittent: 500 at
+  21:38:13Z, 200 with the normal shape at 21:42Z (LP's independent check), 500 again at 21:43:13Z.
+  A merged NVIDIA example calls this path, so callers see a hard failure during every rate-limit window.
+- **Root cause:** `src/routes/free-tier.ts:247` turns any upstream fetch error into a 500
+  (`` throw new Error(`CoinGecko returned ${resp.status}`) `` at `:185`/`:205`). Behavior predates
+  the cron work (`5810712`, 2026-09-17); `free-tier.ts` was untouched by `acd31f7`/`c8de73b`/`61d22e3`.
+  Every gateway restart empties the in-memory cache, so deploys make the cold-cache window more likely.
+- **Fix outline (own ceremonied session — this is a frozen path):** on upstream failure, serve the
+  last good prices with the exact same response shape (status 200, same top-level keys and key
+  paths; at most `cached`/`ttl` values differ). Keep the last good result beyond the 60 s TTL for this
+  purpose. Only answer an error when there has never been a good result since boot. Consider a
+  second price source. Run `node scripts/rtp-ext-proof.mjs`, and do not re-baseline: the fix must keep
+  the shape byte-compatible.
+
 ## MPP: any `Authorization: Payment …` request returns HTTP 500 (all chains)
 
 - **Found:** 2026-09-09, while verifying the Robinhood USDG rail deploy. **Predates that work** — reproduced locally on the untouched tempo-only branch of `src/middleware/mppMiddleware.ts` with the rail key removed.
@@ -225,3 +243,78 @@ out of scope on purpose. Live model list used as evidence: `GET /bittensor/v1/mo
   `upstreamFailureStatus()`. `compute-router` could throw a typed error like `UpstreamHttpError`
   in `src/routes/bittensor-dropin.ts`. None of these routes are frozen, but run the nine-path
   proof anyway (shared middleware chain).
+
+## Cron scheduler v1 — left over from the `feat/cron-scheduler` session (2026-10-08)
+
+Shipped: `acd31f7` (scheduler v1, trigger-only signed webhooks; `cron/create` $0.01 → $0.10 for up to
+100 runs), `c8de73b` (SSRF hardening for webhook delivery and the guard), `61d22e3` (redeploy for
+llms). Migration `docs/sql/2026-10-08-cron-scheduler.sql` run by LP the same day.
+`CRON_WORKER_ENABLED=true` in Railway since 20:54Z (deploy `672156a8`).
+
+### Phase 3 live smoke test — record
+
+- **When / who paid:** 2026-10-08 21:21–21:38Z, Base USDC from `0x867c6c5487Ea8504010B776a7a1475751F1b40a1`
+  to `0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8`. Receiver: webhook.site.
+- **Jobs:** `cron_1791494541193_bp7yn6` (`webhook.trigger`, `26 * * * *`, `maxRuns` 1) fired once at
+  21:26:28Z, delivered 21:26:29Z, signature verified against the create-time secret, delivery
+  `dispatched`, job `completed`. `cron_1791494890121_5bjp1q` (`35 * * * *`, `maxRuns` 2) cancelled at
+  21:28:23Z and never delivered.
+- **Settlement transactions (Base):**
+  - create job 1, $0.10: `0x491acc0eb02cc43f833b88a0830acca8fdda239271c0fc895e617d83bd75c708`
+  - list, $0.002: `0x49ee76e861abe17ea8374066d0c796aea8d26311f2e471447be035c3748158b5`
+  - create job 2, $0.10: `0xd9d246dcf81cd7e55cf5ac63976828c9970fdb2ab89f555a5d13bb1b120990cd`
+  - cancel job 2, $0.002: `0xe12427098b06c1925d1eb6d964321014cf7cd90770d9482663e52e0412319f93`
+  - list, $0.002: `0xb32dc5b4dd86dcb3a2ffe5822e40ccc5c05433ad0b9007c1fa4620fb228bfb32`
+  - A paid create with an invalid schedule (`*/5 * * * *`) was rejected 400 before the payment gate:
+    no settlement, balance unchanged.
+- **Total spend:** $0.206 (payer balance 1.303106 → 1.097106 USDC, checked after every call).
+
+### `scripts/rtp-proof/baseline-prod.json` is stale — refresh it from production
+
+- `baseline-prod.json` was captured 2026-09-11 (`600d1c3`). Three LP-approved frozen-path changes
+  since then re-baselined only `baseline.json`: `f9580e1` (peaq: `.chains.peaq.*` on
+  `/free/chain-status` and `/api/v1/tokens`), `d8d2744` (`.estimate.supported(Chains)` on
+  `/free/estimate-batch`), `31f6ebc` (escrow 402 `_spraay.example_*`: 6 keys removed, 7 added).
+  Live production differs from it on exactly those four paths; the cron deploy was verified against
+  a pre-deploy production capture instead.
+- **Fix:** its own task. Capture the nine paths from production (unpaid only), regenerate
+  `baseline-prod.json`, confirm the diff is exactly those four paths, and commit it alone.
+
+### Cron follow-ups
+
+1. **`spraay-docs`:** sync `llms*.txt` and update the cron cards for the $0.10 price, `callback_url`,
+   the three actions, UTC, the hourly minimum and the signed-webhook flow.
+2. **ClawHub skills:** check whether any published skill documents cron, and update it.
+3. **Version two:** the gateway executes the payout itself through Agent Wallet session keys, with
+   per-run billing.
+4. ~~The webhook worker does not run `validateOutboundURL` at delivery time.~~ **Done in `c8de73b`:**
+   `deliverEvent` re-checks the destination before every attempt and never follows redirects.
+5. **Legacy stub rows:** 9 rows from the old stub (7 `batch.execute`, 2 `webhook.trigger`, created
+   2026-05-20 → 2026-07-26) remain `active` with no owner and no `callback_url`. They never fire and
+   no one can list or cancel them. Decide whether to mark them cancelled.
+6. **`POST /api/v1/webhook/test`** charges $0.005 and returns `delivered: true` without sending
+   anything (`src/routes/webhook.ts:47-70`). Same stub pattern cron had.
+7. **`checkWebhookCooldown` / `recordWebhookDelivery`** in `loop-safety.ts:318-338` are never called.
+8. **Repeated delivery failure still uses up runs.** Consider auto-suspending a job after N
+   consecutive `exhausted` deliveries.
+9. **x402 on Solana through the facilitator (exact-SVM) cannot create jobs:** the payer is not in
+   the header. Decode it from the transaction if there is demand. (Solana pay-first `X-Solana-Tx`
+   works.)
+10. **`cron/list` shows a future `nextRun` for completed and cancelled jobs.** The claim advances
+    `next_run` even on the final run, and cancel leaves it as is. Return `nextRun: null` for any
+    non-active job (display only; the worker already ignores non-active rows).
+
+### SSRF guard and webhook follow-ups found during `c8de73b`
+
+1. **`/free/x402-check` follows redirects** (`fetch(..., { redirect: "follow" })` in
+   `src/routes/free-tier.ts`), so a public URL can redirect the probe to an internal address after
+   the guard has passed it. `free-tier.ts` was out of scope; fix with `redirect: "manual"`, or
+   re-validate each hop.
+2. **The carrier-grade NAT pattern over-blocks:** `/^100\.(6[4-9]|[7-9]\d|1[0-2]\d)\./` blocks
+   100.64–100.129 instead of 100.64–100.127, so 100.128.0.0/16 and 100.129.0.0/16 (public) are
+   refused. Safe-side; tighten to `1[01]\d|12[0-7]`.
+3. **The guard checks only the first resolved address, and `fetch` resolves again** (TOCTOU / DNS
+   rebinding, multi-record hosts). A robust fix resolves all addresses, rejects if any is blocked,
+   and connects to the vetted address (custom `lookup`/dispatcher).
+4. **`webhookMiddleware` still accepts `http://localhost` / `127.0.0.1` callback URLs** for local
+   development, but delivery now always refuses them. Align the two, or document it.
