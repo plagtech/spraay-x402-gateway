@@ -11,6 +11,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { generateWebhookSecret, signPayload } from './signing';
+import { validateOutboundURL } from '../lib/ssrf-guard.js';
 import {
   WebhookEvent,
   WebhookEventType,
@@ -231,20 +232,36 @@ export class WebhookService {
     };
 
     try {
+      // SSRF guard at delivery time: the destination may have changed (or
+      // been re-pointed by DNS) since the callback_url was accepted.
+      const ssrf = await validateOutboundURL(event.callback_url);
+      if (!ssrf.safe) {
+        await this.markFailed(event, `callback_url blocked: ${ssrf.error ?? 'unsafe destination'}`);
+        return false;
+      }
+
       const controller = new AbortController();
       const timeout = setTimeout(
         () => controller.abort(),
         this.config.deliveryTimeoutMs
       );
 
+      // Never follow redirects: a 3xx could point at an internal address
+      // the guard above never saw.
       const response = await fetch(event.callback_url, {
         method: 'POST',
         headers,
         body,
         signal: controller.signal,
+        redirect: 'manual',
       });
 
       clearTimeout(timeout);
+
+      if (response.status >= 300 && response.status < 400) {
+        await this.markFailed(event, `HTTP ${response.status}: redirect not followed`);
+        return false;
+      }
 
       if (response.ok) {
         // SUCCESS — mark as dispatched

@@ -215,15 +215,6 @@ async function main() {
   const gw = await new Promise<http.Server>(ok => { const s = app.listen(0, "127.0.0.1", () => ok(s)); });
   GW = `http://127.0.0.1:${(gw.address() as AddressInfo).port}`;
 
-  // Local receiver for the end-to-end signature check.
-  const received: Array<{ headers: http.IncomingHttpHeaders; body: string }> = [];
-  const receiver = http.createServer((req, res) => {
-    let b = ""; req.on("data", c => (b += c));
-    req.on("end", () => { received.push({ headers: req.headers, body: b }); res.writeHead(200); res.end("ok"); });
-  });
-  await new Promise<void>(ok => receiver.listen(0, "127.0.0.1", ok));
-  const RECEIVER = `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/hook`;
-
   try {
     out("── schedule rules");
     const NOW = new Date("2026-10-08T12:00:00Z");
@@ -499,14 +490,25 @@ async function main() {
       await runCronTick(deps, fireAt);
       const [ev] = eventsFor(c.body.id);
       assert.ok(ev, "no event queued");
-      // Deliver through the real WebhookService, redirected to the local receiver.
-      const ok = await webhookService.deliverEvent({ ...ev, callback_url: RECEIVER });
+      // Deliver through the real WebhookService (including its delivery-time
+      // SSRF guard) with fetch captured, so nothing leaves the machine.
+      const realFetch = globalThis.fetch;
+      let got: { url: string; headers: Record<string, string>; body: string } | null = null;
+      globalThis.fetch = (async (url: any, init: any) => {
+        if (String(url).startsWith(process.env.SUPABASE_URL!)) return realFetch(url, init); // the mock DB
+        got = { url: String(url), headers: init.headers, body: init.body };
+        return new Response("ok", { status: 200 });
+      }) as any;
+      let ok: boolean;
+      try { ok = await webhookService.deliverEvent(ev); } finally { globalThis.fetch = realFetch; }
       assert.strictEqual(ok, true);
-      const got = received.at(-1)!;
-      assert.strictEqual(got.headers["x-spraay-event"], "cron.triggered");
-      assert.ok(verifySignature(secret, String(got.headers["x-spraay-timestamp"]), got.body, String(got.headers["x-spraay-signature"])));
-      assert.ok(!verifySignature("whsec_wrong", String(got.headers["x-spraay-timestamp"]), got.body, String(got.headers["x-spraay-signature"])));
-      assert.strictEqual(JSON.parse(got.body).data.job_id, c.body.id);
+      assert.ok(got, "fetch was not called");
+      const g = got as unknown as { url: string; headers: Record<string, string>; body: string };
+      assert.strictEqual(g.url, SAFE_URL);
+      assert.strictEqual(g.headers["X-Spraay-Event"], "cron.triggered");
+      assert.ok(verifySignature(secret, g.headers["X-Spraay-Timestamp"], g.body, g.headers["X-Spraay-Signature"]));
+      assert.ok(!verifySignature("whsec_wrong", g.headers["X-Spraay-Timestamp"], g.body, g.headers["X-Spraay-Signature"]));
+      assert.strictEqual(JSON.parse(g.body).data.job_id, c.body.id);
       assert.strictEqual(events.get(ev.id)!.status, "dispatched");
     });
     await test("job completes at maxRuns and never fires again", async () => {
@@ -670,7 +672,6 @@ async function main() {
     });
   } finally {
     gw.close();
-    receiver.close();
     db.close();
   }
 

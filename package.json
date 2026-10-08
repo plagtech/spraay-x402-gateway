@@ -15,7 +15,8 @@
     "test:usdg": "ts-node --transpile-only test/robinhood-usdg.test.ts",
     "test:inference": "ts-node --project test/tsconfig.json test/inference-upstream.test.ts",
     "test:solana": "ts-node --project test/tsconfig.json test/solana-replay.test.ts",
-    "test:cron": "ts-node --project test/tsconfig.json test/cron-scheduler.test.ts"
+    "test:cron": "ts-node --project test/tsconfig.json test/cron-scheduler.test.ts",
+    "test:webhook-ssrf": "ts-node --project test/tsconfig.json test/webhook-ssrf.test.ts"
   },
   "keywords": [
     "x402",
