@@ -95,7 +95,7 @@ export const ENDPOINT_PRICES: Record<string, EndpointPrice> = {
   "POST /api/v1/storage/pin":              { price: "0.01",  category: "infrastructure" },
   "GET /api/v1/storage/get":               { price: "0.005", category: "infrastructure" },
   "GET /api/v1/storage/status":            { price: "0.002", category: "infrastructure" },
-  "POST /api/v1/cron/create":              { price: "0.01",  category: "infrastructure" },
+  "POST /api/v1/cron/create":              { price: "0.10",  category: "infrastructure" },
   "GET /api/v1/cron/list":                 { price: "0.002", category: "infrastructure" },
   "POST /api/v1/cron/cancel":              { price: "0.002", category: "infrastructure" },
   "POST /api/v1/logs/ingest":              { price: "0.002", category: "infrastructure" },

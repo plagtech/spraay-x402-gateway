@@ -275,7 +275,7 @@ Multi-dimensional wallet/agent trust score — financial, reliability, trust, an
 | `/api/v1/storage/pin` | POST | $0.01 |
 | `/api/v1/storage/get` | GET | $0.005 |
 | `/api/v1/storage/status` | GET | $0.002 |
-| `/api/v1/cron/create` | POST | $0.01 |
+| `/api/v1/cron/create` | POST | $0.10 |
 | `/api/v1/cron/list` | GET | $0.002 |
 | `/api/v1/cron/cancel` | POST | $0.002 |
 | `/api/v1/logs/ingest` | POST | $0.002 |

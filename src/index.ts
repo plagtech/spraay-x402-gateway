@@ -96,6 +96,11 @@ import { wrapWithSolanaBypass } from "./middleware/solanaBypass.js";
 import { robotTaskPrecheck } from "./middleware/robotTaskPrecheck.js";
 // Rejects invalid escrow/create payloads before the payment gate settles them
 import { escrowCreatePrecheck } from "./middleware/escrowCreatePrecheck.js";
+// Rejects cron/create before the payment gate when it cannot succeed (scheduler off, no owner, bad body)
+import { cronCreatePrecheck } from "./middleware/cronCreatePrecheck.js";
+// Cron scheduler v1 worker (trigger-only). Off unless CRON_WORKER_ENABLED=true.
+import { startCronWorker } from "./cron/worker.js";
+import { cronWorkerEnabled } from "./cron/config.js";
 // Gateway version — read from package.json, never hand-written here
 import { GATEWAY_VERSION } from "./lib/version.js";
 import { solanaDiscoveryHandler } from "./routes/solana-discovery.js";
@@ -635,19 +640,19 @@ const paidRoutes = {
         extensions: { ...declareDiscoveryExtension({ input: { id: "pin_123" }, inputSchema: { properties: { id: { type: "string" } }, required: ["id"] }, output: { example: { status: "pinned" }, schema: { properties: { status: { type: "string" } } } } }) },
       },
       "POST /api/v1/cron/create": {
-        accepts: [{ scheme: "exact", price: "$0.01", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.01", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Create scheduled job for recurring payments, DCA, reminders.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { action: "batch.execute", schedule: "0 9 * * 1", payload: { token: "USDC", recipients: ["0x..."] } }, inputSchema: { properties: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" }, maxRuns: { type: "number" } }, required: ["action", "schedule", "payload"] }, bodyType: "json", output: { example: { id: "cron_123", status: "active" }, schema: { properties: { id: { type: "string" }, status: { type: "string" } } } } }) },
+        accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.10", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Schedule a recurring trigger: 5-field cron in UTC, at least 1 hour between runs, 100 runs included. On each run the gateway POSTs a signed cron.triggered webhook to your https callback_url; your agent then calls batch/execute or payroll/execute itself and pays for it as usual. Actions: batch.execute, payroll.execute, webhook.trigger.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { action: "batch.execute", schedule: "0 9 * * 1", payload: { token: "USDC", recipients: ["0x..."], amounts: ["1000000"] }, callback_url: "https://agent.example.com/spraay/cron", maxRuns: 52 }, inputSchema: { properties: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" }, callback_url: { type: "string" }, maxRuns: { type: "number" }, metadata: { type: "object" } }, required: ["action", "schedule", "payload", "callback_url"] }, bodyType: "json", output: { example: { id: "cron_123", status: "active", nextRun: "2026-10-12T09:00:00.000Z", timezone: "UTC", maxRuns: 52, callback: { url: "https://agent.example.com/spraay/cron", event: "cron.triggered", webhook_secret: "whsec_...", signature_header: "X-Spraay-Signature", timestamp_header: "X-Spraay-Timestamp" } }, schema: { properties: { id: { type: "string" }, status: { type: "string" }, nextRun: { type: "string" }, callback: { type: "object" } } } } }) },
       },
       "GET /api/v1/cron/list": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "List scheduled jobs.", mimeType: "application/json",
+        description: "List your own scheduled jobs (owned by the paying wallet or API key): status, next run (UTC), runs used and remaining. Optional ?status= and ?action= filters.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ output: { example: { jobs: [], total: 0 }, schema: { properties: { jobs: { type: "array" } } } } }) },
       },
       "POST /api/v1/cron/cancel": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
-        description: "Cancel a scheduled job.", mimeType: "application/json",
-        extensions: { ...declareDiscoveryExtension({ input: { jobId: "cron_123" }, inputSchema: { properties: { jobId: { type: "string" } }, required: ["jobId"] }, bodyType: "json", output: { example: { status: "cancelled" }, schema: { properties: { status: { type: "string" } } } } }) },
+        description: "Cancel one of your own scheduled jobs by jobId so it no longer fires.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { jobId: "cron_123" }, inputSchema: { properties: { jobId: { type: "string" } }, required: ["jobId"] }, bodyType: "json", output: { example: { jobId: "cron_123", status: "cancelled", runCount: 3 }, schema: { properties: { jobId: { type: "string" }, status: { type: "string" } } } } }) },
       },
       "POST /api/v1/logs/ingest": {
         accepts: [{ scheme: "exact", price: "$0.002", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.002", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -1271,6 +1276,7 @@ const TOTAL_COUNT = PAID_COUNT + FREE_COUNT;
 // through untouched, so the unpaid 402 challenge is unchanged.
 app.post("/api/v1/robots/task", robotTaskPrecheck);
 app.post("/api/v1/escrow/create", escrowCreatePrecheck);
+app.post("/api/v1/cron/create", cronCreatePrecheck);
 
 // Normalises inbound x402 v2 PAYMENT-SIGNATURE payloads so a spec-compliant
 // echo of our advertised accepts[] matches. Must run immediately before
@@ -1353,9 +1359,9 @@ const MANIFEST_META = [
       { resource: `${BASE_URL}/api/v1/storage/pin`, method: "POST", price: "$0.01", category: "infrastructure", description: "Pin content to IPFS or Arweave for permanent decentralized storage. Returns a CID for retrieval.", searchTerms: ["IPFS", "Arweave", "pin file", "decentralized storage", "store data permanently", "upload to IPFS", "content addressing", "pin content"] },
       { resource: `${BASE_URL}/api/v1/storage/get`, method: "GET", price: "$0.005", category: "infrastructure", description: "Retrieve content from IPFS or Arweave by CID. Pairs with storage/pin.", searchTerms: ["IPFS get", "retrieve from IPFS", "fetch by CID", "read decentralized storage", "download pinned content"] },
       { resource: `${BASE_URL}/api/v1/storage/status`, method: "GET", price: "$0.002", category: "infrastructure", description: "Check the pin status of content on IPFS or Arweave (pinned, pending, or failed).", searchTerms: ["pin status", "IPFS status", "storage status", "check pin", "pinning state"] },
-      { resource: `${BASE_URL}/api/v1/cron/create`, method: "POST", price: "$0.01", category: "infrastructure", description: "Schedule a recurring or one-time job (payments, API calls, on-chain actions) with cron syntax. For automation and recurring payouts.", searchTerms: ["cron", "schedule job", "recurring task", "automate", "scheduled payment", "timer", "recurring payout", "task scheduler"] },
-      { resource: `${BASE_URL}/api/v1/cron/list`, method: "GET", price: "$0.002", category: "infrastructure", description: "List scheduled cron jobs with their schedules, actions, and next run times.", searchTerms: ["list cron jobs", "scheduled tasks", "my jobs", "view schedules", "recurring jobs"] },
-      { resource: `${BASE_URL}/api/v1/cron/cancel`, method: "POST", price: "$0.002", category: "infrastructure", description: "Cancel a scheduled cron job so it no longer runs.", searchTerms: ["cancel cron", "stop scheduled job", "remove job", "delete schedule", "unschedule"] },
+      { resource: `${BASE_URL}/api/v1/cron/create`, method: "POST", price: "$0.10", category: "infrastructure", description: "Schedule a recurring trigger with 5-field cron (UTC, hourly minimum, 100 runs included). Each run sends a signed cron.triggered webhook to your callback_url so your agent can run batch/execute or payroll/execute. For recurring payouts and reminders.", searchTerms: ["cron", "schedule job", "recurring task", "automate", "scheduled payment", "timer", "recurring payout", "task scheduler"] },
+      { resource: `${BASE_URL}/api/v1/cron/list`, method: "GET", price: "$0.002", category: "infrastructure", description: "List your own scheduled cron jobs with their schedules, actions, next run times (UTC) and runs remaining.", searchTerms: ["list cron jobs", "scheduled tasks", "my jobs", "view schedules", "recurring jobs"] },
+      { resource: `${BASE_URL}/api/v1/cron/cancel`, method: "POST", price: "$0.002", category: "infrastructure", description: "Cancel one of your own scheduled cron jobs so it no longer runs.", searchTerms: ["cancel cron", "stop scheduled job", "remove job", "delete schedule", "unschedule"] },
       { resource: `${BASE_URL}/api/v1/logs/ingest`, method: "POST", price: "$0.002", category: "infrastructure", description: "Ingest structured log entries for agent observability and audit trails. Batch up to many entries per call.", searchTerms: ["ingest logs", "log events", "structured logging", "observability", "send logs", "agent logging", "telemetry"] },
       { resource: `${BASE_URL}/api/v1/logs/query`, method: "GET", price: "$0.005", category: "infrastructure", description: "Query ingested structured logs by service, level, and time range. For debugging and monitoring agent activity.", searchTerms: ["query logs", "search logs", "log search", "read logs", "debug logs", "monitoring", "log analytics"] },
       // Identity & Access
@@ -1672,7 +1678,7 @@ app.get("/.well-known/mcp/server-card.json", (_req, res) => {
       { name: "spraay_storage_pin", description: "Pin to IPFS/Arweave", price: "$0.01" },
       { name: "spraay_storage_get", description: "Get pinned content", price: "$0.005" },
       { name: "spraay_storage_status", description: "Pin status", price: "$0.002" },
-      { name: "spraay_cron_create", description: "Create scheduled job", price: "$0.01" },
+      { name: "spraay_cron_create", description: "Create scheduled trigger (signed webhook)", price: "$0.10" },
       { name: "spraay_cron_list", description: "List jobs", price: "$0.002" },
       { name: "spraay_cron_cancel", description: "Cancel job", price: "$0.002" },
       { name: "spraay_logs_ingest", description: "Ingest logs", price: "$0.002" },
@@ -1816,7 +1822,7 @@ app.get("/", (_req, res) => {
         "POST /api/v1/storage/pin": "$0.01 - Pin to IPFS/Arweave",
         "GET /api/v1/storage/get": "$0.005 - Get pinned content",
         "GET /api/v1/storage/status": "$0.002 - Pin status",
-        "POST /api/v1/cron/create": "$0.01 - Create scheduled job",
+        "POST /api/v1/cron/create": "$0.10 - Create scheduled trigger (signed webhook, 100 runs)",
         "GET /api/v1/cron/list": "$0.002 - List jobs",
         "POST /api/v1/cron/cancel": "$0.002 - Cancel job",
         "POST /api/v1/logs/ingest": "$0.002 - Ingest logs",
@@ -2377,15 +2383,15 @@ app.get("/openapi.json", (_req, res) => {
     { method: "get", path: "/api/v1/storage/status", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Check pin status",
       queryParams: [{ name: "id", type: "string", required: true }],
       outputProps: { status: { type: "string" } } },
-    { method: "post", path: "/api/v1/cron/create", price: "$0.01", priceNum: "0.010000", tag: "infrastructure", desc: "Create scheduled job",
-      inputProps: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" } }, required: ["action", "schedule", "payload"],
-      outputProps: { id: { type: "string" }, status: { type: "string" } } },
-    { method: "get", path: "/api/v1/cron/list", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "List scheduled jobs",
-      queryParams: [],
+    { method: "post", path: "/api/v1/cron/create", price: "$0.10", priceNum: "0.100000", tag: "infrastructure", desc: "Create scheduled trigger: 5-field cron (UTC, hourly minimum, 100 runs included); each run POSTs a signed cron.triggered webhook to callback_url. Actions: batch.execute, payroll.execute, webhook.trigger",
+      inputProps: { action: { type: "string" }, schedule: { type: "string" }, payload: { type: "object" }, callback_url: { type: "string" }, maxRuns: { type: "number" }, metadata: { type: "object" } }, required: ["action", "schedule", "payload", "callback_url"],
+      outputProps: { id: { type: "string" }, status: { type: "string" }, nextRun: { type: "string" }, timezone: { type: "string" }, callback: { type: "object" } } },
+    { method: "get", path: "/api/v1/cron/list", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "List your own scheduled jobs",
+      queryParams: [{ name: "status", type: "string", required: false }, { name: "action", type: "string", required: false }],
       outputProps: { jobs: { type: "array" }, total: { type: "number" } } },
-    { method: "post", path: "/api/v1/cron/cancel", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Cancel a scheduled job",
+    { method: "post", path: "/api/v1/cron/cancel", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Cancel one of your own scheduled jobs",
       inputProps: { jobId: { type: "string" } }, required: ["jobId"],
-      outputProps: { status: { type: "string" } } },
+      outputProps: { jobId: { type: "string" }, status: { type: "string" }, runCount: { type: "number" } } },
     { method: "post", path: "/api/v1/logs/ingest", price: "$0.002", priceNum: "0.002000", tag: "infrastructure", desc: "Ingest structured logs",
       inputProps: { entries: { type: "array" } }, required: ["entries"],
       outputProps: { ingested: { type: "number" }, ids: { type: "array" } } },
@@ -3035,6 +3041,9 @@ app.listen(PORT, async () => {
   void resolveBittensorModel(listBittensorChatModels);
 const webhookWorker = startWebhookWorker(supabase!, { pollIntervalMs: 5_000, batchSize: 25 });
   process.on("SIGTERM", () => webhookWorker.stop());
+  const cronWorker = cronWorkerEnabled() ? startCronWorker({ webhookService }) : null;
+  if (cronWorker) process.on("SIGTERM", () => cronWorker.stop());
+  console.log(`⏰ Cron scheduler worker: ${cronWorker ? "ACTIVE" : "inactive (CRON_WORKER_ENABLED is not \"true\")"}`);
   console.log(`\n💧 Spraay x402 Gateway v${GATEWAY_VERSION} running on port ${PORT}`);
   console.log(`📡 Network: ${NETWORK} ${IS_MAINNET ? "(MAINNET)" : "(TESTNET)"}`);
   console.log(`💰 Payments to: ${PAY_TO}`);

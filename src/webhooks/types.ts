@@ -22,7 +22,8 @@ export type WebhookEventType =
   | 'escrow.expired'
   | 'session.timeout'
   | 'health.degraded'
-  | 'health.recovered';
+  | 'health.recovered'
+  | 'cron.triggered';
 
 // ---------------------------------------------------------------------------
 // Database row shape (matches Supabase table)

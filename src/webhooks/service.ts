@@ -140,6 +140,45 @@ export class WebhookService {
     return data.id;
   }
 
+  /**
+   * Queue an event signed with a caller-supplied secret, for producers that
+   * own a long-lived secret (e.g. a cron job, whose secret is handed to the
+   * customer once at creation and must sign every firing).
+   * Same insert as queueEvent otherwise. Returns the new event id.
+   */
+  async queueSignedEvent(params: {
+    eventType: WebhookEventType;
+    callbackUrl: string;
+    hmacSecret: string;
+    payload: Record<string, unknown>;
+    sourceEndpoint?: string;
+    requestId?: string;
+    maxAttempts?: number;
+  }): Promise<string> {
+    const { data, error } = await this.supabase
+      .from('webhook_events')
+      .insert({
+        event_type: params.eventType,
+        callback_url: params.callbackUrl,
+        payload: params.payload,
+        hmac_secret: params.hmacSecret,
+        source_endpoint: params.sourceEndpoint ?? null,
+        request_id: params.requestId ?? null,
+        batch_id: null,
+        max_attempts: params.maxAttempts ?? 3,
+        status: 'pending',
+        next_retry_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to queue signed webhook: ${error.message}`);
+    }
+
+    return data.id;
+  }
+
   // -------------------------------------------------------------------------
   // 2. DISPATCH — called by the background worker
   // -------------------------------------------------------------------------

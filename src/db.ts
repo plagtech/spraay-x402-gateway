@@ -234,37 +234,124 @@ export const webhookDb = {
 // CRON JOBS
 // ============================================
 
+// Row shape of public.cron_jobs (see docs/sql/2026-10-08-cron-scheduler.sql).
+// Rows created by the pre-scheduler stub have owner/callback_url/hmac_secret
+// NULL; fetchDue's callback_url filter keeps them from ever firing.
+export interface CronJobRow {
+  id: string;
+  action: string;
+  schedule: string;
+  payload: Record<string, unknown>;
+  status: string;
+  next_run: string | null;
+  last_run: string | null;
+  run_count: number;
+  max_runs: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  owner: string | null;
+  callback_url: string | null;
+  hmac_secret: string | null;
+  claim_seq: number;
+  missed_count: number;
+  last_error: string | null;
+  cancelled_at: string | null;
+}
+
 export const cronDb = {
-  async create(job: any) {
+  async create(job: {
+    id: string; action: string; schedule: string; payload: Record<string, unknown>;
+    nextRun: string; maxRuns: number; metadata: Record<string, unknown>;
+    owner: string; callbackUrl: string; hmacSecret: string; createdAt: string;
+  }): Promise<CronJobRow> {
     return insert("cron_jobs", {
       id: job.id, action: job.action, schedule: job.schedule,
-      payload: job.payload, status: job.status,
-      next_run: job.nextRun, run_count: job.runCount,
-      max_runs: job.maxRuns || null, metadata: job.metadata,
+      payload: job.payload, status: "active",
+      next_run: job.nextRun, run_count: 0,
+      max_runs: job.maxRuns, metadata: job.metadata,
       created_at: job.createdAt,
-    });
+      owner: job.owner, callback_url: job.callbackUrl, hmac_secret: job.hmacSecret,
+      claim_seq: 0, missed_count: 0,
+    }) as Promise<CronJobRow>;
   },
 
   async get(id: string) {
-    return getById<any>("cron_jobs", id);
+    return getById<CronJobRow>("cron_jobs", id);
   },
 
-  async update(id: string, updates: Record<string, any>) {
-    const mapped: Record<string, any> = {};
-    if ("status" in updates) mapped.status = updates.status;
-    if ("lastRun" in updates) mapped.last_run = updates.lastRun;
-    if ("nextRun" in updates) mapped.next_run = updates.nextRun;
-    if ("runCount" in updates) mapped.run_count = updates.runCount;
-    await update("cron_jobs", id, mapped);
-  },
-
-  async list(statusFilter?: string | null, actionFilter?: string | null) {
-    let query = supabase.from("cron_jobs").select("*");
+  async listByOwner(owner: string, statusFilter?: string | null, actionFilter?: string | null): Promise<CronJobRow[]> {
+    let query = supabase.from("cron_jobs").select("*").eq("owner", owner);
     if (statusFilter) query = query.eq("status", statusFilter);
     if (actionFilter) query = query.eq("action", actionFilter);
-    const { data, error } = await query;
+    const { data, error } = await query.order("created_at", { ascending: false });
     if (error) throw new Error(`DB list cron_jobs: ${error.message}`);
-    return data || [];
+    return (data || []) as CronJobRow[];
+  },
+
+  async countActiveByOwner(owner: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("cron_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("owner", owner)
+      .eq("status", "active");
+    if (error) throw new Error(`DB count cron_jobs: ${error.message}`);
+    return count ?? 0;
+  },
+
+  /** Conditional: only an active job owned by `owner`. Null if none matched. */
+  async cancel(id: string, owner: string): Promise<CronJobRow | null> {
+    const { data, error } = await supabase
+      .from("cron_jobs")
+      .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("owner", owner)
+      .eq("status", "active")
+      .select();
+    if (error) throw new Error(`DB cancel cron_jobs: ${error.message}`);
+    return data && data.length === 1 ? (data[0] as CronJobRow) : null;
+  },
+
+  async fetchDue(nowIso: string, limit: number): Promise<CronJobRow[]> {
+    const { data, error } = await supabase
+      .from("cron_jobs")
+      .select("*")
+      .eq("status", "active")
+      .not("callback_url", "is", null)
+      .lte("next_run", nowIso)
+      .order("next_run", { ascending: true })
+      .limit(limit);
+    if (error) throw new Error(`DB fetchDue cron_jobs: ${error.message}`);
+    return (data || []) as CronJobRow[];
+  },
+
+  /**
+   * Optimistic claim: one conditional update on (id, status=active,
+   * claim_seq). Returns the updated row if this caller won, null if another
+   * worker or a cancel got there first. `patch` must bump claim_seq.
+   */
+  async claim(job: CronJobRow, patch: Record<string, any>): Promise<CronJobRow | null> {
+    const { data, error } = await supabase
+      .from("cron_jobs")
+      .update(patch)
+      .eq("id", job.id)
+      .eq("status", "active")
+      .eq("claim_seq", job.claim_seq)
+      .select();
+    if (error) throw new Error(`DB claim cron_jobs: ${error.message}`);
+    return data && data.length === 1 ? (data[0] as CronJobRow) : null;
+  },
+
+  async recordRun(row: {
+    job_id: string; claim_seq: number; run_number: number | null; scheduled_for: string;
+    fired_at: string; status: "queued" | "missed" | "queue_failed" | "blocked";
+    webhook_event_id?: string | null; error?: string | null;
+  }): Promise<void> {
+    const { error } = await supabase.from("cron_runs").insert({
+      ...row,
+      webhook_event_id: row.webhook_event_id ?? null,
+      error: row.error ? row.error.slice(0, 2000) : null,
+    });
+    if (error) throw new Error(`DB insert cron_runs: ${error.message}`);
   },
 };
 

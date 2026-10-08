@@ -597,29 +597,29 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
     ],
   },
   "POST /api/v1/cron/create": {
-    description: "Schedule a recurring gateway call. Runs on your schedule and delivers results via webhook.",
-    example_request: { schedule: "0 9 * * *", endpoint: "/api/v1/oracle/prices", params: { symbol: "ETH" } },
-    example_response: { cronId: "cron_abc", nextRun: "2026-04-18T09:00:00Z" },
+    description: "Schedule a recurring trigger (5-field cron, UTC, at least 1 hour apart, 100 runs included). Each run POSTs a signed cron.triggered webhook to your https callback_url; your agent then calls batch/execute or payroll/execute itself. Actions: batch.execute, payroll.execute, webhook.trigger. Store callback.webhook_secret from the response: it is shown once.",
+    example_request: { action: "batch.execute", schedule: "0 9 * * 1", payload: { token: "USDC", recipients: ["0x..."], amounts: ["1000000"] }, callback_url: "https://agent.example.com/spraay/cron", maxRuns: 52 },
+    example_response: { id: "cron_abc", status: "active", nextRun: "2026-10-12T09:00:00.000Z", timezone: "UTC", maxRuns: 52, callback: { url: "https://agent.example.com/spraay/cron", event: "cron.triggered", webhook_secret: "whsec_..." } },
     related_endpoints: [
       { method: "GET", path: "/api/v1/cron/list", price: "$0.002", why: "View your scheduled jobs" },
-      { method: "POST", path: "/api/v1/webhook/register", price: "$0.01", why: "Register webhook to receive cron results" },
+      { method: "POST", path: "/api/v1/batch/execute", price: "$0.02", why: "What your agent calls when a batch.execute job fires" },
     ],
   },
   "GET /api/v1/cron/list": {
-    description: "List scheduled cron jobs for a wallet.",
-    example_response: { crons: [{ id: "cron_abc", schedule: "0 9 * * *", nextRun: "..." }] },
+    description: "List your own scheduled cron jobs (owned by the paying wallet or API key).",
+    example_response: { jobs: [{ id: "cron_abc", action: "batch.execute", schedule: "0 9 * * 1", status: "active", nextRun: "...", runCount: 3, maxRuns: 52, runsRemaining: 49 }], total: 1 },
     related_endpoints: [
-      { method: "POST", path: "/api/v1/cron/create", price: "$0.01", why: "Schedule a new job" },
+      { method: "POST", path: "/api/v1/cron/create", price: "$0.10", why: "Schedule a new job" },
       { method: "POST", path: "/api/v1/cron/cancel", price: "$0.002", why: "Cancel an existing job" },
     ],
   },
   "POST /api/v1/cron/cancel": {
-    description: "Cancel a scheduled cron job by ID.",
-    example_request: { cronId: "cron_abc" },
-    example_response: { cronId: "cron_abc", status: "cancelled" },
+    description: "Cancel one of your own scheduled cron jobs by jobId.",
+    example_request: { jobId: "cron_abc" },
+    example_response: { jobId: "cron_abc", status: "cancelled", runCount: 3 },
     related_endpoints: [
       { method: "GET", path: "/api/v1/cron/list", price: "$0.002", why: "View remaining scheduled jobs" },
-      { method: "POST", path: "/api/v1/cron/create", price: "$0.01", why: "Schedule a replacement job" },
+      { method: "POST", path: "/api/v1/cron/create", price: "$0.10", why: "Schedule a replacement job" },
     ],
   },
   "POST /api/v1/logs/ingest": {
