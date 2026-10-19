@@ -1278,6 +1278,38 @@ app.post("/api/v1/robots/task", robotTaskPrecheck);
 app.post("/api/v1/escrow/create", escrowCreatePrecheck);
 app.post("/api/v1/cron/create", cronCreatePrecheck);
 
+// ── HEAD-request bypass fix (CVE-style: x402 Doctor / Fizzl disclosure) ─────
+// @x402/express paymentMiddleware keys routes as "METHOD /path". Express
+// auto-dispatches HEAD to GET handlers, but paymentMiddleware never sees a
+// match for "HEAD /path" — so the handler runs (incurring upstream API/LLM
+// costs) with no payment required. Block HEAD on every paid-route path that
+// is keyed as GET. Returns 405 with an Allow header listing the actual
+// methods the path accepts, so well-behaved clients know what to do.
+// Ref: https://github.com/x402-foundation/x402/pull/3796 (not yet on npm)
+const _paidGETPaths = new Set<string>();
+const _paidPathMethods = new Map<string, Set<string>>();
+for (const key of Object.keys(paidRoutes)) {
+  const spaceIdx = key.indexOf(" ");
+  if (spaceIdx < 0) continue;
+  const method = key.slice(0, spaceIdx).toUpperCase();
+  const path = key.slice(spaceIdx + 1);
+  if (method === "GET") _paidGETPaths.add(path);
+  let ms = _paidPathMethods.get(path);
+  if (!ms) { ms = new Set(); _paidPathMethods.set(path, ms); }
+  ms.add(method);
+}
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req.method === "HEAD" && _paidGETPaths.has(req.path)) {
+    const allow = [...(_paidPathMethods.get(req.path) ?? ["GET"])].join(", ");
+    res.set("Allow", allow);
+    return res.status(405).json({
+      error: "HEAD requests are not supported on paid endpoints.",
+      allow,
+    });
+  }
+  next();
+});
+
 // Normalises inbound x402 v2 PAYMENT-SIGNATURE payloads so a spec-compliant
 // echo of our advertised accepts[] matches. Must run immediately before
 // paymentMiddleware. v1 (X-PAYMENT) requests pass through untouched.
