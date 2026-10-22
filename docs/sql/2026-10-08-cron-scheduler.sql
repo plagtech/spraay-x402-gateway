@@ -48,6 +48,13 @@ create index if not exists cron_runs_job_idx on public.cron_runs (job_id, fired_
 alter table public.cron_runs enable row level security;
 
 -- ----------------------------------------------------------------------------
+-- Data API grants (required for projects created/reset after Oct 30, 2026)
+-- ----------------------------------------------------------------------------
+grant select on public.cron_runs to anon;
+grant select, insert, update, delete on public.cron_runs to authenticated;
+grant select, insert, update, delete on public.cron_runs to service_role;
+
+-- ----------------------------------------------------------------------------
 -- After running, confirm (Phase 2 step 1):
 --
 -- select table_name, column_name, data_type, is_nullable, column_default
