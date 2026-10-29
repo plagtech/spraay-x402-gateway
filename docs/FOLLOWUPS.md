@@ -318,3 +318,21 @@ llms). Migration `docs/sql/2026-10-08-cron-scheduler.sql` run by LP the same day
    and connects to the vetted address (custom `lookup`/dispatcher).
 4. **`webhookMiddleware` still accepts `http://localhost` / `127.0.0.1` callback URLs** for local
    development, but delivery now always refuses them. Align the two, or document it.
+
+## API keys (B2B) — deferred from the `gateway-api-key-auth` session (2026-10-28)
+
+Decided by LP 2026-10-28; both deliberately deferred, not forgotten.
+
+- **B2B keys cannot own cron jobs without an email.** `src/cron/identity.ts` identifies a key
+  holder as `"key:" + apiKeyEmail`; `scripts/generate-api-key.mjs` only sets `email` when
+  `--email` is passed, so a B2B key without one gets `resolveCronCaller() === null`. The
+  middleware already exposes `req.apiKeyOwner`/`req.apiKeyId`; a fallback needs its own owner
+  namespace (e.g. `key-owner:` / `key-id:`) so it can never collide with an email-derived owner.
+- **Replace the 402 interception with x402's protected-request hook.** `apiKeyAuth.ts` swallows
+  paymentMiddleware's `res.status(402)` / `setHeader` / `json|send` and calls `next()`.
+  `@x402/core`'s `x402HTTPResourceServer` supports protected-request hooks that can return
+  `{ grantAccess }` → `no-payment-required`, which is cleaner. It changes the frozen paths'
+  handler chain, so it needs its own ceremonied session with `node scripts/rtp-ext-proof.mjs`.
+- Behavior note (kept on purpose): the middleware only acts on paidRoutes matches, so Stripe
+  subscriber keys no longer consume `daily_calls` on free/unpaid routes, and a bad key on
+  `/free/*` passes through instead of 401.

@@ -80,7 +80,7 @@ import {
 // NEW: Compute Futures (Category 22)
 import { computeFuturesDepositHandler, computeFuturesBalanceHandler, computeFuturesExecuteHandler, computeFuturesHistoryHandler, computeFuturesRefundHandler, computeFuturesPricingHandler } from "./routes/compute-futures.js";
 import pluginRouter from "./routes/plugin-router.js";
-import { apiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
+import { createApiKeyAuthMiddleware } from "./middleware/apiKeyAuth.js";
 import { registerHandler, successHandler, cancelHandler, usageHandler, rotateHandler, portalHandler, stripeWebhookHandler } from "./routes/stripe-auth.js";
 import { enrich402Middleware } from "./middleware/enrich402.js";
 import { x402PayloadNormalizer } from "./middleware/x402PayloadNormalizer.js";
@@ -197,7 +197,8 @@ app.use(bazaarIdentityMiddleware);
 app.use(protocolDetectorMiddleware);
 app.use(solanaPaymentMiddleware);     
 app.use(mppMiddleware);
-app.use(apiKeyAuthMiddleware);
+// Getter: paidRoutes is declared below; read on the first request.
+app.use(createApiKeyAuthMiddleware(() => paidRoutes));
 const webhookService = new WebhookService(supabase!);
 app.use(webhookMiddleware(webhookService));
 app.use("/api/v1/callbacks", createWebhookRouter(webhookService));
