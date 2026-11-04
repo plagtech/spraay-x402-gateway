@@ -27,6 +27,8 @@ declare global {
       paymentProtocol?: PaymentProtocol;
       /** Set by MPP middleware after successful payment verification */
       mppReceipt?: unknown;
+      /** Set by MPP middleware once an MPP charge has verified (and settled); the x402 gate skips such requests */
+      mppPaid?: boolean;
     }
   }
 }

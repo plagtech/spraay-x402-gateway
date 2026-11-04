@@ -27,6 +27,69 @@ Known issues that are deliberately NOT fixed in the change that found them. Pick
 - **Root cause:** the middleware treats the value returned by `mppx.charge(...)(req)` / `mppx.compose(...)(req)` as a Fetch `Response`, but mppx 0.6.14 returns `{ status: 402, challenge: Response } | { status: 200, withReceipt }` (see `node_modules/mppx/dist/server/Mppx.d.ts`, `MethodFn.Response`). Every MPP method is affected (tempo/pathUSD and the new evm/USDG alike); x402 on Base, Solana and Robinhood Chain is unaffected.
 - **Fix outline:** in `handleMppPayment`, on `status === 402` forward `result.challenge`'s status, `WWW-Authenticate` header(s) and body; on `status === 200` obtain the receipt via `result.withReceipt(...)` and set `Payment-Receipt`; apply to both branches; add an offline test with a stub mppx instance. Consider bumping `mppx` (latest 0.9.2) in the same task and re-checking `compose()`.
 - **Guard:** MPP is not on the nine frozen NVIDIA paths, but run `node scripts/rtp-ext-proof.mjs` anyway (middleware chain).
+- **Fixed 2026-11-03 (branch `fix-mpp-middleware`):** `handleMppPayment` now handles the wrapper shape
+  (mirrors `mppx/src/middlewares/express.ts`), and `wrapWithSolanaBypass` skips the x402 gate when
+  `req.mppPaid === true` — without that, a paid MPP request was 402'd by x402 *after* being charged.
+  Offline suite: `npm run test:mpp`. mppx stays 0.6.14. The items below were found doing that fix and
+  deliberately left out of it.
+
+## MPP: charge happens BEFORE every gateway-side check (charged-then-rejected)
+
+- **Found:** 2026-11-03, MPP fix Phase 0. Deferred by LP ruling (needs mount-order changes = own ceremony).
+- **Mechanism:** both MPP methods settle inside mppx `verify()` — tempo broadcasts / checks the
+  transfer, the Robinhood `evm/charge` method calls `rail.settle()` (`src/rails/robinhoodUsdgMpp.ts:173`).
+  `verify()` runs inside `mppMiddleware`, mounted at `src/index.ts:199`, which is **before**:
+  - the API-key middleware (`createApiKeyAuthMiddleware`),
+  - `loopRateLimiter()` and every `duplicatePaymentGuard()` mount (batch, escrow, payroll, stellar, xrp,
+    wallet/send-transaction),
+  - the pay-before-validate prechecks `robotTaskPrecheck`, `escrowCreatePrecheck`, `cronCreatePrecheck`
+    (`app.post` at ~`:1279`), whose `hasPaymentProof()` also doesn't recognise `Authorization: Payment`
+    (only `x-mpp-payment`),
+  - the route handler itself.
+- **Effect:** an MPP request that is rate-limited, flagged duplicate, fails a precheck (the exact
+  robots/task case rtp-ext-proof Block B protects for x402) or errors in the handler has already paid,
+  and nothing refunds it. x402, by contrast, cancels settlement on any status ≥ 400.
+- **Fix outline:** run the prechecks / dup guard / rate limiter for MPP requests before
+  `mppMiddleware` (or move MPP after them), make `hasPaymentProof()` MPP-aware, and decide what a
+  handler failure after an MPP charge should do (refund path vs. accept). Touches the frozen paths'
+  handler chain → full `rtp-ext-proof` ceremony.
+
+## MPP: possible past losses, May 2026 → fix deploy
+
+- Before the fix, a *valid* MPP credential settled in `verify()` and then hit the 500 at the old
+  `mppResponse.headers.get(...)` line — charged, not served. Production has run the compose path
+  (tempo + Robinhood USDG) since the rail shipped.
+- **Check:** incoming pathUSD transfers on Tempo to the MPP recipient (`MPP_RECIPIENT`, else
+  `PAY_TO_ADDRESS`) since May 2026, and USDG `transferWithAuthorization`s to the Robinhood `payTo` that
+  have no matching x402 settlement. `/health` `robinhoodUsdg.stats.settled` is in-memory and resets on
+  every deploy, so it is not evidence either way. Refund anything found.
+
+## MPP: unpaid requests never receive an MPP challenge (discovery gap)
+
+- **Found:** 2026-11-03, MPP fix verification. `mppMiddleware` only runs when `Authorization: Payment`
+  is present, so an unpaid request gets x402's 402 only — no `WWW-Authenticate: Payment` header
+  (confirmed on production `GET /api/v1/oracle/gas`). A stock mppx client — including the
+  `npx mppx …/api/v1/oracle/gas` example served in `/.well-known/mpp.json` — starts unauthenticated, so
+  it has no challenge to answer.
+- A client can bootstrap by sending any `Authorization: Payment <junk>` (now a 402 carrying a fresh
+  tempo challenge). But with compose, an unparseable credential is dispatched to the **first** handler
+  (tempo), so the `evm/charge` (USDG) challenge is only reachable for a client that already holds one.
+  The two-method merged 402 (two `WWW-Authenticate` lines) is produced by mppx only for
+  credential-less requests, i.e. never on this gateway today — the middleware handles it (tested) if
+  that ever changes.
+- **Fix outline:** add the MPP `WWW-Authenticate` challenge(s) to the unpaid 402 (both methods), or
+  route credential-less paid requests through mppx and merge with the x402 body. This changes the
+  unpaid 402 of every paid route including frozen ones (headers, possibly body) → its own ceremony;
+  check what NVIDIA examples parse first.
+
+## MPP: tempo replay store is in-memory
+
+- mppx `tempo()` defaults to `Store.memory()` for used-hash / sponsored-sender tracking
+  (`node_modules/mppx/src/tempo/server/Charge.ts:68`); the gateway passes no `store`. A deploy or
+  restart forgets which transaction hashes were already redeemed, so a `hash` credential could be
+  replayed for service within its challenge's validity window after a restart. Unreachable before the
+  fix (the paid branch always 500'd). Fix: pass a persistent `store` (Supabase/Redis-backed) to
+  `tempo({...})`; confirm challenge expiry length while there.
 
 ## Discovery: the frozen `/api/v1/batch/execute` 402 still advertises a stale `transactions[]` output example
 

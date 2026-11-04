@@ -16,7 +16,8 @@
     "test:inference": "ts-node --project test/tsconfig.json test/inference-upstream.test.ts",
     "test:solana": "ts-node --project test/tsconfig.json test/solana-replay.test.ts",
     "test:cron": "ts-node --project test/tsconfig.json test/cron-scheduler.test.ts",
-    "test:webhook-ssrf": "ts-node --project test/tsconfig.json test/webhook-ssrf.test.ts"
+    "test:webhook-ssrf": "ts-node --project test/tsconfig.json test/webhook-ssrf.test.ts",
+    "test:mpp": "ts-node --project test/tsconfig.json test/mpp-middleware.test.ts"
   },
   "keywords": [
     "x402",

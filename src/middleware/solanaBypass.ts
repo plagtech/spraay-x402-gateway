@@ -34,6 +34,14 @@ export function wrapWithSolanaBypass(
     res: Response,
     next: NextFunction
   ): void {
+    // MPP already verified AND settled this request (mppMiddleware) — the x402
+    // gate must not 402 a request the caller has already paid for. Only set by
+    // mppMiddleware after a successful charge; never present on any other request.
+    if (req.mppPaid === true) {
+      next();
+      return;
+    }
+
     // If Solana payment was already verified, skip the EVM payment gate
     if ((req as any).solanaPaid === true) {
       console.log(

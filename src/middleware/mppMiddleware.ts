@@ -204,50 +204,96 @@ async function handleMppPayment(
   //   - tempo + Robinhood USDG: `mppx.compose(...)` presents BOTH methods in the
   //     402 (one WWW-Authenticate per method) and routes the credential by
   //     method name. The tempo-only path is untouched.
-  let mppResponse: globalThis.Response;
+  //
+  // mppx 0.6.x resolves to a WRAPPER, not a Fetch Response:
+  //   { status: 402, challenge: Response }            — challenge / rejected credential
+  //   { status: 200, withReceipt(response?) => Response } — paid; NOTE the charge has
+  //                                                     ALREADY settled inside verify()
+  // Handling mirrors mppx's own Express adapter (node_modules/mppx/src/middlewares/express.ts),
+  // copied inline rather than imported.
+  let result: any;
   if (mppEvmRegistered && typeof mppx.compose === "function") {
-    mppResponse = await mppx.compose(
+    result = await mppx.compose(
       ["tempo/charge", { amount: priceUSD }],
       ["evm/charge", { amount: usdToUsdgUnits(Number(priceUSD)) }],
     )(fetchReq);
-    // Forward the challenge headers so spec clients can pick either method.
-    if (mppResponse.status === 402) {
-      const wwwAuth: string[] = [];
-      mppResponse.headers.forEach((v, k) => { if (k.toLowerCase() === "www-authenticate") wwwAuth.push(v); });
-      if (wwwAuth.length) res.setHeader("WWW-Authenticate", wwwAuth.length === 1 ? wwwAuth[0] : wwwAuth);
-    }
   } else {
-    mppResponse = await mppx.charge({
+    result = await mppx.charge({
       amount: priceUSD,
     })(fetchReq);
   }
 
-  // If 402 — payment required, forward the MPP challenge to the agent
-  if (mppResponse.status === 402) {
-    const challengeBody = await mppResponse.json();
-
-    // Add Spraay metadata to the challenge response
-    res.status(402).json({
-      ...challengeBody,
-      spraay: {
-        gateway: "gateway.spraay.app",
-        version: GATEWAY_VERSION,
-        protocol: "mpp",
-        category,
-        priceUSD: `$${priceUSD}`,
-        alternativeProtocols: ["x402"],
-        ...(mppEvmRegistered ? { methods: ["tempo/charge", "evm/charge"], evm: { network: "eip155:4663", currency: "USDG", credentialTypes: ["authorization"] } } : {}),
-      },
-    });
+  // Defensive fallback: a bare Fetch Response (older/future mppx shape).
+  if (result instanceof globalThis.Response) {
+    if (result.status === 402) {
+      const wwwAuth = collectWwwAuthenticate(result);
+      if (wwwAuth.length) res.setHeader("WWW-Authenticate", wwwAuth.length === 1 ? wwwAuth[0] : wwwAuth);
+      await sendChallenge(res, result, priceUSD, category);
+      return;
+    }
+    const receiptHeader = result.headers.get("payment-receipt");
+    if (receiptHeader) res.setHeader("Payment-Receipt", receiptHeader);
+    markPaidAndContinue(req, next, priceUSD, category);
     return;
   }
 
-  // Payment verified — extract receipt and continue to route handler
-  const receiptHeader = mppResponse.headers.get("payment-receipt");
+  // Challenge branch — no credential accepted (missing, malformed, expired, failed verify).
+  if (result && result.status === 402) {
+    const challenge = result.challenge as globalThis.Response;
+    // Forward every WWW-Authenticate as a SEPARATE header (compose comma-joins them).
+    const wwwAuth = collectWwwAuthenticate(challenge);
+    if (wwwAuth.length) res.setHeader("WWW-Authenticate", wwwAuth.length === 1 ? wwwAuth[0] : wwwAuth);
+    const cacheControl = challenge.headers.get("cache-control");
+    if (cacheControl) res.setHeader("Cache-Control", cacheControl);
+    await sendChallenge(res, challenge, priceUSD, category);
+    return;
+  }
+
+  if (!result || result.status !== 200 || typeof result.withReceipt !== "function") {
+    throw new Error(`Unexpected mppx result shape (status=${result?.status})`);
+  }
+
+  // Receipt branch. A method may own the whole response (management action,
+  // e.g. session channel open) — then the route handler must NOT run.
+  let managementResponse: globalThis.Response | null;
+  try {
+    managementResponse = result.withReceipt() as globalThis.Response;
+  } catch (err: any) {
+    if (err instanceof Error && err.message === "withReceipt() requires a response argument") {
+      managementResponse = null;
+    } else {
+      throw err;
+    }
+  }
+  if (managementResponse) {
+    res.status(managementResponse.status);
+    managementResponse.headers.forEach((v, k) => res.setHeader(k, v));
+    if (managementResponse.body === null) {
+      res.end();
+      return;
+    }
+    res.send(Buffer.from(await managementResponse.arrayBuffer()));
+    return;
+  }
+
+  // Payment verified — the receipt is independent of the body, so take it from an empty response.
+  const receiptHeader = (result.withReceipt(new globalThis.Response(null)) as globalThis.Response)
+    .headers.get("payment-receipt");
   if (receiptHeader) {
     // Attach receipt to Express response headers
     res.setHeader("Payment-Receipt", receiptHeader);
   }
+
+  markPaidAndContinue(req, next, priceUSD, category);
+}
+
+/**
+ * Marks the request as paid via MPP and hands it to the route.
+ * `req.mppPaid` makes the x402 gate (solanaBypass wrapper) stand aside —
+ * without it an MPP-paid request would be 402'd AFTER being charged.
+ */
+function markPaidAndContinue(req: Request, next: NextFunction, priceUSD: string, category: string): void {
+  req.mppPaid = true;
 
   // Tag the request so gateway-events middleware can log the protocol
   req.mppReceipt = {
@@ -259,6 +305,93 @@ async function handleMppPayment(
 
   // Continue to the actual route handler
   next();
+}
+
+/** Forward the challenge body (JSON merged with Spraay metadata; raw otherwise). */
+async function sendChallenge(
+  res: Response,
+  challenge: globalThis.Response,
+  priceUSD: string,
+  category: string,
+): Promise<void> {
+  const text = await challenge.text();
+  let challengeBody: unknown = {};
+  if (text.trim() !== "") {
+    try {
+      challengeBody = JSON.parse(text);
+    } catch {
+      challengeBody = undefined;
+    }
+  }
+
+  if (challengeBody === null || typeof challengeBody !== "object" || Array.isArray(challengeBody)) {
+    // Not a JSON object — send it as-is with mppx's status and content type.
+    const contentType = challenge.headers.get("content-type");
+    if (contentType) res.setHeader("Content-Type", contentType);
+    res.status(challenge.status).send(text);
+    return;
+  }
+
+  // Add Spraay metadata to the challenge response
+  res.status(challenge.status).json({
+    ...(challengeBody as Record<string, unknown>),
+    spraay: {
+      gateway: "gateway.spraay.app",
+      version: GATEWAY_VERSION,
+      protocol: "mpp",
+      category,
+      priceUSD: `$${priceUSD}`,
+      alternativeProtocols: ["x402"],
+      ...(mppEvmRegistered ? { methods: ["tempo/charge", "evm/charge"], evm: { network: "eip155:4663", currency: "USDG", credentialTypes: ["authorization"] } } : {}),
+    },
+  });
+}
+
+/**
+ * Fetch `Headers` joins repeated WWW-Authenticate values with ", " (mppx's
+ * compose() appends one per method). Split them back into one string per
+ * challenge: a new challenge starts at a top-level comma followed by
+ * `token SP` (RFC 9110 §11.6.1) — an auth-param would be `token=`.
+ */
+export function collectWwwAuthenticate(response: globalThis.Response): string[] {
+  const joined = response.headers.get("www-authenticate");
+  if (!joined) return [];
+  return splitChallenges(joined);
+}
+
+export function splitChallenges(value: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  let inQuotes = false;
+  let escaped = false;
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (inQuotes) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inQuotes = false;
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === "," && /^\s*[!#$%&'*+.^_`|~0-9A-Za-z-]+[ \t]+[^\s=]/.test(value.slice(i + 1))) {
+      const part = value.slice(start, i).trim();
+      if (part) out.push(part);
+      start = i + 1;
+    }
+  }
+  const last = value.slice(start).trim();
+  if (last) out.push(last);
+  return out;
+}
+
+/** @internal Test seam — inject a stub mppx instance (never used in production code). */
+export function __setMppxForTests(instance: any, opts: { evmRegistered?: boolean } = {}): void {
+  mppxInstance = instance;
+  mppxInitError = null;
+  mppEvmRegistered = opts.evmRegistered === true;
 }
 
 // ─── Initialization (call on startup to pre-warm) ─────────────────────
