@@ -19,7 +19,9 @@
  * 
  * For Phase 1, we take the simpler approach: MPP middleware ONLY handles
  * requests that arrive with MPP credentials. Requests with no credentials
- * continue to x402 (existing behavior preserved exactly).
+ * continue to x402, which still produces the 402; on paid routes the MPP
+ * challenge(s) are ADDED to that 402 as WWW-Authenticate: Payment headers
+ * (additive only — x402 status, headers and body are unchanged).
  * 
  * Install: npm install mppx stripe
  * 
@@ -142,7 +144,8 @@ function expressToFetchRequest(req: Request): globalThis.Request {
  * 
  * Mount BEFORE x402 paymentMiddleware in the Express chain.
  * Only intercepts requests with "Authorization: Payment" headers.
- * All other requests pass through untouched to x402.
+ * All other requests pass through to x402; credential-less requests on paid
+ * routes get the MPP challenge header(s) added if their response is a 402.
  */
 export function mppMiddleware(
   req: Request,
@@ -154,8 +157,18 @@ export function mppMiddleware(
     return next();
   }
 
-  // Gate 2: Only handle MPP-protocol requests
-  // If protocol is "x402", "l402", or "none" → skip, let x402 handle
+  // Gate 2a: No credential at all → x402 still answers, exactly as before.
+  // On a paid route we only ADD the MPP challenge header(s) to that 402 so
+  // stock MPP clients can discover how to pay (see advertiseMppOn402).
+  if (req.paymentProtocol === "none") {
+    const price = getEndpointPrice(req.method, req.path);
+    if (!price) return next();
+    advertiseMppOn402(req, res, price.price).then(() => next(), () => next());
+    return;
+  }
+
+  // Gate 2b: Only handle MPP-protocol requests
+  // If protocol is "x402" or "l402" → skip, let x402 handle
   if (req.paymentProtocol !== "mpp") {
     return next();
   }
@@ -199,29 +212,13 @@ async function handleMppPayment(
   // Convert Express request to Fetch API Request for mppx
   const fetchReq = expressToFetchRequest(req);
 
-  // Run mppx charge handler.
-  //   - tempo only (today's behaviour): `mppx.charge({ amount })`
-  //   - tempo + Robinhood USDG: `mppx.compose(...)` presents BOTH methods in the
-  //     402 (one WWW-Authenticate per method) and routes the credential by
-  //     method name. The tempo-only path is untouched.
-  //
   // mppx 0.6.x resolves to a WRAPPER, not a Fetch Response:
   //   { status: 402, challenge: Response }            — challenge / rejected credential
   //   { status: 200, withReceipt(response?) => Response } — paid; NOTE the charge has
   //                                                     ALREADY settled inside verify()
   // Handling mirrors mppx's own Express adapter (node_modules/mppx/src/middlewares/express.ts),
   // copied inline rather than imported.
-  let result: any;
-  if (mppEvmRegistered && typeof mppx.compose === "function") {
-    result = await mppx.compose(
-      ["tempo/charge", { amount: priceUSD }],
-      ["evm/charge", { amount: usdToUsdgUnits(Number(priceUSD)) }],
-    )(fetchReq);
-  } else {
-    result = await mppx.charge({
-      amount: priceUSD,
-    })(fetchReq);
-  }
+  const result: any = await runMppxCharge(mppx, fetchReq, priceUSD);
 
   // Defensive fallback: a bare Fetch Response (older/future mppx shape).
   if (result instanceof globalThis.Response) {
@@ -285,6 +282,60 @@ async function handleMppPayment(
   }
 
   markPaidAndContinue(req, next, priceUSD, category);
+}
+
+/**
+ * Run the mppx charge handler for `priceUSD` — the single place that decides
+ * which MPP methods are offered, shared by the paid flow and the unpaid-402
+ * advertisement so both always present identical challenges.
+ *   - tempo only: `mppx.charge({ amount })`
+ *   - tempo + Robinhood USDG: `mppx.compose(...)` presents BOTH methods in the
+ *     402 (one WWW-Authenticate per method) and routes the credential by
+ *     method name.
+ */
+function runMppxCharge(mppx: any, fetchReq: globalThis.Request, priceUSD: string): Promise<any> {
+  if (mppEvmRegistered && typeof mppx.compose === "function") {
+    return mppx.compose(
+      ["tempo/charge", { amount: priceUSD }],
+      ["evm/charge", { amount: usdToUsdgUnits(Number(priceUSD)) }],
+    )(fetchReq);
+  }
+  return mppx.charge({ amount: priceUSD })(fetchReq);
+}
+
+/**
+ * Discovery for credential-less requests on paid routes. mppx is asked for the
+ * challenge it issues when no credential is present (local HMAC only: nothing
+ * is verified, settled or stored). The resulting `WWW-Authenticate: Payment`
+ * value(s) are added to the response ONLY if it goes out as a 402, and only if
+ * nothing else already set WWW-Authenticate. Status, body and every other
+ * header (the x402 `payment-required` challenge included) are untouched — the
+ * x402 middleware still produces the response exactly as before.
+ * Any failure here is swallowed: the x402 402 is then sent without MPP.
+ */
+async function advertiseMppOn402(req: Request, res: Response, priceUSD: string): Promise<void> {
+  try {
+    const mppx = await getMppx();
+    if (!mppx) return;
+    const result: any = await runMppxCharge(mppx, expressToFetchRequest(req), priceUSD);
+    const challenge: globalThis.Response | null =
+      result instanceof globalThis.Response ? result
+        : result && result.status === 402 ? result.challenge
+        : null;
+    if (!challenge || challenge.status !== 402) return;
+    const wwwAuth = collectWwwAuthenticate(challenge);
+    if (!wwwAuth.length) return;
+
+    const writeHead = res.writeHead;
+    res.writeHead = function (this: Response, statusCode: number, ...rest: any[]) {
+      if (statusCode === 402 && !this.hasHeader("WWW-Authenticate")) {
+        this.setHeader("WWW-Authenticate", wwwAuth.length === 1 ? wwwAuth[0] : wwwAuth);
+      }
+      return (writeHead as any).apply(this, [statusCode, ...rest]);
+    } as typeof res.writeHead;
+  } catch (err: any) {
+    console.warn(`⚠️  MPP: could not build unpaid-402 challenge — ${err?.message || err}`);
+  }
 }
 
 /**

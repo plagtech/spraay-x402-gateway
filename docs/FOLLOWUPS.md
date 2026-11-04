@@ -81,6 +81,15 @@ Known issues that are deliberately NOT fixed in the change that found them. Pick
   route credential-less paid requests through mppx and merge with the x402 body. This changes the
   unpaid 402 of every paid route including frozen ones (headers, possibly body) → its own ceremony;
   check what NVIDIA examples parse first.
+- **Fixed 2026-11-04 (branch `fix/mpp-unpaid-challenge`):** for credential-less requests on paid
+  routes, `mppMiddleware` asks mppx for its no-credential challenge (local HMAC only — nothing
+  verified, settled or stored) and adds the resulting `WWW-Authenticate: Payment` line(s) — both
+  methods when the USDG rail is registered — to the response only if it goes out as a 402 and nothing
+  else set that header. x402 status, body and every other header are unchanged; any mppx failure
+  sends the x402 402 as before. Charge/compose selection is shared with the paid flow
+  (`runMppxCharge`). NVIDIA example client (`spraay_client.py`) parses the 402 JSON body and pays via
+  the x402 SDK (`payment-required`); it never reads `WWW-Authenticate`. `rtp-ext-proof` passes with
+  MPP disabled and with MPP enabled (throwaway keys); `npm run test:mpp` covers the new path.
 
 ## MPP: tempo replay store is in-memory
 

@@ -42,4 +42,4 @@ Never re-baseline to silence a failure you did not intend.
 If a task seems to require modifying these routes, STOP and ask LP first.
 ## Known follow-ups
 
-See docs/FOLLOWUPS.md before starting new work. The MPP 500 is fixed (3faea0b, deployed 2026-11-04); open MPP items there: charge settles before the gateway's own checks (no refund on rejection), unpaid 402s carry no MPP challenge (stock mppx clients can't bootstrap), possible past losses May→Nov 2026 to check, in-memory tempo replay store. Top priority remains frozen /free/prices 500 on CoinGecko 429.
+See docs/FOLLOWUPS.md before starting new work. The MPP 500 is fixed (3faea0b, deployed 2026-11-04); open MPP items there: charge settles before the gateway's own checks (no refund on rejection), possible past losses May→Nov 2026 to check, in-memory tempo replay store. Top priority remains frozen /free/prices 500 on CoinGecko 429.

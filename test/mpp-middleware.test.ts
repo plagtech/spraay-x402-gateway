@@ -102,6 +102,8 @@ function buildApp() {
   app.use(wrapWithSolanaBypass((req, res, next) => {
     x402GateRuns++;
     if (req.path.startsWith("/free/")) return next();
+    // Stand-in for a credential-less request served by another rail (API key, Solana tx).
+    if (req.headers["x-test-gate-pass"]) return next();
     res.status(402).json({ x402Version: 2, error: "Payment required" });
   }));
   const handler = (req: any, res: any) => {
@@ -301,13 +303,82 @@ async function main() {
   });
 
   // ── non-MPP paths unchanged ──────────────────────────────────────
-  await test("no MPP header: mppx never called, x402 gate answers as before", async () => {
+  // ── unpaid 402 discovery (credential-less requests) ───────────────
+  const X402_BODY = JSON.stringify({ x402Version: 2, error: "Payment required" });
+
+  await test("unpaid, one method: x402 402 unchanged + WWW-Authenticate added; route not run", async () => {
+    reset(() => challenge402([CH_TEMPO]));
+    const w = await get("/api/v1/oracle/gas");
+    assert.strictEqual(w.status, 402);
+    assert.strictEqual(w.body, X402_BODY, "x402 body must be byte-identical");
+    assert.match(header(w, "content-type")[0], /^application\/json/);
+    assert.deepStrictEqual(header(w, "www-authenticate"), [CH_TEMPO]);
+    assert.deepStrictEqual(header(w, "cache-control"), [], "no mppx headers other than WWW-Authenticate");
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].kind, "charge");
+    assert.deepStrictEqual(calls[0].args, [{ amount: "0.005" }]);
+    assert.strictEqual(calls[0].auth, null, "mppx sees no credential → challenge only, nothing settles");
+    assert.strictEqual(x402GateRuns, 1);
+    assert.strictEqual(handlerSeen.ran, false);
+  });
+
+  await test("unpaid, two methods (compose): BOTH WWW-Authenticate lines added to the x402 402", async () => {
+    reset(() => challenge402([CH_TEMPO, CH_EVM]), true);
+    const w = await get("/api/v1/oracle/gas");
+    assert.strictEqual(w.status, 402);
+    assert.strictEqual(w.body, X402_BODY);
+    assert.deepStrictEqual(header(w, "www-authenticate"), [CH_TEMPO, CH_EVM]);
+    assert.strictEqual(calls[0].kind, "compose");
+    assert.deepStrictEqual(calls[0].args, [["tempo/charge", { amount: "0.005" }], ["evm/charge", { amount: "5000" }]]);
+  });
+
+  await test("unpaid: only WWW-Authenticate differs from the response without MPP", async () => {
+    reset(() => { throw new Error("mppx down"); });
+    const without = await get("/api/v1/oracle/gas");
+    reset(() => challenge402([CH_TEMPO]));
+    const withMpp = await get("/api/v1/oracle/gas");
+    const names = (w: Wire) => w.raw.filter((_, i) => i % 2 === 0).map((n) => n.toLowerCase()).sort();
+    const valuesExcept = (w: Wire, skip: string[]) =>
+      w.raw.reduce<string[]>((acc, v, i) => (i % 2 === 0 && !skip.includes(v.toLowerCase()) ? [...acc, `${v.toLowerCase()}: ${w.raw[i + 1]}`] : acc), []);
+    assert.deepStrictEqual(names(withMpp).filter((n) => n !== "www-authenticate"), names(without));
+    assert.deepStrictEqual(valuesExcept(withMpp, ["www-authenticate", "date"]), valuesExcept(without, ["date"]));
+    assert.strictEqual(withMpp.body, without.body);
+    assert.strictEqual(withMpp.status, without.status);
+  });
+
+  await test("unpaid, mppx throws: x402 402 sent unchanged without WWW-Authenticate", async () => {
+    reset(() => { throw new Error("boom"); });
+    const w = await get("/api/v1/oracle/gas");
+    assert.strictEqual(w.status, 402);
+    assert.strictEqual(w.body, X402_BODY);
+    assert.deepStrictEqual(header(w, "www-authenticate"), []);
+  });
+
+  await test("unpaid, mppx returns a non-402 result: no header added", async () => {
     reset(() => paid200());
     const w = await get("/api/v1/oracle/gas");
     assert.strictEqual(w.status, 402);
-    assert.deepStrictEqual(w.json, { x402Version: 2, error: "Payment required" });
+    assert.strictEqual(w.body, X402_BODY);
+    assert.deepStrictEqual(header(w, "www-authenticate"), []);
+    assert.strictEqual(handlerSeen.ran, false);
+    assert.strictEqual(handlerSeen.mppPaid, undefined);
+  });
+
+  await test("unpaid but served 200 by another rail: no WWW-Authenticate on the 200", async () => {
+    reset(() => challenge402([CH_TEMPO]));
+    const w = await get("/api/v1/oracle/gas", { "x-test-gate-pass": "1" });
+    assert.strictEqual(w.status, 200);
+    assert.deepStrictEqual(w.json, { ok: true, path: "/api/v1/oracle/gas" });
+    assert.deepStrictEqual(header(w, "www-authenticate"), []);
+    assert.strictEqual(handlerSeen.mppPaid, undefined);
+  });
+
+  await test("unpaid on a free route: mppx never called, no WWW-Authenticate", async () => {
+    reset(() => challenge402([CH_TEMPO]));
+    const w = await get("/free/prices");
+    assert.strictEqual(w.status, 200);
     assert.strictEqual(calls.length, 0);
-    assert.strictEqual(x402GateRuns, 1);
+    assert.deepStrictEqual(header(w, "www-authenticate"), []);
   });
 
   await test("x402 header present: mppx never called, x402 gate runs", async () => {

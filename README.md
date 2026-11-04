@@ -39,7 +39,7 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 | **x402 on Solana** | USDC (SPL) on Solana mainnet-beta via the `X-Solana-Tx` header. Discovery: `/.well-known/solana.json` |
 | **x402 on Robinhood Chain** | USDG (Global Dollar, `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`) on Robinhood Chain (`eip155:4663`) — same x402 v2 `exact` scheme and EIP-3009 wire format as Base, same USD prices, on every paid endpoint. No approval step, payer needs no ETH; the gateway's own facilitator relays `transferWithAuthorization`. Discovery: `/.well-known/x402.json` → `robinhoodPayment`. |
 | **Subscription (Stripe)** | API-key access, no wallet needed. **Starter $29/mo** (1,000 calls/day) · **Pro $99/mo** (10,000 calls/day). All paid endpoints included. [Sign up](https://spraay.app/#pricing) |
-| **MPP** *(limited)* | Machine Payments Protocol via `Authorization: Payment`. Methods: `tempo/charge` (pathUSD on Tempo) and `evm/charge` (USDG on Robinhood Chain, EIP-3009). Requests carrying a Payment credential get a proper MPP 402 challenge (`WWW-Authenticate: Payment`) or, once paid, the resource plus a `Payment-Receipt` header. **Limits:** the default unpaid 402 is x402-only and carries no MPP challenge, so stock MPP clients can't start a payment on their own — send any `Authorization: Payment …` first to receive a `tempo` challenge (the `evm/charge` challenge isn't reachable this way yet). MPP charges settle before the gateway's own request checks, so a rejected request is not refunded. **x402 remains the recommended path.** [Spec](https://mpp.dev) |
+| **MPP** *(limited)* | Machine Payments Protocol via `Authorization: Payment`. Methods: `tempo/charge` (pathUSD on Tempo) and `evm/charge` (USDG on Robinhood Chain, EIP-3009). The unpaid 402 on every paid route carries the MPP challenge(s) (`WWW-Authenticate: Payment`, one per method) alongside the unchanged x402 `payment-required` header and body, so stock MPP clients can start a payment on their own. Paid requests get the resource plus a `Payment-Receipt` header. **Limits:** MPP charges settle before the gateway's own request checks, so a rejected request is not refunded. **x402 remains the recommended path.** [Spec](https://mpp.dev) |
 
 ## How x402 Works
 
@@ -49,9 +49,8 @@ The Spraay x402 Gateway is a payment-gated API server where every endpoint costs
 4. Gateway validates payment via the Coinbase CDP facilitator (Base/Solana) or its in-process facilitator (Robinhood Chain)
 5. Gateway returns requested data
 
-> **Note:** `/.well-known/mpp.json` advertises MPP as active, and credential-bearing MPP
-> requests are handled end to end. Its `npx mppx …` example does not work yet with a stock
-> client, because unpaid 402s don't carry an MPP challenge — see Ways to Pay.
+> **Note:** `/.well-known/mpp.json` advertises MPP as active. Unpaid 402s carry the MPP
+> challenge, so its `npx mppx …` example can start from an unauthenticated request — see Ways to Pay.
 
 ---
 
