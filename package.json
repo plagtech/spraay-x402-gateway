@@ -17,7 +17,8 @@
     "test:solana": "ts-node --project test/tsconfig.json test/solana-replay.test.ts",
     "test:cron": "ts-node --project test/tsconfig.json test/cron-scheduler.test.ts",
     "test:webhook-ssrf": "ts-node --project test/tsconfig.json test/webhook-ssrf.test.ts",
-    "test:mpp": "ts-node --project test/tsconfig.json test/mpp-middleware.test.ts"
+    "test:mpp": "ts-node --project test/tsconfig.json test/mpp-middleware.test.ts",
+    "test:swap-and-pay": "ts-node --project test/tsconfig.json test/swap-and-pay.test.ts"
   },
   "keywords": [
     "x402",

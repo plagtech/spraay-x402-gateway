@@ -16,6 +16,7 @@ import { stellarBatchHandler, stellarEstimateHandler } from "./routes/stellar-ba
 
 import { swapQuoteHandler, swapTokensHandler } from "./routes/swap-data.js";
 import { swapExecuteHandler } from "./routes/swap-execute.js";
+import { swapAndPayEstimateHandler, swapAndPayExecuteHandler } from "./routes/swap-and-pay.js";
 import { oraclePricesHandler, oracleGasHandler, oracleFxHandler } from "./routes/oracle.js";
 import { bridgeQuoteHandler, bridgeChainsHandler } from "./routes/bridge.js";
 import { payrollExecuteHandler, payrollEstimateHandler, payrollTokensHandler } from "./routes/payroll.js";
@@ -210,6 +211,8 @@ app.use("/api/v1/payroll", duplicatePaymentGuard());
 app.use("/api/v1/stellar", duplicatePaymentGuard());
 app.use("/api/v1/xrp", duplicatePaymentGuard());
 app.use("/api/v1/wallet/send-transaction", duplicatePaymentGuard());
+// Execute only: repeated estimates are normal and must not 409.
+app.use("/api/v1/swap-and-pay/execute", duplicatePaymentGuard());
 // ════════════════════════════════════════════════════════════
 // PAID ROUTES — single source of truth.
 // PAID_COUNT is computed from this object and used in every
@@ -235,6 +238,16 @@ const paidRoutes = {
         accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
         description: "Estimate batch gas and protocol fee. Units: amounts[] are RAW base units (USDC 6dp: \"1500000\" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a decimal string.", mimeType: "application/json",
         extensions: { ...declareDiscoveryExtension({ input: { token: "USDC", recipients: ["0x1111111111111111111111111111111111111111", "0x2222222222222222222222222222222222222222"], amounts: ["1500000", "1500000"] }, inputSchema: { properties: { token: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, sender: { type: "string" }, recipientCount: { type: "number" } }, required: [] }, bodyType: "json", output: { example: { success: true, token: { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, isETH: false }, recipientCount: 2, totalAmount: "3.0", fee: "0.009", feePercent: "0.3%", totalWithFee: "3.009", suggestedGasLimit: "230000" }, schema: { properties: { success: { type: "boolean" }, token: { type: "object" }, recipientCount: { type: "number" }, totalAmount: { type: "string" }, fee: { type: "string" }, feePercent: { type: "string" }, totalWithFee: { type: "string" }, suggestedGasLimit: { type: "string" }, estimatedGas: { type: "string" }, note: { type: "string" } } } } }) },
+      },
+      "POST /api/v1/swap-and-pay/execute": {
+        accepts: [{ scheme: "exact", price: "$0.10", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.10", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Swap ETH to USDC and pay up to 200 recipients fixed USDC amounts in one Base transaction (SwapAndSprayRouter, Uniswap v4). Returns an unsigned transaction; no approval needed. amounts[] are RAW USDC base units.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { sender: "0x...", recipients: ["0x..."], amounts: ["1000000"], inputToken: "ETH", slippageBps: 50 }, inputSchema: { properties: { sender: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, inputToken: { type: "string" }, slippageBps: { type: "number" }, deadline: { type: "number" } }, required: ["sender", "recipients", "amounts"] }, bodyType: "json", output: { example: { success: true, router: "0x8cfb5eBa99170d284120B885A47b08E28FD27379", transaction: { to: "0x8cfb5eBa99170d284120B885A47b08E28FD27379", data: "0x04846b1d...", value: "1130000000000", chainId: 8453, gasLimit: "0x8c5c0" } }, schema: { properties: { success: { type: "boolean" }, router: { type: "string" }, payout: { type: "object" }, quote: { type: "object" }, transaction: { type: "object" } } } } }) },
+      },
+      "POST /api/v1/swap-and-pay/estimate": {
+        accepts: [{ scheme: "exact", price: "$0.001", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.001", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
+        description: "Quote an ETH-to-USDC swap-and-pay: ETH needed (with slippage), Spray 0.3% fee, pool price and gas. amounts[] are RAW USDC base units.", mimeType: "application/json",
+        extensions: { ...declareDiscoveryExtension({ input: { sender: "0x...", recipients: ["0x1111111111111111111111111111111111111111"], amounts: ["1000000"], inputToken: "ETH" }, inputSchema: { properties: { sender: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" }, inputToken: { type: "string" }, slippageBps: { type: "number" } }, required: ["sender", "recipients", "amounts"] }, bodyType: "json", output: { example: { success: true, payout: { totalAmount: "1.0", fee: "0.003", totalWithFee: "1.003" }, quote: { ethIn: "560000000000000", maxEthIn: "562800000000000", slippageBps: 50 }, suggestedGasLimit: "560000" }, schema: { properties: { success: { type: "boolean" }, payout: { type: "object" }, quote: { type: "object" }, pool: { type: "object" }, suggestedGasLimit: { type: "string" } } } } }) },
       },
       "POST /api/v1/stellar/batch": {
         accepts: [{ scheme: "exact", price: "$0.02", network: CAIP2_NETWORK, payTo: PAY_TO }, { scheme: "exact", price: "$0.02", network: SOLANA_NETWORK, payTo: SOLANA_PAY_TO }],
@@ -1350,6 +1363,8 @@ const MANIFEST_META = [
       { resource: `${BASE_URL}/api/v1/models`, method: "GET", price: "$0.001", category: "ai", description: "List all available AI models with IDs, capabilities, and pricing. Call before chat/completions to pick the right model.", searchTerms: ["list models","available models","model catalog","which models","supported models","LLM list","model pricing"] },
       { resource: `${BASE_URL}/api/v1/batch/execute`, method: "POST", price: "$0.02", category: "payments", description: "Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0. Units: amounts[] are RAW base units (USDC has 6 decimals, so \"1500000\" = $1.50); batch.totalAmount/fee/totalWithFee are human-decimal strings; approvalRequired.amount is RAW base units - pass it verbatim as the ERC-20 allowance - while approvalRequired.amountFormatted is the human-decimal form; transaction.gasLimit is hex. Settles on Base (default) or peaq via the optional \"chain\" field; other chains are rejected.", searchTerms: ["batch payment","bulk payout","mass payout","send to many wallets","airdrop","disbursement","multi-send","pay many recipients","peaq"], spec: "https://docs.spraay.app/bpa/1.0/" },
       { resource: `${BASE_URL}/api/v1/batch/estimate`, method: "POST", price: "$0.001", category: "payments", description: "Estimate gas, protocol fee and total for a batch payment before sending. Runs the same amount and fee math as batch/execute, so a quote cannot disagree with what execute charges. Units: amounts[] are RAW base units (USDC has 6 decimals, so \"1500000\" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a DECIMAL string (unlike execute's transaction.gasLimit, which is hex). Accepts the same optional \"chain\" field as batch/execute (base or peaq). Call before batch/execute.", searchTerms: ["batch estimate","payment estimate","gas estimate","fee preview","bulk payment cost","pre-flight check","dry run"] },
+      { resource: `${BASE_URL}/api/v1/swap-and-pay/execute`, method: "POST", price: "$0.10", category: "payments", description: "Swap ETH to USDC and pay up to 200 recipients fixed USDC amounts in one transaction on Base, via SwapAndSprayRouter on the Uniswap v4 ETH/USDC pool. Exact-output: recipients get exactly their amounts and unused ETH is refunded to sender. Returns an unsigned transaction (to, data, value, chainId, hex gasLimit); no ERC-20 approval is needed. Units: amounts[] are RAW USDC base units (\"1500000\" = $1.50); transaction.value is wei. Spray's 0.3% fee is the only fee. SprayContract v2 is skip-on-fail: undeliverable amounts are refunded to sender. Input token: ETH only.", searchTerms: ["swap and pay","swap and send","pay in USDC with ETH","ETH to USDC payout","convert and distribute","swap then batch pay","Uniswap v4","one transaction payout"] },
+      { resource: `${BASE_URL}/api/v1/swap-and-pay/estimate`, method: "POST", price: "$0.001", category: "payments", description: "Quote a swap-and-pay before executing: ETH needed (quote and max with slippage), Spray 0.3% fee, pool spot price, price impact and suggested gas limit (decimal string). Same validation and math as swap-and-pay/execute. Units: amounts[] are RAW USDC base units.", searchTerms: ["swap and pay estimate","swap quote","ETH needed","payout cost","pre-flight check"] },
       { resource: `${BASE_URL}/api/v1/swap/quote`, method: "GET", price: "$0.008", category: "defi", description: "Get a token swap quote across Uniswap V3, Aerodrome and other DEXes on Base.", searchTerms: ["swap quote","best swap rate","token exchange rate","DEX aggregator","get swap price","price impact"] },
       { resource: `${BASE_URL}/api/v1/swap/tokens`, method: "GET", price: "$0.001", category: "defi", description: "List tokens available for swapping on Base via Uniswap V3 / Aerodrome with addresses, symbols, and decimals. Call before swap/quote.", searchTerms: ["list tokens","token list","swappable tokens","Base tokens","tradeable tokens","token discovery","ERC-20 list"] },
       { resource: `${BASE_URL}/api/v1/swap/execute`, method: "POST", price: "$0.015", category: "defi", description: "Execute a token swap on Base via the MangoSwap router (Uniswap V3 / Aerodrome).", searchTerms: ["swap tokens","exchange tokens","trade tokens","DEX swap","convert tokens","buy token","sell token"] },
@@ -1805,6 +1820,8 @@ app.get("/", (_req, res) => {
         // Payments
         "POST /api/v1/batch/execute": "$0.02 - Batch payment",
         "POST /api/v1/batch/estimate": "$0.001 - Batch estimate",
+        "POST /api/v1/swap-and-pay/execute": "$0.10 - Swap ETH to USDC and pay many recipients",
+        "POST /api/v1/swap-and-pay/estimate": "$0.001 - Swap-and-pay estimate",
         // DeFi
         "GET /api/v1/swap/quote": "$0.008 - Swap quote",
         "GET /api/v1/swap/tokens": "$0.001 - Swap tokens",
@@ -2246,6 +2263,50 @@ app.get("/openapi.json", (_req, res) => {
         suggestedGasLimit: { type: "string", description: "DECIMAL string — note this differs from batch/execute's transaction.gasLimit, which is hex." },
         estimatedGas: { type: "string", description: "Count-only form. DECIMAL string, cold-recipient worst case." },
         note: { type: "string", description: "Count-only form. Explains that the figure is a conservative ceiling." },
+      } },
+    { method: "post", path: "/api/v1/swap-and-pay/execute", price: "$0.10", priceNum: "0.100000", tag: "payments", desc: "Swap ETH to USDC and pay many recipients in one Base transaction (amounts[] in RAW USDC units)",
+      inputProps: {
+        sender: { type: "string", description: "Payer address. Signs the transaction, pays the ETH, and receives any unused ETH and any refund for skipped recipients." },
+        recipients: { type: "array", description: "Recipient addresses, parallel to amounts[]. 1 to 200. Not the zero address, the router or the Spray contract." },
+        amounts: { type: "array", description: "RAW USDC base units as integer strings. USDC has 6 decimals, so \"1500000\" = $1.50. Each must be > 0." },
+        inputToken: { type: "string", description: "Input token. Only \"ETH\" (the default) is supported; anything else is rejected with supportedInputTokens." },
+        slippageBps: { type: "number", description: "Max extra ETH over the quote, in bps. Integer 0 to 500. Default 50 (0.5%)." },
+        deadline: { type: "number", description: "Unix seconds after which the transaction reverts. Must be in the future. Default now + 300." },
+      }, required: ["sender", "recipients", "amounts"],
+      outputProps: {
+        success: { type: "boolean" },
+        chainId: { type: "number" },
+        router: { type: "string", description: "SwapAndSprayRouter, the transaction target." },
+        sprayContract: { type: "string", description: "SprayContract v2 the router pays through (skip-on-fail)." },
+        inputToken: { type: "object" },
+        outputToken: { type: "object" },
+        supportedInputTokens: { type: "array" },
+        pool: { type: "object", description: "Uniswap v4 PoolKey, poolId and spot price snapshot." },
+        payout: { type: "object", description: "totalAmount/fee/totalWithFee are HUMAN-DECIMAL USDC; requiredOutputRaw is RAW USDC (swap output)." },
+        quote: { type: "object", description: "ethIn/maxEthIn are RAW wei strings; maxEthIn = ethIn × (1 + slippageBps). priceImpactBps includes the pool's 0.30% LP fee." },
+        deadline: { type: "number" },
+        transaction: { type: "object", description: "Unsigned transaction to sign and broadcast from sender.", properties: { from: { type: "string" }, to: { type: "string" }, data: { type: "string", description: "Hex calldata for swapAndSpray (selector 0x04846b1d)." }, value: { type: "string", description: "RAW wei as a decimal string (= quote.maxEthIn). Unused ETH is refunded." }, chainId: { type: "number" }, gasLimit: { type: "string", description: "HEX quantity." } } },
+        gasLimitSource: { type: "string", description: "\"estimate\" (eth_estimateGas × 1.5) or \"floor\" (estimation failed, e.g. sender lacks ETH)." },
+        note: { type: "string" },
+      } },
+    { method: "post", path: "/api/v1/swap-and-pay/estimate", price: "$0.001", priceNum: "0.001000", tag: "payments", desc: "Estimate an ETH-to-USDC swap-and-pay (amounts[] in RAW USDC units)",
+      inputProps: {
+        sender: { type: "string", description: "Payer address. Used for the gas estimate." },
+        recipients: { type: "array", description: "Recipient addresses, parallel to amounts[]. 1 to 200." },
+        amounts: { type: "array", description: "RAW USDC base units as integer strings — identical semantics to swap-and-pay/execute." },
+        inputToken: { type: "string", description: "Only \"ETH\" (default)." },
+        slippageBps: { type: "number", description: "Integer 0 to 500. Default 50." },
+      }, required: ["sender", "recipients", "amounts"],
+      outputProps: {
+        success: { type: "boolean" },
+        router: { type: "string" },
+        sprayContract: { type: "string" },
+        pool: { type: "object" },
+        payout: { type: "object" },
+        quote: { type: "object" },
+        suggestedGasLimit: { type: "string", description: "DECIMAL string — unlike execute's transaction.gasLimit, which is hex." },
+        gasLimitSource: { type: "string" },
+        note: { type: "string" },
       } },
     { method: "post", path: "/api/v1/stellar/batch", price: "$0.02", priceNum: "0.020000", tag: "payments", desc: "Batch XLM payments on Stellar",
       inputProps: { sourceSecret: { type: "string" }, recipients: { type: "array" }, amounts: { type: "array" } }, required: ["sourceSecret", "recipients", "amounts"],
@@ -2864,6 +2925,9 @@ app.get("/api/v1/models", aiModelsHandler);
 // Payments
 app.post("/api/v1/batch/execute", batchPaymentHandler);
 app.post("/api/v1/batch/estimate", batchEstimateHandler);
+// Swap-and-pay (SwapAndSprayRouter, Base only)
+app.post("/api/v1/swap-and-pay/estimate", swapAndPayEstimateHandler);
+app.post("/api/v1/swap-and-pay/execute", swapAndPayExecuteHandler);
 // Stellar (Chain #14)
 app.post("/api/v1/stellar/batch", stellarBatchHandler);
 app.post("/api/v1/stellar/estimate", stellarEstimateHandler);

@@ -154,6 +154,34 @@ const ENDPOINT_ENRICHMENT: Record<string, EndpointEnrichment> = {
       { method: "GET", path: "/api/v1/oracle/gas", price: "$0.005", why: "Get current gas prices to time execution" },
     ],
   },
+  "POST /api/v1/swap-and-pay/execute": {
+    description: "Swap ETH to USDC and pay up to 200 recipients fixed USDC amounts in one Base transaction (SwapAndSprayRouter, Uniswap v4). Returns an unsigned transaction; no approval needed. 0.3% Spray fee, no swap surcharge.",
+    example_request: {
+      sender: "0xYourWallet",
+      recipients: ["0xabc...", "0xdef..."],
+      amounts: ["1000000", "2000000"],
+      inputToken: "ETH",
+      slippageBps: 50,
+    },
+    example_response: {
+      success: true,
+      router: "0x8cfb5eBa99170d284120B885A47b08E28FD27379",
+      payout: { recipientCount: 2, totalAmount: "3.0", fee: "0.009", totalWithFee: "3.009" },
+      quote: { ethIn: "1680000000000000", maxEthIn: "1688400000000000", slippageBps: 50 },
+      transaction: { to: "0x8cfb5eBa99170d284120B885A47b08E28FD27379", data: "0x04846b1d...", value: "1688400000000000", chainId: 8453, gasLimit: "0x8c5c0" },
+    },
+    related_endpoints: [
+      { method: "POST", path: "/api/v1/swap-and-pay/estimate", price: "$0.001", why: "Quote the ETH needed before executing" },
+    ],
+  },
+  "POST /api/v1/swap-and-pay/estimate": {
+    description: "Quote an ETH-to-USDC swap-and-pay: ETH needed with slippage, Spray fee, pool price, price impact and gas.",
+    example_request: { sender: "0xYourWallet", recipients: ["0xabc..."], amounts: ["1000000"], inputToken: "ETH" },
+    example_response: { success: true, payout: { totalAmount: "1.0", fee: "0.003", totalWithFee: "1.003" }, quote: { ethIn: "560000000000000", maxEthIn: "562800000000000" }, suggestedGasLimit: "560000" },
+    related_endpoints: [
+      { method: "POST", path: "/api/v1/swap-and-pay/execute", price: "$0.10", why: "Build the unsigned transaction after estimating" },
+    ],
+  },
   "POST /api/v1/stellar/batch": {
     description: "Batch XLM or Stellar-asset payments on Stellar mainnet. Native multi-op transactions.",
     example_response: { txHash: "...", operations: 5 },
