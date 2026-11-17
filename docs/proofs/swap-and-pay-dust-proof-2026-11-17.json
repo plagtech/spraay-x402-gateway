@@ -1,0 +1,210 @@
+{
+ "date": "2026-11-17T19:44:06.926Z",
+ "mode": "broadcast",
+ "recipients": [
+  "0x3583E6989FaABD0A9c4E5e08815d8B1A5D3F92b6",
+  "0xDF9cb5C694C9CcaE6B8B0EADD2687029bD33d81f",
+  "0x74EBA65721F456dEaCA4740b7dC863fFc87BC41f"
+ ],
+ "amountEach": "1000",
+ "negative": {
+  "status": 400,
+  "body": {
+   "error": "Unsupported inputToken \"DAI\". Supported input tokens: ETH.",
+   "supportedInputTokens": [
+    "ETH"
+   ]
+  }
+ },
+ "estimate": {
+  "success": true,
+  "chainId": 8453,
+  "router": "0x8cfb5eBa99170d284120B885A47b08E28FD27379",
+  "sprayContract": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+  "inputToken": {
+   "symbol": "ETH",
+   "address": "0x0000000000000000000000000000000000000000",
+   "decimals": 18,
+   "isETH": true
+  },
+  "outputToken": {
+   "symbol": "USDC",
+   "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+   "decimals": 6
+  },
+  "supportedInputTokens": [
+   "ETH"
+  ],
+  "pool": {
+   "currency0": "0x0000000000000000000000000000000000000000",
+   "currency1": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+   "fee": 3000,
+   "tickSpacing": 60,
+   "hooks": "0x0000000000000000000000000000000000000000",
+   "poolId": "0xe070797535b13431808f8fc81fdbe7b41362960ed0b55bc2b6117c49c51b7eb9",
+   "sqrtPriceX96": "3352439211413559566099234",
+   "tick": -201419,
+   "usdcPerEth": "1790.45189"
+  },
+  "payout": {
+   "recipientCount": 3,
+   "totalAmount": "0.003",
+   "fee": "0.000009",
+   "feePercent": "0.3%",
+   "totalWithFee": "0.003009",
+   "requiredOutputRaw": "3009"
+  },
+  "quote": {
+   "ethIn": "1686482323040",
+   "ethInFormatted": "0.00000168648232304",
+   "maxEthIn": "1694914734656",
+   "maxEthInFormatted": "0.000001694914734656",
+   "slippageBps": 50,
+   "effectiveUsdcPerEth": "1784.187096",
+   "priceImpactBps": 34
+  },
+  "note": "Exact-output swap: recipients receive exactly their amounts. Unused ETH (maxEthIn - actual input) is refunded to sender in the same transaction. SprayContract v2 is skip-on-fail: a recipient that cannot receive is skipped and its amount plus unused fee is refunded to sender in USDC.",
+  "suggestedGasLimit": "646440",
+  "gasLimitSource": "estimate"
+ },
+ "execute": {
+  "success": true,
+  "chainId": 8453,
+  "router": "0x8cfb5eBa99170d284120B885A47b08E28FD27379",
+  "sprayContract": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+  "inputToken": {
+   "symbol": "ETH",
+   "address": "0x0000000000000000000000000000000000000000",
+   "decimals": 18,
+   "isETH": true
+  },
+  "outputToken": {
+   "symbol": "USDC",
+   "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+   "decimals": 6
+  },
+  "supportedInputTokens": [
+   "ETH"
+  ],
+  "pool": {
+   "currency0": "0x0000000000000000000000000000000000000000",
+   "currency1": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+   "fee": 3000,
+   "tickSpacing": 60,
+   "hooks": "0x0000000000000000000000000000000000000000",
+   "poolId": "0xe070797535b13431808f8fc81fdbe7b41362960ed0b55bc2b6117c49c51b7eb9",
+   "sqrtPriceX96": "3352439211413559566099234",
+   "tick": -201419,
+   "usdcPerEth": "1790.45189"
+  },
+  "payout": {
+   "recipientCount": 3,
+   "totalAmount": "0.003",
+   "fee": "0.000009",
+   "feePercent": "0.3%",
+   "totalWithFee": "0.003009",
+   "requiredOutputRaw": "3009"
+  },
+  "quote": {
+   "ethIn": "1686482323040",
+   "ethInFormatted": "0.00000168648232304",
+   "maxEthIn": "1694914734656",
+   "maxEthInFormatted": "0.000001694914734656",
+   "slippageBps": 50,
+   "effectiveUsdcPerEth": "1784.187096",
+   "priceImpactBps": 34
+  },
+  "note": "Exact-output swap: recipients receive exactly their amounts. Unused ETH (maxEthIn - actual input) is refunded to sender in the same transaction. SprayContract v2 is skip-on-fail: a recipient that cannot receive is skipped and its amount plus unused fee is refunded to sender in USDC.",
+  "deadline": 1794944967,
+  "transaction": {
+   "from": "0xe0DAa969c50ed9353bCDB9Fd6A3B3EA510F567E3",
+   "to": "0x8cfb5eBa99170d284120B885A47b08E28FD27379",
+   "data": "0x04846b1d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda029130000000000000000000000000000000000000000000000000000000000000bb8000000000000000000000000000000000000000000000000000000000000003c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000bc100000000000000000000000000000000000000000000000000000001000276a40000000000000000000000000000000000000000000000000000018aa0ca6a400000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000006afcafc70000000000000000000000000000000000000000000000000000000000000001000000000000000000000000e0daa969c50ed9353bcdb9fd6a3b3ea510f567e30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000030000000000000000000000003583e6989faabd0a9c4e5e08815d8b1a5d3f92b6000000000000000000000000df9cb5c694c9ccae6b8b0eadd2687029bd33d81f00000000000000000000000074eba65721f456deaca4740b7dc863ffc87bc41f000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000003e800000000000000000000000000000000000000000000000000000000000003e800000000000000000000000000000000000000000000000000000000000003e8",
+   "value": "1694914734656",
+   "chainId": 8453,
+   "gasLimit": "0x9dd28"
+  },
+  "gasLimitSource": "estimate"
+ },
+ "preflight": {
+  "worstWei": "8812557080688",
+  "worstUsd": 0.01577845948085071,
+  "usdPerEth": 1790.45189,
+  "balBefore": "1673826016961080",
+  "maxFeePerGas": "11000000",
+  "l1FeeCushioned": "6802346032"
+ },
+ "txHash": "0x0cc043f1361f3d33fde95ffb1ed90cf78c5ee47dbc5696f5a3fa16e9e5fc49d9",
+ "receipt": {
+  "status": 1,
+  "block": 58771464,
+  "gasUsed": "265952",
+  "effectiveGasPrice": "6000000"
+ },
+ "verify": {
+  "swap": {
+   "amount0": "-1686482323040",
+   "amount1": "3009"
+  },
+  "settled": {
+   "output": "3009",
+   "total": "3000",
+   "fee": "9",
+   "recipientCount": "3",
+   "failedCount": "0",
+   "refund": "0"
+  },
+  "transfers": [
+   {
+    "from": "0x498581fF718922c3f8e6A244956aF099B2652b2b",
+    "to": "0x8cfb5eBa99170d284120B885A47b08E28FD27379",
+    "value": "3009"
+   },
+   {
+    "from": "0x8cfb5eBa99170d284120B885A47b08E28FD27379",
+    "to": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+    "value": "3009"
+   },
+   {
+    "from": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+    "to": "0x3583E6989FaABD0A9c4E5e08815d8B1A5D3F92b6",
+    "value": "1000"
+   },
+   {
+    "from": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+    "to": "0xDF9cb5C694C9CcaE6B8B0EADD2687029bD33d81f",
+    "value": "1000"
+   },
+   {
+    "from": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+    "to": "0x74EBA65721F456dEaCA4740b7dC863fFc87BC41f",
+    "value": "1000"
+   },
+   {
+    "from": "0x4B1d57EBFaBDF3F21F30f210a1d95f649E9edD4c",
+    "to": "0x033d3ce3BFd69B1d180869308822075219e771b5",
+    "value": "9"
+   }
+  ],
+  "feeRecipient": "0x033d3ce3BFd69B1d180869308822075219e771b5",
+  "feeAmount": "9",
+  "expectedFee": "9",
+  "recipientDeltas": [
+   "1000",
+   "1000",
+   "1000"
+  ],
+  "balAfter": "1670540453847820",
+  "totalSpendWei": "3285563113260",
+  "totalSpendUsd": 0.005882642685850651,
+  "checks": {
+   "routerCalled": true,
+   "v4SwapOnPool": true,
+   "recipientsPaidExactly": true,
+   "sprayFeeCollected": true,
+   "settledNoFailures": true,
+   "routerHoldsNothing": true,
+   "underCap": true
+  }
+ }
+}
