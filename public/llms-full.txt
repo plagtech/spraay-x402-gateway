@@ -1,8 +1,8 @@
 # Spraay x402 Gateway — Full Endpoint Catalog
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
-190 endpoints (158 paid + 32 free) across 33 categories.
-Network: Base mainnet (eip155:8453) · Asset: USDC · Pay to: 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8
+192 endpoints (160 paid + 32 free) across 33 categories.
+Network: Base mainnet (eip155:8453) · Asset: USDC · Pay to: 0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec
 Also accepted on every paid endpoint: USDG on Robinhood Chain (eip155:4663) · Asset: 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168 · Pay to: 0xdAA0fb4fb470AA8fb53A0c301EF9AADC89949F33 · same price, x402 exact/EIP-3009, no approval needed
 Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
@@ -39,14 +39,18 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Batch Payments
 
-- `POST /api/v1/batch/estimate` — $0.001 — Estimate gas, protocol fee and total for a batch payment before sending. Runs the same amount and fee math as batch/execute, so a quote cannot disagree with what execute charges. Units: amounts[] are RAW base units (USDC has 6 decimals, so "1500000" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a DECIMAL string (unlike execute's transaction.gasLimit, which is hex). Call before batch/execute.
+- `POST /api/v1/batch/estimate` — $0.001 — Estimate gas, protocol fee and total for a batch payment before sending. Runs the same amount and fee math as batch/execute, so a quote cannot disagree with what execute charges. Units: amounts[] are RAW base units (USDC has 6 decimals, so "1500000" = $1.50); totalAmount/fee/totalWithFee are human-decimal strings; suggestedGasLimit is a DECIMAL string (unlike execute's transaction.gasLimit, which is hex). Accepts the same optional "chain" field as batch/execute (base or peaq). Call before batch/execute.
   search: batch estimate, payment estimate, gas estimate, fee preview, bulk payment cost, pre-flight check, dry run
-- `POST /api/v1/batch/execute` — $0.02 — Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0. Units: amounts[] are RAW base units (USDC has 6 decimals, so "1500000" = $1.50); batch.totalAmount/fee/totalWithFee are human-decimal strings; approvalRequired.amount is RAW base units - pass it verbatim as the ERC-20 allowance - while approvalRequired.amountFormatted is the human-decimal form; transaction.gasLimit is hex.
-  search: batch payment, bulk payout, mass payout, send to many wallets, airdrop, disbursement, multi-send, pay many recipients
+- `POST /api/v1/batch/execute` — $0.02 — Batch USDC/ERC-20 payments to up to 200 recipients in one atomic, non-custodial transaction. Implements Batch Payments for Agents (BPA) 1.0. Units: amounts[] are RAW base units (USDC has 6 decimals, so "1500000" = $1.50); batch.totalAmount/fee/totalWithFee are human-decimal strings; approvalRequired.amount is RAW base units - pass it verbatim as the ERC-20 allowance - while approvalRequired.amountFormatted is the human-decimal form; transaction.gasLimit is hex. Settles on Base (default) or peaq via the optional "chain" field; other chains are rejected.
+  search: batch payment, bulk payout, mass payout, send to many wallets, airdrop, disbursement, multi-send, pay many recipients, peaq
 - `POST /api/v1/stellar/batch` — $0.02 — Send batch payments to many recipients in one transaction on the Stellar network.
   search: Stellar batch, XLM payments, batch Stellar, mass Stellar payout, Stellar disbursement, send XLM to many, lumens
 - `POST /api/v1/stellar/estimate` — $0.001 — Estimate fees for a batch Stellar payment before sending.
   search: Stellar estimate, XLM fee, Stellar batch cost, preview Stellar payment, lumens fee
+- `POST /api/v1/swap-and-pay/estimate` — $0.001 — Quote a swap-and-pay before executing: ETH needed (quote and max with slippage), Spray 0.3% fee, pool spot price, price impact and suggested gas limit (decimal string). Same validation and math as swap-and-pay/execute. Units: amounts[] are RAW USDC base units.
+  search: swap and pay estimate, swap quote, ETH needed, payout cost, pre-flight check
+- `POST /api/v1/swap-and-pay/execute` — $0.10 — Swap ETH to USDC and pay up to 200 recipients fixed USDC amounts in one transaction on Base, via SwapAndSprayRouter on the Uniswap v4 ETH/USDC pool. Exact-output: recipients get exactly their amounts and unused ETH is refunded to sender. Returns an unsigned transaction (to, data, value, chainId, hex gasLimit); no ERC-20 approval is needed. Units: amounts[] are RAW USDC base units ("1500000" = $1.50); transaction.value is wei. Spray's 0.3% fee is the only fee. SprayContract v2 is skip-on-fail: undeliverable amounts are refunded to sender. Input token: ETH only.
+  search: swap and pay, swap and send, pay in USDC with ETH, ETH to USDC payout, convert and distribute, swap then batch pay, Uniswap v4, one transaction payout
 - `POST /api/v1/xrp/batch` — $0.02 — Send batch XRP payments to many recipients in one transaction on the XRP Ledger.
   search: XRP batch, XRP Ledger, batch XRP, mass XRP payout, ripple payments, XRP disbursement, send XRP to many
 - `POST /api/v1/xrp/estimate` — $0.001 — Estimate fees for a batch XRP payment before sending on the XRP Ledger.
@@ -166,7 +170,7 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 - `GET /free` — free — Free tier catalog
 - `GET /free/agent-card` — free — Look up AI agent registration from ERC-8004 Identity Registry on Base. No payment required.
   search: ERC-8004, agent card, agent registry, agent identity, agent lookup
-- `GET /free/chain-status` — free — Block height and liveness for 7 EVM chains. No payment required.
+- `GET /free/chain-status` — free — Block height and liveness for 9 EVM chains. No payment required.
   search: chain status, block height, chain health, network status
 - `POST /free/chat` — free — Free AI chat (open-weight models)
 - `GET /free/chat/models` — free — Free model catalog (open-weight models)
@@ -176,9 +180,9 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 - `GET /free/dex/search` — free — DEX token pair search (DexScreener)
 - `GET /free/dex/tokens/:address` — free — All pairs for a token (DexScreener)
 - `GET /free/dex/trending` — free — Trending tokens (DexScreener boosts)
-- `GET /free/estimate-batch` — free — Rough cost estimate for batch payments by recipient count and chain. No payment required.
+- `GET /free/estimate-batch` — free — Rough cost estimate for batch payments by recipient count and chain. Returns estimate.supported — whether a batch can actually settle on that chain — alongside estimate.supportedChains. No payment required.
   search: batch estimate, rough estimate, cost preview, free estimate
-- `GET /free/gas` — free — Gas prices across 7 EVM chains (Base, Ethereum, Arbitrum, Polygon, Optimism, Avalanche, BSC). Cached 15s. No payment required.
+- `GET /free/gas` — free — Gas prices across 9 EVM chains (Base, Ethereum, Arbitrum One, Polygon, Optimism, Avalanche C-Chain, BNB Chain, Robinhood Chain, peaq). Cached 15s. No payment required.
   search: gas price, free gas, network fee, gwei, base fee
 - `GET /free/models` — free — AI model catalog — free mirror of /api/v1/models
 - `GET /free/nonce` — free — Transaction count (nonce) for any EVM address. No payment required.
@@ -249,11 +253,11 @@ Source of truth: https://gateway.spraay.app/.well-known/x402.json
 
 ## Infrastructure (RPC/Storage/Webhooks)
 
-- `POST /api/v1/cron/cancel` — $0.002 — Cancel a scheduled cron job so it no longer runs.
+- `POST /api/v1/cron/cancel` — $0.002 — Cancel one of your own scheduled cron jobs so it no longer runs.
   search: cancel cron, stop scheduled job, remove job, delete schedule, unschedule
-- `POST /api/v1/cron/create` — $0.01 — Schedule a recurring or one-time job (payments, API calls, on-chain actions) with cron syntax. For automation and recurring payouts.
+- `POST /api/v1/cron/create` — $0.10 — Schedule a recurring trigger with 5-field cron (UTC, hourly minimum, 100 runs included). Each run sends a signed cron.triggered webhook to your callback_url so your agent can run batch/execute or payroll/execute. For recurring payouts and reminders.
   search: cron, schedule job, recurring task, automate, scheduled payment, timer, recurring payout, task scheduler
-- `GET /api/v1/cron/list` — $0.002 — List scheduled cron jobs with their schedules, actions, and next run times.
+- `GET /api/v1/cron/list` — $0.002 — List your own scheduled cron jobs with their schedules, actions, next run times (UTC) and runs remaining.
   search: list cron jobs, scheduled tasks, my jobs, view schedules, recurring jobs
 - `POST /api/v1/logs/ingest` — $0.002 — Ingest structured log entries for agent observability and audit trails. Batch up to many entries per call.
   search: ingest logs, log events, structured logging, observability, send logs, agent logging, telemetry

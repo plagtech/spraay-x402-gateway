@@ -2,13 +2,13 @@
 Pay-per-use infrastructure for autonomous AI agents. Powered by the x402 protocol on Base.
 
 ## What this is
-Spraay provides 158 paid API endpoints (190 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
+Spraay provides 160 paid API endpoints (192 total) that agents call with USDC micropayments via HTTP 402. No API keys, no signups — agents pay per-call with on-chain USDC.
 
 ## Payment details
 - Protocol: x402 (https://x402.org)
 - Network: Base mainnet (EVM, eip155:8453)
 - Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
-- Pay to: 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8
+- Pay to: 0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec
 - Facilitator: Coinbase CDP
 - Solana rail: USDC payments also accepted on Solana — see https://gateway.spraay.app/.well-known/solana.json
 - Robinhood Chain rail: USDG (0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168) also accepted on Robinhood Chain (eip155:4663, chainId 4663) via the same x402 `exact` scheme, EIP-3009 transferWithAuthorization — no approval step, payer needs no ETH. Pay to: 0xdAA0fb4fb470AA8fb53A0c301EF9AADC89949F33. EIP-712 domain: name "Global Dollar", version "1". Details: https://gateway.spraay.app/.well-known/x402.json (robinhoodPayment)
@@ -24,7 +24,7 @@ Spraay provides 158 paid API endpoints (190 total) that agents call with USDC mi
 - Agent Wallets (5)
 - AI Chat & Models (2)
 - AI Inference (Intelligence) (4)
-- Batch Payments (7)
+- Batch Payments (9)
 - Bittensor (SN64) (5)
 - Communication (Email/SMS/XMTP) (9)
 - Compute (Inference Jobs) (8)
