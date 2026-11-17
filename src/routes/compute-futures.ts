@@ -42,7 +42,7 @@ const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_DECIMALS = 6;
 const BASE_RPC = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const OPERATOR_KEY = process.env.FACILITATOR_PRIVATE_KEY || process.env.AGENT_WALLET_DEPLOYER_KEY || "";
-const GATEWAY_ADDRESS = process.env.PAY_TO_ADDRESS || "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8";
+const GATEWAY_ADDRESS = process.env.PAY_TO_ADDRESS || "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec";
 
 const FUTURES_ABI = [
   "function deposit(uint256 amount) external",

@@ -45,7 +45,7 @@ Live send 0.01 USDC on Base to one address (requires a funded wallet)::
 
     export EVM_PRIVATE_KEY=0x...        # funded Base wallet; never commit/share
     python scripts/live_batch_send_smoke.py \
-        --to 0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8 --amount 0.01 --yes
+        --to 0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec --amount 0.01 --yes
 
 Multiple recipients::
 
@@ -248,7 +248,7 @@ def main() -> int:
     args = _build_parser().parse_args()
     if not args.to:
         # Default: a single tiny test payment to a well-known example address.
-        args.to = ["0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8"]
+        args.to = ["0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec"]
         if args.amount is None:
             args.amount = "0.01"
     return asyncio.run(_run(args))

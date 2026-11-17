@@ -9,7 +9,7 @@ const hre = require("hardhat");
 
 async function main() {
   const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-  const OPERATOR = "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8"; // Spraay gateway wallet
+  const OPERATOR = "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec"; // Spraay gateway wallet
 
   console.log("\n💧 Deploying SpraayComputeFutures to Base mainnet...\n");
   console.log("  USDC:", USDC_BASE);

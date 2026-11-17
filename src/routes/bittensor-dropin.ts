@@ -230,7 +230,7 @@ function addSpraayMeta(data: any, provider: Provider, latencyMs: number, extra?:
       network: "bittensor",
       latencyMs,
       protocol: "x402",
-      payTo: process.env.PAY_TO_ADDRESS || "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8",
+      payTo: process.env.PAY_TO_ADDRESS || "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec",
       ...extra,
     },
   };

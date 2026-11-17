@@ -37,7 +37,7 @@ const endpoints = [
   ["GET", "/api/v1/models", 0.001, "ai", null],
 
   // ── Batch Payments ──
-  ["POST", "/api/v1/batch/execute", 0.02, "batch", { token: "USDC", recipients: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"], amounts: ["1000000"], sender: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8" }],
+  ["POST", "/api/v1/batch/execute", 0.02, "batch", { token: "USDC", recipients: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"], amounts: ["1000000"], sender: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec" }],
   ["POST", "/api/v1/batch/estimate", 0.001, "batch", { recipientCount: 5 }],
 
   // ── XRP ──
@@ -46,7 +46,7 @@ const endpoints = [
   // ── Swap / DEX ──
   ["GET", "/api/v1/swap/quote?tokenIn=USDC&tokenOut=WETH&amountIn=1000000", 0.008, "swap", null],
   ["GET", "/api/v1/swap/tokens", 0.001, "swap", null],
-  ["POST", "/api/v1/swap/execute", 0.015, "swap", { tokenIn: "USDC", tokenOut: "WETH", amountIn: "100", recipient: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8" }],
+  ["POST", "/api/v1/swap/execute", 0.015, "swap", { tokenIn: "USDC", tokenOut: "WETH", amountIn: "100", recipient: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec" }],
 
   // ── Solana Jupiter ──
   ["GET", "/api/v1/solana/jupiter/quote?inputMint=USDC&outputMint=SOL&amount=1000000&slippageBps=50", 0.005, "solana", null],
@@ -66,17 +66,17 @@ const endpoints = [
   ["GET", "/api/v1/oracle/fx?base=USDC", 0.008, "oracle", null],
 
   // ── Bridge ──
-  ["GET", "/api/v1/bridge/quote?fromChain=base&toChain=ethereum&token=USDC&amount=1000000000&fromAddress=0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", 0.05, "bridge", null],
+  ["GET", "/api/v1/bridge/quote?fromChain=base&toChain=ethereum&token=USDC&amount=1000000000&fromAddress=0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", 0.05, "bridge", null],
   ["GET", "/api/v1/bridge/chains", 0.002, "bridge", null],
 
   // ── Payroll ──
-  ["POST", "/api/v1/payroll/execute", 0.1, "payroll", { token: "USDC", sender: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", employees: [{ address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", amount: "3000" }] }],
+  ["POST", "/api/v1/payroll/execute", 0.1, "payroll", { token: "USDC", sender: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", employees: [{ address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", amount: "3000" }] }],
   ["POST", "/api/v1/payroll/estimate", 0.003, "payroll", { employeeCount: 10 }],
   ["GET", "/api/v1/payroll/tokens", 0.002, "payroll", null],
 
   // ── Invoice ──
-  ["POST", "/api/v1/invoice/create", 0.05, "invoice", { creator: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", token: "USDC", amount: "1500" }],
-  ["GET", "/api/v1/invoice/list?address=0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", 0.01, "invoice", null],
+  ["POST", "/api/v1/invoice/create", 0.05, "invoice", { creator: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", token: "USDC", amount: "1500" }],
+  ["GET", "/api/v1/invoice/list?address=0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", 0.01, "invoice", null],
   ["GET", "/api/v1/invoice/INV-SEED-001", 0.01, "invoice", null],
 
   // ── Analytics ──
@@ -84,12 +84,12 @@ const endpoints = [
   ["GET", "/api/v1/analytics/txhistory?address=0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", 0.008, "analytics", null],
 
   // ── Escrow ──
-  ["POST", "/api/v1/escrow/create", 0.1, "escrow", { depositor: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", beneficiary: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", token: "USDC", amount: "5000" }],
-  ["GET", "/api/v1/escrow/list?address=0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", 0.02, "escrow", null],
+  ["POST", "/api/v1/escrow/create", 0.1, "escrow", { depositor: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", beneficiary: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", token: "USDC", amount: "5000" }],
+  ["GET", "/api/v1/escrow/list?address=0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", 0.02, "escrow", null],
   ["GET", "/api/v1/escrow/ESC-SEED-001", 0.005, "escrow", null],
   ["POST", "/api/v1/escrow/fund", 0.02, "escrow", { escrowId: "ESC-SEED-001" }],
-  ["POST", "/api/v1/escrow/release", 0.08, "escrow", { escrowId: "ESC-SEED-001", caller: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8" }],
-  ["POST", "/api/v1/escrow/cancel", 0.02, "escrow", { escrowId: "ESC-SEED-001", caller: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8" }],
+  ["POST", "/api/v1/escrow/release", 0.08, "escrow", { escrowId: "ESC-SEED-001", caller: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec" }],
+  ["POST", "/api/v1/escrow/cancel", 0.02, "escrow", { escrowId: "ESC-SEED-001", caller: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec" }],
 
   // ── AI Inference ──
   ["POST", "/api/v1/inference/classify-address", 0.03, "inference", { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" }],
@@ -139,12 +139,12 @@ const endpoints = [
   ["GET", "/api/v1/auth/verify?token=seed_token", 0.005, "auth", null],
 
   // ── Audit ──
-  ["POST", "/api/v1/audit/log", 0.005, "audit", { action: "bazaar.seed", actor: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", resource: "seed_001", details: { purpose: "bazaar indexing" } }],
-  ["GET", "/api/v1/audit/query?actor=0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", 0.03, "audit", null],
+  ["POST", "/api/v1/audit/log", 0.005, "audit", { action: "bazaar.seed", actor: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", resource: "seed_001", details: { purpose: "bazaar indexing" } }],
+  ["GET", "/api/v1/audit/query?actor=0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", 0.03, "audit", null],
 
   // ── Tax ──
   ["POST", "/api/v1/tax/calculate", 0.08, "tax", { transactions: [{ type: "swap", asset: "ETH", amount: 1.5, costBasisUsd: 3000, proceedsUsd: 4500, holdingDays: 400 }] }],
-  ["GET", "/api/v1/tax/report?address=0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8&year=2025", 0.05, "tax", null],
+  ["GET", "/api/v1/tax/report?address=0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec&year=2025", 0.05, "tax", null],
 
   // ── GPU ──
   ["POST", "/api/v1/gpu/run", 0.06, "gpu", { model: "flux-pro", input: { prompt: "a serene mountain lake at sunset" } }],
@@ -175,9 +175,9 @@ const endpoints = [
 
   // ── Agent Wallet ──
   ["POST", "/api/v1/agent-wallet/provision", 0.05, "agent-wallet", { agentId: "bazaar-seeder", agentType: "script", mode: "managed" }],
-  ["POST", "/api/v1/agent-wallet/session-key", 0.02, "agent-wallet", { walletAddress: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", sessionKeyAddress: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", spendLimitEth: "0.5", durationHours: 24 }],
+  ["POST", "/api/v1/agent-wallet/session-key", 0.02, "agent-wallet", { walletAddress: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", sessionKeyAddress: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", spendLimitEth: "0.5", durationHours: 24 }],
   ["GET", "/api/v1/agent-wallet/info?agentId=bazaar-seeder", 0.005, "agent-wallet", null],
-  ["POST", "/api/v1/agent-wallet/revoke-key", 0.02, "agent-wallet", { walletAddress: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", sessionKeyAddress: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" }],
+  ["POST", "/api/v1/agent-wallet/revoke-key", 0.02, "agent-wallet", { walletAddress: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", sessionKeyAddress: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" }],
   ["GET", "/api/v1/agent-wallet/predict?agentId=bazaar-seeder", 0.001, "agent-wallet", null],
 
   // ── Bittensor Drop-in ──
@@ -197,7 +197,7 @@ const endpoints = [
   ["GET", "/api/v1/compute/status/job_seed_001", 0.001, "compute", null],
 
   // ── SCTP (Supply Chain) ──
-  ["POST", "/api/v1/sctp/supplier", 0.02, "sctp", { name: "Acme Corp", wallet: "0xAd62f03C7514bb8c51f1eA70C2b75C37404695c8", paymentPrefs: { token: "USDC" } }],
+  ["POST", "/api/v1/sctp/supplier", 0.02, "sctp", { name: "Acme Corp", wallet: "0x86e43BD1d94802bcF431707b67ff4c8F5B7267Ec", paymentPrefs: { token: "USDC" } }],
   ["GET", "/api/v1/sctp/supplier/SUP-SEED-001", 0.005, "sctp", null],
   ["POST", "/api/v1/sctp/po", 0.02, "sctp", { supplierId: "SUP-SEED-001", lineItems: [{ sku: "ABC", qty: 10, price: "100" }] }],
   ["GET", "/api/v1/sctp/po/PO-SEED-001", 0.005, "sctp", null],
